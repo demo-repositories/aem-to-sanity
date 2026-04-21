@@ -1,0 +1,25 @@
+{
+  "name": "studio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Example Sanity Studio consuming schemas emitted by aem-to-sanity-schema.",
+  "type": "module",
+  "scripts": {
+    "dev": "sanity dev",
+    "build": "sanity build",
+    "deploy": "sanity deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "sanity": "^5.21.0",
+    "styled-components": "^6.4.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.2",
+    "aem-to-sanity-schema": "workspace:*",
+    "typescript": "^5.9.3"
+  }
+}

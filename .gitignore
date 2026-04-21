@@ -5,6 +5,8 @@ node_modules/
 output/
 *.tsbuildinfo
 dist/
+.turbo/
+.sanity/
 
 # Local environment (never commit real credentials)
 .env

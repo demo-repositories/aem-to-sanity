@@ -1,0 +1,19 @@
+{
+  "name": "example-davids-bridal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reference consumer: runs the AEM→Sanity schema + typegen + content pipeline end-to-end.",
+  "type": "module",
+  "scripts": {
+    "migrate:schema": "aem-to-sanity-schema",
+    "typegen": "aem-to-sanity-typegen",
+    "pagebuilder:refresh": "aem-to-sanity-pagebuilder",
+    "migrate:content": "aem-to-sanity-content --root /content/davidsbridal/us/en --registry ./output/content-type-registry.json",
+    "migrate:all": "pnpm run migrate:schema && pnpm run typegen"
+  },
+  "devDependencies": {
+    "aem-to-sanity-content": "workspace:*",
+    "aem-to-sanity-schema": "workspace:*",
+    "sanity": "^5.21.0"
+  }
+}

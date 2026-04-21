@@ -1,0 +1,62 @@
+{
+  "name": "aem-to-sanity-schema",
+  "version": "0.0.0",
+  "description": "Generate Sanity object schemas (and TypeScript types) from AEM Granite UI component dialog definitions.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./sanitize": {
+      "types": "./dist/sanitize.d.ts",
+      "import": "./dist/sanitize.js",
+      "default": "./dist/sanitize.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo",
+    "migrate:schema": "node dist/cli.js",
+    "typegen": "node dist/typegen-cli.js",
+    "pagebuilder": "node dist/pagebuilder-cli.js"
+  },
+  "bin": {
+    "aem-to-sanity-schema": "./dist/cli.js",
+    "aem-to-sanity-typegen": "./dist/typegen-cli.js",
+    "aem-to-sanity-pagebuilder": "./dist/pagebuilder-cli.js"
+  },
+  "dependencies": {
+    "aem-to-sanity-core": "workspace:*",
+    "dotenv": "^16.4.5",
+    "prettier": "^3.3.3"
+  },
+  "devDependencies": {
+    "@sanity/schema": "^5.21.0",
+    "sanity": "^5.21.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "sanity": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "sanity": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

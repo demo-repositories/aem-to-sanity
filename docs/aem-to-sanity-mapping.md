@@ -1,6 +1,6 @@
 # AEM → Sanity field mapping
 
-> Auto-generated from `src/mapping-table.ts` on every `npm run migrate`. Do not edit by hand — update the mapping table and re-run.
+> Auto-generated from `packages/aem-to-sanity-schema/src/mapping-table.ts` on every `pnpm migrate:schema` run. Do not edit by hand — update the mapping table and re-run.
 
 Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unknown types become a string placeholder and are reported in `output/migration-report.json` so you can extend the table.
 

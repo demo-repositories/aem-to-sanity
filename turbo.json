@@ -1,0 +1,35 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "lint": {},
+    "migrate:schema": {
+      "dependsOn": ["^build", "build"],
+      "cache": false,
+      "outputs": [
+        "output/schemas/**",
+        "output/migration-report.json",
+        "output/aem/**"
+      ]
+    },
+    "typegen": {
+      "dependsOn": ["migrate:schema"],
+      "outputs": ["output/sanity.types.ts"]
+    },
+    "migrate:content": {
+      "dependsOn": ["^build", "build", "typegen"],
+      "cache": false,
+      "outputs": ["output/audit/**", "output/content/**"]
+    },
+    "docs": {
+      "dependsOn": ["^build"],
+      "outputs": ["docs/**"]
+    }
+  }
+}
