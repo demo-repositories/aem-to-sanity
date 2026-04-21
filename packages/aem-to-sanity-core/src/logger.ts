@@ -1,3 +1,5 @@
+import { ANSI_CODES, detectColor } from "./colors.ts";
+
 export type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 
 export interface Logger {
@@ -12,6 +14,12 @@ export interface LoggerOptions {
   stream?: NodeJS.WritableStream;
   /** Emit one JSON object per line (NDJSON). Otherwise a compact text format. */
   json?: boolean;
+  /**
+   * Force-enable or force-disable ANSI colors. Defaults to auto-detect based on
+   * whether the target stream is a TTY and the `NO_COLOR` / `FORCE_COLOR` env
+   * vars. JSON mode is always uncolored.
+   */
+  color?: boolean;
 }
 
 const LEVEL_ORDER: Record<Exclude<LogLevel, "silent">, number> = {
@@ -21,12 +29,23 @@ const LEVEL_ORDER: Record<Exclude<LogLevel, "silent">, number> = {
   error: 40,
 };
 
+const LEVEL_COLOR: Record<Exclude<LogLevel, "silent">, string> = {
+  debug: ANSI_CODES.gray,
+  info: ANSI_CODES.cyan,
+  warn: ANSI_CODES.yellow,
+  error: ANSI_CODES.red,
+};
+
 export function createLogger(opts: LoggerOptions = {}): Logger {
   const level: LogLevel = opts.level ?? "info";
   const stream = opts.stream ?? process.stderr;
   const json = opts.json ?? false;
+  const color = json ? false : (opts.color ?? detectColor(stream));
 
   const threshold = level === "silent" ? Infinity : LEVEL_ORDER[level];
+
+  const paint = (code: string, s: string) =>
+    color ? `${code}${s}${ANSI_CODES.reset}` : s;
 
   const write = (
     lvl: Exclude<LogLevel, "silent">,
@@ -38,8 +57,9 @@ export function createLogger(opts: LoggerOptions = {}): Logger {
       const line = JSON.stringify({ t: lvl, msg, ...(meta ?? {}) });
       stream.write(`${line}\n`);
     } else {
-      const metaStr = meta ? ` ${JSON.stringify(meta)}` : "";
-      stream.write(`[${lvl}] ${msg}${metaStr}\n`);
+      const prefix = paint(LEVEL_COLOR[lvl], `[${lvl}]`);
+      const metaStr = meta ? paint(ANSI_CODES.dim, ` ${JSON.stringify(meta)}`) : "";
+      stream.write(`${prefix} ${msg}${metaStr}\n`);
     }
   };
 

@@ -3,6 +3,7 @@ import "dotenv/config";
 import { readFile } from "node:fs/promises";
 import {
   DialogNodeSchema,
+  createColors,
   createLogger,
   fetchInfinityJson,
   resolveConfig,
@@ -48,13 +49,20 @@ async function main(): Promise<void> {
 
   const s = report.summary();
   const unmappedCount = Object.keys(s.unmappedTypes).length;
+  const c = createColors({ stream: process.stderr });
 
-  logger.info("────────────────────────────────────────");
-  logger.info(`Emitted:             ${s.successes} / ${s.total} component(s)`);
-  logger.info(`Failed:              ${s.failures}`);
-  logger.info(`Unmapped AEM types:  ${unmappedCount}`);
-  logger.info(`Report:              ${reportFile}`);
-  logger.info("────────────────────────────────────────");
+  const ok = c.green(s.successes);
+  const total = c.dim(`/ ${s.total}`);
+  const failed = s.failures > 0 ? c.yellow(s.failures) : c.green(0);
+  const unmapped = unmappedCount > 0 ? c.yellow(unmappedCount) : c.green(0);
+  const sep = c.dim("────────────────────────────────────────");
+
+  logger.info(sep);
+  logger.info(`Emitted:             ${ok} ${total} component(s)`);
+  logger.info(`Failed:              ${failed}`);
+  logger.info(`Unmapped AEM types:  ${unmapped}`);
+  logger.info(`Report:              ${c.dim(reportFile)}`);
+  logger.info(sep);
 
   if (s.failures > 0) {
     const failures = report.results.filter(
@@ -65,18 +73,29 @@ async function main(): Promise<void> {
       60,
       failures.reduce((w, f) => Math.max(w, f.path.length), 0),
     );
-    logger.error(`${failures.length} component(s) failed:`);
+    const hasAuthFailure = failures.some((f) => f.kind === "auth");
+    const headline = hasAuthFailure
+      ? `${failures.length} component(s) failed (auth — aborting):`
+      : s.successes === 0
+        ? `${failures.length} component(s) failed (no successes — aborting):`
+        : `${failures.length} component(s) skipped with errors:`;
+    const level = hasAuthFailure || s.successes === 0 ? logger.error : logger.warn;
+
+    level(headline);
     failures.forEach((f, i) => {
-      const n = String(i + 1).padStart(2, " ");
+      const n = c.dim(String(i + 1).padStart(2, " ") + ".");
       const path = f.path.padEnd(pathWidth, " ");
-      const kind = `[${f.kind}]`.padEnd(14, " ");
-      const msg = f.message.replace(/\s+/g, " ").slice(0, 140);
-      logger.error(`  ${n}. ${path}  ${kind} ${msg}`);
+      const kindPainted = hasAuthFailure || s.successes === 0 ? c.red : c.yellow;
+      const kind = kindPainted(`[${f.kind}]`.padEnd(14, " "));
+      const msg = c.dim(f.message.replace(/\s+/g, " ").slice(0, 140));
+      level(`  ${n} ${path}  ${kind} ${msg}`);
     });
-    logger.error(
-      `Full details (including response bodies) in ${reportFile} under results[].`,
+    level(`Full details in ${c.dim(reportFile)} under results[].`);
+
+    if (hasAuthFailure || s.successes === 0) process.exit(1);
+    logger.info(
+      "Partial-success run. Drop failed paths from the component-paths file (or fix them in AEM) to clean this up.",
     );
-    process.exit(1);
   }
 }
 
