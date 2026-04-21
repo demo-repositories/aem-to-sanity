@@ -1,0 +1,522 @@
+{
+  "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-stacked": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage",
+      "ctalink"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-carousel": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage",
+      "ctalink",
+      "ctabuttonlink"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath",
+      "ctabuttoncategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath",
+      "ctabuttonproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/4-column-staggered-grid-2-column-mobile-full": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "mobileimage",
+      "desktopimage"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/4-column-staggered-grid-2-column-mobile": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "styleimagemobile",
+      "styleimagedesktop",
+      "ctalink"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/4-column-staggered-grid-full-width-mobile": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "mobileimage",
+      "desktopimage"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/about": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath",
+      "buttoncategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath",
+      "buttonproductpath"
+    ],
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "ctalink",
+      "desktopimage",
+      "mobileimage",
+      "buttonlink"
+    ]
+  },
+  "/apps/dbi/components/content/5-column-content": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "mobileimage",
+      "desktopimage"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "categorypath",
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "productpath",
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/4-column-staggered-grid-mobile-carousel": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "mobileimage",
+      "desktopimage"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/bv-curation-carousel": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ],
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "ctalink"
+    ]
+  },
+  "/apps/aem-integration/components/button": {
+    "(none)": [
+      "content"
+    ]
+  },
+  "/apps/dbi/components/content/captioned-image": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "categorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "productpath"
+    ],
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage"
+    ]
+  },
+  "/apps/aem-integration/components/column-layout": {
+    "(none)": [
+      "properties"
+    ]
+  },
+  "/apps/aem-integration/components/content": {
+    "(none)": [
+      "content"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-appointments-banner": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "addresslinethreecategorypath",
+      "ctacategorypath",
+      "ctabuttoncategorypath",
+      "ctachatcategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "addresslinethreeproductpath",
+      "ctaproductpath",
+      "ctabuttonproductpath",
+      "ctachatproductpath"
+    ],
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "addresslinethreelink",
+      "ctalink",
+      "ctabuttonlink",
+      "ctachatlink",
+      "appointmentsdesktopimage",
+      "appointmentsmobileimage"
+    ]
+  },
+  "/apps/dbi/components/universal/dbi-footer": {
+    "granite/ui/components/foundation/section": [
+      "tab1",
+      "tab2",
+      "tab3"
+    ]
+  },
+  "/apps/dbi/components/universal/dbi-header": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "navigationpath"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-our-partners": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "ourpartnersmobileimage",
+      "ourpartnersdesktopimage"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-personalized-sales": {
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "productpath",
+      "ctaproductpath"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "granite/ui/components/foundation/form/pathbrowser": [
+      "ctalink"
+    ],
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage"
+    ]
+  },
+  "/apps/dbi/components/common/dbi-hero-banner": {
+    "(none)": [
+      "metadata"
+    ],
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage"
+    ],
+    "granite/ui/components/foundation/section": [
+      "tab3"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath",
+      "secondctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath",
+      "secondctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-product-recommendations": {
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "productpath"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-personalized-style": {
+    "granite/ui/components/foundation/form/pathbrowser": [
+      "imagedesktop",
+      "imagemobile",
+      "imagectalink",
+      "secondimagedesktop",
+      "secondimagemobile",
+      "secondimagectalink",
+      "thirdimagedesktop",
+      "thirdimagemobile",
+      "thirdimagectalink",
+      "fourthimagedesktop",
+      "fourthimagemobile",
+      "fourthimagectalink",
+      "bottomctalink"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "imagectacategorypath",
+      "secondimagectacategorypath",
+      "thirdimagectacategorypath",
+      "fourthimagectacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "imagectaproductpath",
+      "secondimagectaproductpath",
+      "thirdimagectaproductpath",
+      "fourthimagectaproductpath"
+    ]
+  },
+  "/apps/dbi/components/commerce/dbi-search-results": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-real-story": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "realstoryimage",
+      "mobileimage"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath",
+      "secondctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath",
+      "secondctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-seo-sitemap": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-shop-your-looks": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ],
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "ctalink"
+    ]
+  },
+  "/apps/dbi/components/common/dbi-store-locator": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "changestorecategorypath",
+      "storedetailscategorypath",
+      "categorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "changestoreproductpath",
+      "storedetailsproductpath",
+      "productpath"
+    ],
+    "granite/ui/components/foundation/form/pathbrowser": [
+      "changestorelink",
+      "storedetaillink",
+      "backgroundimage",
+      "buttonlink",
+      "mobilebackgroundimage"
+    ]
+  },
+  "/apps/dbi/components/content/dbi-trends-component": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "imageone",
+      "imagetwo",
+      "imagethree"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath1",
+      "ctacategorypath2",
+      "ctacategorypath3"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath1",
+      "ctaproductpath2",
+      "ctaproductpath3"
+    ],
+    "granite/ui/components/foundation/form/pathbrowser": [
+      "linkone",
+      "linktwo",
+      "linkthree"
+    ]
+  },
+  "/apps/dbi/components/content/editorial-grid-3-points-small-text-layout": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "imagedesktop",
+      "imagemobile",
+      "secondimagedesktop",
+      "secondimagemobile",
+      "thirdimagedesktop",
+      "thirdimagemobile"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath1",
+      "ctacategorypath2",
+      "ctacategorypath3",
+      "ctacategorypath4"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath1",
+      "ctaproductpath2",
+      "ctaproductpath3",
+      "ctaproductpath4"
+    ],
+    "granite/ui/components/foundation/form/pathbrowser": [
+      "imagectalink",
+      "secondimagectalink",
+      "thirdimagectalink",
+      "bottomctalink"
+    ]
+  },
+  "/apps/dbi/components/content/editorial-grid-5-points": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage1",
+      "mobileimage1",
+      "ctalink1",
+      "desktopimage2",
+      "mobileimage2",
+      "ctalink2",
+      "desktopimage3",
+      "mobileimage3",
+      "ctalink3",
+      "desktopimage4",
+      "mobileimage4",
+      "ctalink4",
+      "desktopimage5",
+      "mobileimage5",
+      "ctalink5",
+      "ctabuttonlink"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath1",
+      "ctacategorypath2",
+      "ctacategorypath3",
+      "ctacategorypath4",
+      "ctacategorypath5"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath1",
+      "ctaproductpath2",
+      "ctaproductpath3",
+      "ctaproductpath4",
+      "ctaproductpath5"
+    ]
+  },
+  "/apps/dbi/components/content/full-width-messaging": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage",
+      "ctalink"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/dbi/components/content/full-width-text-component": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage",
+      "ctalink"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/aem-integration/components/hero-video-banner": {
+    "aem-integration/components/dialog/space": [
+      "space"
+    ]
+  },
+  "/apps/aem-integration/components/hero-slide": {
+    "aem-integration/components/dialog/dialogimage": [
+      "image",
+      "image",
+      "image",
+      "image"
+    ],
+    "aem-integration/components/dialog/space": [
+      "space",
+      "space"
+    ]
+  },
+  "/apps/dbi/components/content/icon-ctas": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "shopimage",
+      "ctalink"
+    ],
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "ctacategorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "ctaproductpath"
+    ]
+  },
+  "/apps/aem-integration/components/icon-grid": {
+    "(none)": [
+      "content"
+    ]
+  },
+  "/apps/aem-integration/components/image": {
+    "(none)": [
+      "metadata"
+    ]
+  },
+  "/apps/dbi/components/content/image": {
+    "(none)": [
+      "asset",
+      "metadata"
+    ],
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage"
+    ]
+  },
+  "/apps/dbi/components/content/message-banner": {
+    "/libs/commerce/gui/components/common/cifcategoryfield": [
+      "categorypath"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "productpath"
+    ]
+  },
+  "/apps/dbi/components/plp/disruptor/image-disruptor": {
+    "granite/ui/components/coral/foundation/form/pathbrowser": [
+      "desktopimage",
+      "mobileimage"
+    ],
+    "/libs/commerce/gui/components/common/cifproductfield": [
+      "productpath"
+    ]
+  },
+  "/apps/dbi/components/content/rich-text-with-header": {
+    "granite/ui/components/foundation/section": [
+      "tab3"
+    ]
+  },
+  "/apps/dbi/components/content/rich-text-with-light-header": {
+    "granite/ui/components/foundation/section": [
+      "tab3"
+    ]
+  },
+  "/apps/dbi/components/content/size-guide": {
+    "granite/ui/components/foundation/section": [
+      "tab3",
+      "tab3"
+    ]
+  }
+}

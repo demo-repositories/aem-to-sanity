@@ -1,0 +1,478 @@
+{
+  "granite/ui/components/coral/foundation/form/pathbrowser": {
+    "count": 78,
+    "components": {
+      "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-stacked": [
+        "desktopimage",
+        "mobileimage",
+        "ctalink"
+      ],
+      "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-carousel": [
+        "desktopimage",
+        "mobileimage",
+        "ctalink",
+        "ctabuttonlink"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-2-column-mobile-full": [
+        "mobileimage",
+        "desktopimage"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-2-column-mobile": [
+        "styleimagemobile",
+        "styleimagedesktop",
+        "ctalink"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-full-width-mobile": [
+        "mobileimage",
+        "desktopimage"
+      ],
+      "/apps/dbi/components/content/about": [
+        "ctalink",
+        "desktopimage",
+        "mobileimage",
+        "buttonlink"
+      ],
+      "/apps/dbi/components/content/5-column-content": [
+        "mobileimage",
+        "desktopimage"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-mobile-carousel": [
+        "mobileimage",
+        "desktopimage"
+      ],
+      "/apps/dbi/components/content/bv-curation-carousel": [
+        "ctalink"
+      ],
+      "/apps/dbi/components/content/captioned-image": [
+        "desktopimage",
+        "mobileimage"
+      ],
+      "/apps/dbi/components/content/dbi-appointments-banner": [
+        "addresslinethreelink",
+        "ctalink",
+        "ctabuttonlink",
+        "ctachatlink",
+        "appointmentsdesktopimage",
+        "appointmentsmobileimage"
+      ],
+      "/apps/dbi/components/universal/dbi-header": [
+        "navigationpath"
+      ],
+      "/apps/dbi/components/content/dbi-our-partners": [
+        "ourpartnersmobileimage",
+        "ourpartnersdesktopimage"
+      ],
+      "/apps/dbi/components/content/dbi-personalized-sales": [
+        "desktopimage",
+        "mobileimage"
+      ],
+      "/apps/dbi/components/common/dbi-hero-banner": [
+        "desktopimage",
+        "mobileimage"
+      ],
+      "/apps/dbi/components/content/dbi-real-story": [
+        "realstoryimage",
+        "mobileimage"
+      ],
+      "/apps/dbi/components/content/dbi-shop-your-looks": [
+        "ctalink"
+      ],
+      "/apps/dbi/components/content/dbi-trends-component": [
+        "imageone",
+        "imagetwo",
+        "imagethree"
+      ],
+      "/apps/dbi/components/content/editorial-grid-3-points-small-text-layout": [
+        "imagedesktop",
+        "imagemobile",
+        "secondimagedesktop",
+        "secondimagemobile",
+        "thirdimagedesktop",
+        "thirdimagemobile"
+      ],
+      "/apps/dbi/components/content/editorial-grid-5-points": [
+        "desktopimage1",
+        "mobileimage1",
+        "ctalink1",
+        "desktopimage2",
+        "mobileimage2",
+        "ctalink2",
+        "desktopimage3",
+        "mobileimage3",
+        "ctalink3",
+        "desktopimage4",
+        "mobileimage4",
+        "ctalink4",
+        "desktopimage5",
+        "mobileimage5",
+        "ctalink5",
+        "ctabuttonlink"
+      ],
+      "/apps/dbi/components/content/full-width-messaging": [
+        "desktopimage",
+        "mobileimage",
+        "ctalink"
+      ],
+      "/apps/dbi/components/content/full-width-text-component": [
+        "desktopimage",
+        "mobileimage",
+        "ctalink"
+      ],
+      "/apps/dbi/components/content/icon-ctas": [
+        "shopimage",
+        "ctalink"
+      ],
+      "/apps/dbi/components/content/image": [
+        "desktopimage",
+        "mobileimage"
+      ],
+      "/apps/dbi/components/plp/disruptor/image-disruptor": [
+        "desktopimage",
+        "mobileimage"
+      ]
+    }
+  },
+  "/libs/commerce/gui/components/common/cifcategoryfield": {
+    "count": 50,
+    "components": {
+      "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-stacked": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-carousel": [
+        "ctacategorypath",
+        "ctabuttoncategorypath"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-2-column-mobile-full": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-2-column-mobile": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-full-width-mobile": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/about": [
+        "ctacategorypath",
+        "buttoncategorypath"
+      ],
+      "/apps/dbi/components/content/5-column-content": [
+        "categorypath",
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-mobile-carousel": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/bv-curation-carousel": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/captioned-image": [
+        "categorypath"
+      ],
+      "/apps/dbi/components/content/dbi-appointments-banner": [
+        "addresslinethreecategorypath",
+        "ctacategorypath",
+        "ctabuttoncategorypath",
+        "ctachatcategorypath"
+      ],
+      "/apps/dbi/components/universal/dbi-header": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/dbi-our-partners": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/dbi-personalized-sales": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/common/dbi-hero-banner": [
+        "ctacategorypath",
+        "secondctacategorypath"
+      ],
+      "/apps/dbi/components/content/dbi-personalized-style": [
+        "imagectacategorypath",
+        "secondimagectacategorypath",
+        "thirdimagectacategorypath",
+        "fourthimagectacategorypath"
+      ],
+      "/apps/dbi/components/commerce/dbi-search-results": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/dbi-real-story": [
+        "ctacategorypath",
+        "secondctacategorypath"
+      ],
+      "/apps/dbi/components/content/dbi-seo-sitemap": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/dbi-shop-your-looks": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/common/dbi-store-locator": [
+        "changestorecategorypath",
+        "storedetailscategorypath",
+        "categorypath"
+      ],
+      "/apps/dbi/components/content/dbi-trends-component": [
+        "ctacategorypath1",
+        "ctacategorypath2",
+        "ctacategorypath3"
+      ],
+      "/apps/dbi/components/content/editorial-grid-3-points-small-text-layout": [
+        "ctacategorypath1",
+        "ctacategorypath2",
+        "ctacategorypath3",
+        "ctacategorypath4"
+      ],
+      "/apps/dbi/components/content/editorial-grid-5-points": [
+        "ctacategorypath1",
+        "ctacategorypath2",
+        "ctacategorypath3",
+        "ctacategorypath4",
+        "ctacategorypath5"
+      ],
+      "/apps/dbi/components/content/full-width-messaging": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/full-width-text-component": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/icon-ctas": [
+        "ctacategorypath"
+      ],
+      "/apps/dbi/components/content/message-banner": [
+        "categorypath"
+      ]
+    }
+  },
+  "/libs/commerce/gui/components/common/cifproductfield": {
+    "count": 53,
+    "components": {
+      "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-stacked": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-carousel": [
+        "ctaproductpath",
+        "ctabuttonproductpath"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-2-column-mobile-full": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-2-column-mobile": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-full-width-mobile": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/about": [
+        "ctaproductpath",
+        "buttonproductpath"
+      ],
+      "/apps/dbi/components/content/5-column-content": [
+        "productpath",
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/4-column-staggered-grid-mobile-carousel": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/bv-curation-carousel": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/captioned-image": [
+        "productpath"
+      ],
+      "/apps/dbi/components/content/dbi-appointments-banner": [
+        "addresslinethreeproductpath",
+        "ctaproductpath",
+        "ctabuttonproductpath",
+        "ctachatproductpath"
+      ],
+      "/apps/dbi/components/universal/dbi-header": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/dbi-our-partners": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/dbi-personalized-sales": [
+        "productpath",
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/common/dbi-hero-banner": [
+        "ctaproductpath",
+        "secondctaproductpath"
+      ],
+      "/apps/dbi/components/content/dbi-product-recommendations": [
+        "productpath"
+      ],
+      "/apps/dbi/components/content/dbi-personalized-style": [
+        "imagectaproductpath",
+        "secondimagectaproductpath",
+        "thirdimagectaproductpath",
+        "fourthimagectaproductpath"
+      ],
+      "/apps/dbi/components/commerce/dbi-search-results": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/dbi-real-story": [
+        "ctaproductpath",
+        "secondctaproductpath"
+      ],
+      "/apps/dbi/components/content/dbi-seo-sitemap": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/dbi-shop-your-looks": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/common/dbi-store-locator": [
+        "changestoreproductpath",
+        "storedetailsproductpath",
+        "productpath"
+      ],
+      "/apps/dbi/components/content/dbi-trends-component": [
+        "ctaproductpath1",
+        "ctaproductpath2",
+        "ctaproductpath3"
+      ],
+      "/apps/dbi/components/content/editorial-grid-3-points-small-text-layout": [
+        "ctaproductpath1",
+        "ctaproductpath2",
+        "ctaproductpath3",
+        "ctaproductpath4"
+      ],
+      "/apps/dbi/components/content/editorial-grid-5-points": [
+        "ctaproductpath1",
+        "ctaproductpath2",
+        "ctaproductpath3",
+        "ctaproductpath4",
+        "ctaproductpath5"
+      ],
+      "/apps/dbi/components/content/full-width-messaging": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/full-width-text-component": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/icon-ctas": [
+        "ctaproductpath"
+      ],
+      "/apps/dbi/components/content/message-banner": [
+        "productpath"
+      ],
+      "/apps/dbi/components/plp/disruptor/image-disruptor": [
+        "productpath"
+      ]
+    }
+  },
+  "(none)": {
+    "count": 8,
+    "components": {
+      "/apps/aem-integration/components/button": [
+        "content"
+      ],
+      "/apps/aem-integration/components/column-layout": [
+        "properties"
+      ],
+      "/apps/aem-integration/components/content": [
+        "content"
+      ],
+      "/apps/dbi/components/common/dbi-hero-banner": [
+        "metadata"
+      ],
+      "/apps/aem-integration/components/icon-grid": [
+        "content"
+      ],
+      "/apps/aem-integration/components/image": [
+        "metadata"
+      ],
+      "/apps/dbi/components/content/image": [
+        "asset",
+        "metadata"
+      ]
+    }
+  },
+  "granite/ui/components/foundation/section": {
+    "count": 8,
+    "components": {
+      "/apps/dbi/components/universal/dbi-footer": [
+        "tab1",
+        "tab2",
+        "tab3"
+      ],
+      "/apps/dbi/components/common/dbi-hero-banner": [
+        "tab3"
+      ],
+      "/apps/dbi/components/content/rich-text-with-header": [
+        "tab3"
+      ],
+      "/apps/dbi/components/content/rich-text-with-light-header": [
+        "tab3"
+      ],
+      "/apps/dbi/components/content/size-guide": [
+        "tab3",
+        "tab3"
+      ]
+    }
+  },
+  "granite/ui/components/foundation/form/pathbrowser": {
+    "count": 26,
+    "components": {
+      "/apps/dbi/components/content/dbi-personalized-sales": [
+        "ctalink"
+      ],
+      "/apps/dbi/components/content/dbi-personalized-style": [
+        "imagedesktop",
+        "imagemobile",
+        "imagectalink",
+        "secondimagedesktop",
+        "secondimagemobile",
+        "secondimagectalink",
+        "thirdimagedesktop",
+        "thirdimagemobile",
+        "thirdimagectalink",
+        "fourthimagedesktop",
+        "fourthimagemobile",
+        "fourthimagectalink",
+        "bottomctalink"
+      ],
+      "/apps/dbi/components/common/dbi-store-locator": [
+        "changestorelink",
+        "storedetaillink",
+        "backgroundimage",
+        "buttonlink",
+        "mobilebackgroundimage"
+      ],
+      "/apps/dbi/components/content/dbi-trends-component": [
+        "linkone",
+        "linktwo",
+        "linkthree"
+      ],
+      "/apps/dbi/components/content/editorial-grid-3-points-small-text-layout": [
+        "imagectalink",
+        "secondimagectalink",
+        "thirdimagectalink",
+        "bottomctalink"
+      ]
+    }
+  },
+  "aem-integration/components/dialog/space": {
+    "count": 3,
+    "components": {
+      "/apps/aem-integration/components/hero-video-banner": [
+        "space"
+      ],
+      "/apps/aem-integration/components/hero-slide": [
+        "space",
+        "space"
+      ]
+    }
+  },
+  "aem-integration/components/dialog/dialogimage": {
+    "count": 4,
+    "components": {
+      "/apps/aem-integration/components/hero-slide": [
+        "image",
+        "image",
+        "image",
+        "image"
+      ]
+    }
+  }
+}

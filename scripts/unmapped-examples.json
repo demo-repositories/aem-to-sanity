@@ -1,0 +1,177 @@
+{
+  "granite/ui/components/coral/foundation/form/pathbrowser": {
+    "componentPath": "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-stacked",
+    "fieldName": "desktopimage",
+    "node": {
+      "jcr:primaryType": "nt:unstructured",
+      "rootPath": "/content",
+      "name": "./desktopImage",
+      "fieldLabel": "Desktop Image",
+      "sling:resourceType": "granite/ui/components/coral/foundation/form/pathbrowser",
+      "fieldDescription": "Give Desktop Image"
+    }
+  },
+  "/libs/commerce/gui/components/common/cifcategoryfield": {
+    "componentPath": "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-stacked",
+    "fieldName": "ctacategorypath",
+    "node": {
+      "jcr:primaryType": "nt:unstructured",
+      "name": "./ctaCategoryPath",
+      "selectionId": "path",
+      "fieldLabel": "PLP Path",
+      "eaem-show-on-collapse": "EAEM.showProductName",
+      "sling:resourceType": "/libs/commerce/gui/components/common/cifcategoryfield",
+      "fieldDescription": "Choose the PLP Page Path"
+    }
+  },
+  "/libs/commerce/gui/components/common/cifproductfield": {
+    "componentPath": "/apps/dbi/components/content/3-column-staggered-grid-portrait-images-mobile-stacked",
+    "fieldName": "ctaproductpath",
+    "node": {
+      "jcr:primaryType": "nt:unstructured",
+      "name": "./ctaProductPath",
+      "selectionId": "slug",
+      "fieldLabel": "Product Path",
+      "eaem-show-on-collapse": "EAEM.showProductName",
+      "sling:resourceType": "/libs/commerce/gui/components/common/cifproductfield",
+      "fieldDescription": "Choose the PDP Page Path"
+    }
+  },
+  "granite/ui/components/foundation/section": {
+    "componentPath": "/apps/dbi/components/universal/dbi-footer",
+    "fieldName": "tab1",
+    "node": {
+      "jcr:primaryType": "nt:unstructured",
+      "jcr:title": "References",
+      "sling:resourceType": "granite/ui/components/foundation/section",
+      "layout": {
+        "jcr:primaryType": "nt:unstructured",
+        "margin": false,
+        "sling:resourceType": "granite/ui/components/foundation/layouts/fixedcolumns"
+      },
+      "items": {
+        "jcr:primaryType": "nt:unstructured",
+        "column": {
+          "jcr:primaryType": "nt:unstructured",
+          "sling:resourceType": "granite/ui/components/foundation/container",
+          "items": {
+            "jcr:primaryType": "nt:unstructured",
+            "references": {
+              "jcr:primaryType": "nt:unstructured",
+              "composite": true,
+              "fieldLabel": "References",
+              "sling:resourceType": "granite/ui/components/coral/foundation/form/multifield",
+              "field": {
+                "jcr:primaryType": "nt:unstructured",
+                "name": "./referncesMulti",
+                "sling:resourceType": "granite/ui/components/coral/foundation/container",
+                "items": {
+                  "jcr:primaryType": "nt:unstructured",
+                  "column": {
+                    "jcr:primaryType": "nt:unstructured",
+                    "sling:resourceType": "granite/ui/components/coral/foundation/container",
+                    "items": {
+                      "jcr:primaryType": "nt:unstructured",
+                      "referencesHeading": {
+                        "jcr:primaryType": "nt:unstructured",
+                        "name": "./referencesHeading",
+                        "fieldLabel": "Section Heading",
+                        "sling:resourceType": "granite/ui/components/coral/foundation/form/textfield"
+                      },
+                      "referencesInfo": {
+                        "jcr:primaryType": "nt:unstructured",
+                        "composite": true,
+                        "fieldLabel": "Reference Details",
+                        "sling:resourceType": "granite/ui/components/coral/foundation/form/multifield",
+                        "eaem-max-items": "5",
+                        "field": {
+                          "jcr:primaryType": "nt:unstructured",
+                          "name": "./referenceDetails",
+                          "sling:resourceType": "granite/ui/components/coral/foundation/container",
+                          "items": {
+                            "jcr:primaryType": "nt:unstructured",
+                            "column": {
+                              "jcr:primaryType": "nt:unstructured",
+                              "sling:resourceType": "granite/ui/components/coral/foundation/container",
+                              "items": {
+                                "jcr:primaryType": "nt:unstructured",
+                                "title": {
+                                  "jcr:primaryType": "nt:unstructured",
+                                  "name": "./footerRefTitle",
+                                  "fieldLabel": "Reference title",
+                                  "sling:resourceType": "granite/ui/components/coral/foundation/form/textfield",
+                                  "fieldDescription": "Enter reference title"
+                                },
+                                "ctaCategoryPath": {
+                                  "jcr:primaryType": "nt:unstructured",
+                                  "name": "./ctaCategoryPath",
+                                  "selectionId": "path",
+                                  "fieldLabel": "PLP Path",
+                                  "eaem-show-on-collapse": "EAEM.showProductName",
+                                  "sling:resourceType": "/libs/commerce/gui/components/common/cifcategoryfield",
+                                  "fieldDescription": "Choose the PLP Page Path"
+                                },
+                                "ctaProductPath": {
+                                  "jcr:primaryType": "nt:unstructured",
+                                  "name": "./ctaProductPath",
+                                  "selectionId": "slug",
+                                  "fieldLabel": "Product Path",
+                                  "eaem-show-on-collapse": "EAEM.showProductName",
+                                  "sling:resourceType": "/libs/commerce/gui/components/common/cifproductfield",
+                                  "fieldDescription": "Choose the PDP Page Path"
+                                },
+                                "link": {
+                                  "jcr:primaryType": "nt:unstructured",
+                                  "rootPath": "/content/dbi",
+                                  "name": "./footerRefLink",
+                                  "fieldLabel": "Reference link",
+                                  "sling:resourceType": "granite/ui/components/coral/foundation/form/pathfield",
+                                  "fieldDescription": "Enter reference link"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "granite/ui/components/foundation/form/pathbrowser": {
+    "componentPath": "/apps/dbi/components/content/dbi-personalized-sales",
+    "fieldName": "ctalink",
+    "node": {
+      "jcr:primaryType": "nt:unstructured",
+      "rootPath": "/content/dbi",
+      "name": "./ctaLink",
+      "fieldLabel": "CTA Link",
+      "sling:resourceType": "granite/ui/components/foundation/form/pathbrowser",
+      "fieldDescription": "CTA Link"
+    }
+  },
+  "aem-integration/components/dialog/space": {
+    "componentPath": "/apps/aem-integration/components/hero-video-banner",
+    "fieldName": "space",
+    "node": {
+      "jcr:primaryType": "nt:unstructured",
+      "height": "30px",
+      "sling:resourceType": "aem-integration/components/dialog/space"
+    }
+  },
+  "aem-integration/components/dialog/dialogimage": {
+    "componentPath": "/apps/aem-integration/components/hero-slide",
+    "fieldName": "image",
+    "node": {
+      "jcr:primaryType": "nt:unstructured",
+      "src": "/content/dam/aem-integration/template-previews/templateD.png",
+      "href": "https://www.figma.com/file/h9E1LDYPVMjc2klap2Z4SR/Hero_UI?node-id=1%3A1648",
+      "sling:resourceType": "aem-integration/components/dialog/dialogimage"
+    }
+  }
+}
