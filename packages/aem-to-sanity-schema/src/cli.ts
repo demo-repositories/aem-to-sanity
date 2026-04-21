@@ -47,11 +47,37 @@ async function main(): Promise<void> {
   });
 
   const s = report.summary();
-  logger.info(
-    `Done. successes=${s.successes} failures=${s.failures} unique-unmapped-types=${Object.keys(s.unmappedTypes).length}`,
-  );
-  logger.info(`Report: ${reportFile}`);
-  if (s.failures > 0) process.exit(1);
+  const unmappedCount = Object.keys(s.unmappedTypes).length;
+
+  logger.info("────────────────────────────────────────");
+  logger.info(`Emitted:             ${s.successes} / ${s.total} component(s)`);
+  logger.info(`Failed:              ${s.failures}`);
+  logger.info(`Unmapped AEM types:  ${unmappedCount}`);
+  logger.info(`Report:              ${reportFile}`);
+  logger.info("────────────────────────────────────────");
+
+  if (s.failures > 0) {
+    const failures = report.results.filter(
+      (r): r is Extract<typeof r, { status: "failure" }> =>
+        r.status === "failure",
+    );
+    const pathWidth = Math.min(
+      60,
+      failures.reduce((w, f) => Math.max(w, f.path.length), 0),
+    );
+    logger.error(`${failures.length} component(s) failed:`);
+    failures.forEach((f, i) => {
+      const n = String(i + 1).padStart(2, " ");
+      const path = f.path.padEnd(pathWidth, " ");
+      const kind = `[${f.kind}]`.padEnd(14, " ");
+      const msg = f.message.replace(/\s+/g, " ").slice(0, 140);
+      logger.error(`  ${n}. ${path}  ${kind} ${msg}`);
+    });
+    logger.error(
+      `Full details (including response bodies) in ${reportFile} under results[].`,
+    );
+    process.exit(1);
+  }
 }
 
 async function readComponentPaths(file: string): Promise<string[]> {
