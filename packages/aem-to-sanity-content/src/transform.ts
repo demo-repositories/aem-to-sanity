@@ -10,11 +10,6 @@ interface AemNode {
   "sling:resourceType"?: string;
   "jcr:uuid"?: string;
 }
-interface SanityDoc {
-  _id: string;
-  _type: string;
-  [key: string]: unknown;
-}
 interface RegistryEntry {
   resourceType: string;
   sanityType: string;
@@ -25,6 +20,18 @@ interface RawFile {
   slug?: string;
   fetchedAt: string;
   tree: AemNode;
+}
+interface PageBuilderItem {
+  _type: string;
+  _key: string;
+  [key: string]: unknown;
+}
+interface PageDoc {
+  _id: string;
+  _type: "page";
+  title: string;
+  slug: { _type: "slug"; current: string };
+  pageBuilder: PageBuilderItem[];
 }
 
 const JCR_METADATA = new Set<string>([
@@ -75,26 +82,6 @@ function stableKey(jcrUuid: string | undefined, jcrPath: string): string {
   return createHash("sha1").update(jcrPath).digest("hex").slice(0, 16);
 }
 
-// Depth-first walk yielding every node with a `sling:resourceType`. Iterative
-// to stay stack-safe on component-heavy pages.
-function* walk(root: AemNode, rootPath: string): Generator<{ node: AemNode; jcrPath: string }> {
-  const seen = new Set<string>();
-  const stack: Array<{ node: AemNode; jcrPath: string }> = [{ node: root, jcrPath: rootPath }];
-  while (stack.length > 0) {
-    const frame = stack.pop()!;
-    if (seen.has(frame.jcrPath)) continue;
-    seen.add(frame.jcrPath);
-    if (typeof frame.node["sling:resourceType"] === "string") yield frame;
-    const entries = Object.entries(frame.node);
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const [key, value] = entries[i]!;
-      if (isChildNode(value)) {
-        stack.push({ node: value, jcrPath: `${frame.jcrPath}/${key}` });
-      }
-    }
-  }
-}
-
 function isChildNode(value: unknown): value is AemNode {
   return (
     typeof value === "object" &&
@@ -104,59 +91,102 @@ function isChildNode(value: unknown): value is AemNode {
   );
 }
 
+function asString(v: unknown): string | undefined {
+  return typeof v === "string" ? v : undefined;
+}
+
 interface TransformContext {
   visited: WeakSet<object>;
   depth: number;
   registry: Map<string, RegistryEntry>;
-  slug: string | undefined;
   audit: Audit;
 }
 
-interface TransformResult {
-  doc: SanityDoc;
-  type: string | undefined;
-  resourceType: string | undefined;
-}
-
-function transformNode(node: AemNode, jcrPath: string, ctx: TransformContext): TransformResult {
-  const resourceType = asString(node["sling:resourceType"]);
-  const entry = resourceType ? ctx.registry.get(resourceType) : undefined;
-  const type = entry?.sanityType;
-
-  const doc: SanityDoc = { _id: pathToDocId(jcrPath), _type: type ?? "aemUnmapped" };
-  if (ctx.slug) doc.slug = { _type: "slug", current: ctx.slug };
+// Transform a mapped component into an inline object. Children are recursively
+// inlined (each with a stable _key). Used for pageBuilder items and nested refs.
+function transformInline(node: AemNode, jcrPath: string, ctx: TransformContext): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
 
   if (ctx.visited.has(node)) {
     ctx.audit.bail(jcrPath, "cycle", ctx.depth);
-    doc.__truncated = { reason: "cycle", jcrPath };
-    return { doc, type, resourceType };
+    return { __truncated: "cycle", jcrPath };
   }
   ctx.visited.add(node);
 
   for (const [key, value] of Object.entries(node)) {
     if (JCR_METADATA.has(key)) continue;
-    if (doc[key] !== undefined) continue;
+    if (out[key] !== undefined) continue;
     if (isChildNode(value)) {
       const childPath = `${jcrPath}/${key}`;
       if (ctx.depth + 1 > MAX_DEPTH) {
         ctx.audit.bail(childPath, "maxDepth", ctx.depth + 1);
-        doc[key] = { __truncated: "maxDepth", jcrPath: childPath };
+        out[key] = { __truncated: "maxDepth", jcrPath: childPath };
         continue;
       }
-      const child = transformNode(value, childPath, { ...ctx, depth: ctx.depth + 1, slug: undefined });
-      const { _id: _unused, ...inline } = child.doc;
-      void _unused;
-      doc[key] = { ...inline, _key: stableKey(asString(value["jcr:uuid"]), childPath) };
+      const inline = transformInline(value, childPath, { ...ctx, depth: ctx.depth + 1 });
+      out[key] = { ...inline, _key: stableKey(asString(value["jcr:uuid"]), childPath) };
     } else {
-      doc[key] = value;
+      out[key] = value;
     }
   }
 
-  return { doc, type, resourceType };
+  return out;
 }
 
-function asString(v: unknown): string | undefined {
-  return typeof v === "string" ? v : undefined;
+// Walk the tree, collect every node whose sling:resourceType maps to a
+// sanityType. Stops descending once a mapped node is found — its children are
+// inlined by transformInline. Unmapped containers (page, responsivegrid, etc.)
+// are transparently descended through.
+function collectPageBuilder(
+  root: AemNode,
+  rootPath: string,
+  ctx: TransformContext,
+  filter: Set<string> | undefined,
+): PageBuilderItem[] {
+  const out: PageBuilderItem[] = [];
+  const stack: Array<{ node: AemNode; jcrPath: string }> = [{ node: root, jcrPath: rootPath }];
+  const seen = new Set<string>();
+
+  while (stack.length > 0) {
+    const frame = stack.pop()!;
+    if (seen.has(frame.jcrPath)) continue;
+    seen.add(frame.jcrPath);
+
+    const resourceType = asString(frame.node["sling:resourceType"]);
+    const entry = resourceType ? ctx.registry.get(resourceType) : undefined;
+
+    if (entry?.sanityType && (!filter || filter.has(resourceType!))) {
+      const inlineCtx: TransformContext = {
+        ...ctx,
+        depth: 0,
+        visited: new WeakSet(),
+      };
+      const inline = transformInline(frame.node, frame.jcrPath, inlineCtx);
+      out.push({
+        _type: entry.sanityType,
+        _key: stableKey(asString(frame.node["jcr:uuid"]), frame.jcrPath),
+        ...inline,
+      });
+      ctx.audit.tick();
+      const drift = diffProps(frame.node, entry);
+      if (drift.length > 0) ctx.audit.unknownProps(entry.sanityType, frame.jcrPath, drift);
+      continue;
+    }
+
+    if (resourceType && !entry?.sanityType) {
+      ctx.audit.unknownType(resourceType, frame.jcrPath);
+    }
+
+    const entries = Object.entries(frame.node);
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const [key, value] = entries[i]!;
+      if (isChildNode(value)) {
+        stack.push({ node: value, jcrPath: `${frame.jcrPath}/${key}` });
+      }
+    }
+  }
+
+  return out;
 }
 
 // Slim audit. Tracks: unknown resource types (with a few example paths),
@@ -249,6 +279,23 @@ function diffProps(node: AemNode, entry: RegistryEntry | undefined): Array<{ pro
   return out;
 }
 
+// Page title: prefer explicit AEM page properties, fall back to slug, then
+// last path segment.
+function derivePageTitle(tree: AemNode, slug: string | undefined, jcrPath: string): string {
+  const content = isChildNode(tree["jcr:content"]) ? (tree["jcr:content"] as AemNode) : undefined;
+  const candidates = [
+    content ? asString(content["pageTitle"]) : undefined,
+    content ? asString(content["jcr:title"]) : undefined,
+    content ? asString(content["navTitle"]) : undefined,
+    slug,
+    jcrPath.split("/").filter(Boolean).pop(),
+  ];
+  for (const c of candidates) {
+    if (c && c.trim().length > 0) return c.trim();
+  }
+  return jcrPath;
+}
+
 function main(): void {
   const c = createColors({ stream: process.stderr });
   const outputDir = resolve(process.env.OUTPUT_DIR ?? "./output");
@@ -271,7 +318,7 @@ function main(): void {
 
   const audit = createAudit();
   let pagesWritten = 0;
-  let docsEmitted = 0;
+  let blocksEmitted = 0;
 
   for (const file of rawFiles) {
     let raw: RawFile;
@@ -283,46 +330,39 @@ function main(): void {
     }
 
     const { jcrPath, slug, tree } = raw;
-    const slugByPath = slug
-      ? new Map([[jcrPath, slug], [`${jcrPath}/jcr:content`, slug]])
-      : undefined;
+    const currentSlug = slug ?? jcrPath.split("/").filter(Boolean).pop() ?? jcrPath;
 
-    const docs: SanityDoc[] = [];
-    for (const { node, jcrPath: nodePath } of walk(tree, jcrPath)) {
-      const resourceType = node["sling:resourceType"] as string;
-      if (allowed && !allowed.has(resourceType)) continue;
+    const ctx: TransformContext = {
+      visited: new WeakSet(),
+      depth: 0,
+      registry,
+      audit,
+    };
 
-      const ctx: TransformContext = {
-        visited: new WeakSet(),
-        depth: 0,
-        registry,
-        slug: slugByPath?.get(nodePath),
-        audit,
-      };
-
-      let result: TransformResult;
-      try {
-        result = transformNode(node, nodePath, ctx);
-      } catch (err) {
-        console.error(`[transform] ${nodePath}: ${(err as Error).message}`);
-        continue;
-      }
-
-      audit.tick();
-      const entry = registry.get(resourceType);
-      if (!result.type) audit.unknownType(resourceType, nodePath);
-      const drift = diffProps(node, entry);
-      if (drift.length > 0) audit.unknownProps(result.type ?? "aemUnmapped", nodePath, drift);
-
-      if (!result.type) continue;
-      docs.push(result.doc);
-      docsEmitted++;
+    let pageBuilder: PageBuilderItem[];
+    try {
+      pageBuilder = collectPageBuilder(tree, jcrPath, ctx, allowed);
+    } catch (err) {
+      console.error(`[transform] ${jcrPath}: ${(err as Error).message}`);
+      continue;
     }
 
-    if (docs.length === 0) continue;
+    const pageDoc: PageDoc = {
+      _id: pathToDocId(jcrPath),
+      _type: "page",
+      title: derivePageTitle(tree, slug, jcrPath),
+      slug: { _type: "slug", current: currentSlug },
+      pageBuilder,
+    };
+
     const outFile = join(cleanDir, file);
-    writeFileSync(outFile, JSON.stringify({ jcrPath, slug, docs }, null, 2) + "\n", "utf8");
+    writeFileSync(
+      outFile,
+      JSON.stringify({ jcrPath, slug: currentSlug, docs: [pageDoc] }, null, 2) + "\n",
+      "utf8",
+    );
     pagesWritten++;
+    blocksEmitted += pageBuilder.length;
   }
 
   const report = audit.report() as { summary: { totalFindings: number } };
@@ -331,7 +371,7 @@ function main(): void {
 
   console.error(c.dim("────────────────────────────────────────"));
   console.error(`Pages:     ${c.green(pagesWritten)}`);
-  console.error(`Docs:      ${c.green(docsEmitted)}`);
+  console.error(`Blocks:    ${c.green(blocksEmitted)}`);
   console.error(
     `Findings:  ${report.summary.totalFindings > 0 ? c.yellow(report.summary.totalFindings) : c.green(0)}  ${c.dim(`→ ${reportFile}`)}`,
   );
