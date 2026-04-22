@@ -7,6 +7,11 @@ export interface EmitInput {
   sourcePath: string;
   fields: SanityField[];
   groups: Array<{ name: string; title: string }>;
+  /**
+   * Studio document title, usually from the AEM component node's `jcr:title`.
+   * When omitted, derived from `typeName` via {@link toTitleCase}.
+   */
+  schemaTitle?: string;
   /** Command the header comment tells readers to run to regenerate. */
   regenerateCommand?: string;
 }
@@ -19,10 +24,13 @@ export interface EmitInput {
 export async function emitSchemaFile(input: EmitInput): Promise<string> {
   const { typeName, sourcePath, fields, groups } = input;
   const regenerateCommand = input.regenerateCommand ?? "pnpm migrate:schema";
-  const title = toTitleCase(typeName);
+  const title =
+    input.schemaTitle?.trim() || toTitleCase(typeName);
+  const titleLiteral = JSON.stringify(title);
 
   const groupsLiteral =
     groups.length > 0 ? `  groups: ${stringifyGroups(groups)},\n` : "";
+  const previewBlock = renderPreviewBlock(fields, title);
 
   const src = `import { defineField, defineType } from "sanity";
 
@@ -32,9 +40,9 @@ export async function emitSchemaFile(input: EmitInput): Promise<string> {
  */
 export const ${typeName} = defineType({
   name: "${typeName}",
-  title: "${title}",
+  title: ${titleLiteral},
   type: "object",
-${groupsLiteral}  fields: [
+${groupsLiteral}${previewBlock}  fields: [
 ${fields.map((f) => renderField(f, 2)).join(",\n")}
   ],
 });
@@ -56,6 +64,136 @@ function stringifyGroups(
       .join(", ") +
     "]"
   );
+}
+
+function isShortTextField(f: SanityField): boolean {
+  return (
+    f.type === "string" || f.type === "text" || f.type === "placeholder"
+  );
+}
+
+function pickTitleFieldName(fields: SanityField[]): string | undefined {
+  const priority = ["title", "headline", "heading", "label", "name"];
+  for (const name of priority) {
+    const f = fields.find((x) => x.name === name);
+    if (f && isShortTextField(f)) return f.name;
+  }
+  for (const f of fields) {
+    if (isShortTextField(f) && /^headline\d*$/i.test(f.name)) return f.name;
+  }
+  for (const f of fields) {
+    if (isShortTextField(f) && /heading/i.test(f.name)) return f.name;
+  }
+  for (const f of fields) {
+    if (isShortTextField(f)) return f.name;
+  }
+  return undefined;
+}
+
+function pickSubtitleFieldName(
+  fields: SanityField[],
+  titleField: string | undefined,
+): string | undefined {
+  const priority = ["eyebrow", "kicker", "caption"];
+  for (const name of priority) {
+    const f = fields.find((x) => x.name === name);
+    if (f && isShortTextField(f) && f.name !== titleField) return f.name;
+  }
+  const desc = fields.find((x) => x.name === "description");
+  if (
+    desc &&
+    (desc.type === "string" || desc.type === "text") &&
+    desc.name !== titleField
+  ) {
+    return desc.name;
+  }
+  if (titleField && /^headline1$/i.test(titleField)) {
+    const h2 = fields.find((x) => /^headline2$/i.test(x.name));
+    if (h2 && isShortTextField(h2)) return h2.name;
+  }
+  if (titleField && /^headline\d+$/i.test(titleField)) {
+    const m = titleField.match(/^(headline)(\d+)$/i);
+    if (m) {
+      const nextNum = parseInt(m[2]!, 10) + 1;
+      const nextName = `${m[1]!}${nextNum}`;
+      const next = fields.find(
+        (x) => x.name.toLowerCase() === nextName.toLowerCase(),
+      );
+      if (next && isShortTextField(next) && next.name !== titleField)
+        return next.name;
+    }
+  }
+  return undefined;
+}
+
+function pickMediaSelectPath(fields: SanityField[]): string | undefined {
+  for (const f of fields) {
+    if (f.type === "image") return f.name;
+  }
+  for (const f of fields) {
+    if (f.type === "array-of-object" && f.itemFields?.length) {
+      const img = f.itemFields.find((i) => i.type === "image");
+      if (img) return `${f.name}.0.${img.name}`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Studio list / array picker preview (`select` + `prepare`) from mapped fields.
+ */
+function renderPreviewBlock(
+  fields: SanityField[],
+  staticTitle: string,
+): string {
+  const titleField = pickTitleFieldName(fields);
+  const subtitleField = pickSubtitleFieldName(fields, titleField);
+  const mediaPath = pickMediaSelectPath(fields);
+  const staticLit = JSON.stringify(staticTitle);
+
+  const select: Record<string, string> = {};
+  if (titleField) select.prTitle = titleField;
+  if (subtitleField) select.prSubtitle = subtitleField;
+  if (mediaPath) select.prMedia = mediaPath;
+
+  const keys = Object.keys(select);
+  if (keys.length === 0) {
+    return `  preview: {
+    prepare() {
+      return { title: ${staticLit} };
+    },
+  },
+`;
+  }
+
+  const selectInner = keys
+    .map((k) => `    ${k}: ${JSON.stringify(select[k])}`)
+    .join(",\n");
+  const destruct = keys.join(", ");
+
+  const titleLine = titleField
+    ? `      title:\n        (typeof prTitle === "string" && prTitle.trim()) || ${staticLit},`
+    : `      title: ${staticLit},`;
+  const subtitleLine = subtitleField
+    ? `      subtitle:\n        typeof prSubtitle === "string" && prSubtitle.trim()\n          ? prSubtitle.trim()\n          : undefined,`
+    : "";
+  const mediaLine = mediaPath ? `      media: prMedia,` : "";
+
+  const returnBody = [titleLine, subtitleLine, mediaLine]
+    .filter(Boolean)
+    .join("\n");
+
+  return `  preview: {
+    select: {
+${selectInner}
+    },
+    prepare({ ${destruct} }) {
+      return {
+${returnBody}
+      };
+    },
+  },
+`;
 }
 
 function renderField(field: SanityField, indentLevel: number): string {

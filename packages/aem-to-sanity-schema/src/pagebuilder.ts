@@ -82,7 +82,21 @@ import { defineField, defineType } from "sanity";
 
 export const ${pageTypeName} = defineType({
   name: ${JSON.stringify(pageTypeName)},
+  title: "Page",
   type: "document",
+  preview: {
+    select: {
+      title: "title",
+      slug: "slug.current",
+    },
+    prepare({ title, slug }) {
+      return {
+        title: typeof title === "string" && title.trim() ? title.trim() : "Untitled page",
+        subtitle:
+          typeof slug === "string" && slug.trim() ? "/" + slug.trim() : undefined,
+      };
+    },
+  },
   fields: [
     defineField({ name: "title", type: "string", validation: (r) => r.required() }),
     defineField({

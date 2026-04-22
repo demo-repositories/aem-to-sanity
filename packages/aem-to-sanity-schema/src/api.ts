@@ -169,6 +169,23 @@ interface ProcessOneDeps {
   regenerateCommand?: string;
 }
 
+/**
+ * AEM `.infinity.json` for a `cq:Component` usually nests the authoring dialog
+ * under `cq:dialog`. When present, we avoid a second request to `/_cq_dialog`.
+ */
+function embeddedCqDialog(node: DialogNode): DialogNode | undefined {
+  const embedded = node["cq:dialog"];
+  if (
+    embedded &&
+    typeof embedded === "object" &&
+    !Array.isArray(embedded) &&
+    Object.keys(embedded as object).length > 0
+  ) {
+    return embedded as DialogNode;
+  }
+  return undefined;
+}
+
 async function processOne(
   componentPath: string,
   deps: ProcessOneDeps,
@@ -178,8 +195,19 @@ async function processOne(
   const typeName = componentPathToTypeName(componentPath);
 
   let dialog: DialogNode;
+  let schemaTitle: string | undefined;
   try {
-    dialog = await fetcher(`${componentPath}/_cq_dialog`);
+    const componentNode = await fetcher(componentPath);
+    const rawTitle = componentNode["jcr:title"];
+    if (typeof rawTitle === "string" && rawTitle.trim()) {
+      schemaTitle = rawTitle.trim();
+    }
+    const embeddedDialog = embeddedCqDialog(componentNode);
+    if (embeddedDialog) {
+      dialog = embeddedDialog;
+    } else {
+      dialog = await fetcher(`${componentPath}/_cq_dialog`);
+    }
   } catch (err) {
     if (err instanceof AemFetchError) {
       report.add({
@@ -224,6 +252,7 @@ async function processOne(
       sourcePath: componentPath,
       fields: mapped.fields,
       groups: mapped.groups,
+      schemaTitle,
       regenerateCommand,
     });
   } catch (err) {
