@@ -176,9 +176,16 @@ function collectDamPaths(value: unknown, out: Set<string>): void {
 
 // Walk the clean doc and replace DAM-path strings with the Sanity asset ref
 // object (when we have one). Operates in place.
-function rewriteDamRefs(value: unknown, manifest: Manifest): unknown {
+// Keys ending with `AemPath` hold read-only migrated paths — never replace.
+function rewriteDamRefs(
+  value: unknown,
+  manifest: Manifest,
+  /** Object key when `value` is a direct property of a record. */
+  propKey?: string,
+): unknown {
   if (typeof value === "string") {
     if (value.startsWith("/content/dam/")) {
+      if (propKey?.endsWith("AemPath")) return value;
       const hit = manifest[value];
       if (hit?.sanityRef) return hit.sanityRef;
     }
@@ -186,11 +193,13 @@ function rewriteDamRefs(value: unknown, manifest: Manifest): unknown {
   }
   if (!value || typeof value !== "object") return value;
   if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) value[i] = rewriteDamRefs(value[i], manifest);
+    for (let i = 0; i < value.length; i++)
+      value[i] = rewriteDamRefs(value[i], manifest, undefined);
     return value;
   }
   const obj = value as Record<string, unknown>;
-  for (const key of Object.keys(obj)) obj[key] = rewriteDamRefs(obj[key], manifest);
+  for (const key of Object.keys(obj))
+    obj[key] = rewriteDamRefs(obj[key], manifest, key) as unknown;
   return obj;
 }
 

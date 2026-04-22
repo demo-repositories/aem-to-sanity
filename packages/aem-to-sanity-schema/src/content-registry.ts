@@ -68,7 +68,7 @@ export async function writeContentRegistry(
         ? r.path.slice(jcrPrefix.length)
         : r.path.replace(/^\/+/, ""),
       sanityType: r.sanityTypeName,
-      fields: [...r.fieldNames].sort(),
+      fields: [...new Set(r.fieldNames)].sort(),
     }))
     .sort((a, b) => a.resourceType.localeCompare(b.resourceType));
 

@@ -1,5 +1,6 @@
 import { childNodes, isTruthyAttr, type DialogNode } from "aem-to-sanity-core";
 import { lookup, type SanityKind } from "./mapping-table.ts";
+import { toCamelCase } from "./naming.ts";
 
 export interface UnmappedField {
   name: string;
@@ -47,6 +48,8 @@ export interface CommonFieldProps {
 interface StringField {
   type: "string";
   initialValue?: string;
+  /** Read-only string (e.g. migrated AEM DAM path alongside an asset field). */
+  readOnly?: boolean;
   options?: {
     list?: Array<{ title: string; value: string }>;
     layout?: "radio";
@@ -82,10 +85,28 @@ interface RichTextField {
 interface ArrayOfObjectField {
   type: "array-of-object";
   itemFields: SanityField[];
+  /** AEM multifield `fieldLabel` → Sanity array member `title` (repeating row). */
+  itemTitle?: string;
 }
 interface PlaceholderField {
   type: "placeholder";
   originalResourceType: string;
+}
+
+/**
+ * All `defineField` names for a component, including nested multifield / array
+ * member fields (used by `content-type-registry.json` and `aem-transform`).
+ */
+export function flattenSchemaFieldNames(fields: SanityField[]): string[] {
+  const out: string[] = [];
+  function walk(f: SanityField): void {
+    out.push(f.name);
+    if (f.type === "array-of-object" && f.itemFields?.length) {
+      for (const inner of f.itemFields) walk(inner);
+    }
+  }
+  for (const f of fields) walk(f);
+  return out;
 }
 
 export async function mapDialog(
@@ -233,8 +254,16 @@ async function walk(
       continue;
     }
 
-    const built = await buildField(entry.kind, key, child, currentGroup, ctx);
-    if (built) out.push(built);
+    const builtList = await buildFieldsForKind(
+      entry.kind,
+      key,
+      child,
+      currentGroup,
+      ctx,
+    );
+    for (const built of builtList) {
+      if (built) out.push(built);
+    }
   }
 }
 
@@ -274,6 +303,69 @@ async function resolveInclude(
   await walk(included, ctx, out, currentGroup);
 }
 
+/** Suffix for read-only DAM path string paired with `fileReference`-style asset fields. */
+export const AEM_FILE_UPLOAD_PATH_FIELD_SUFFIX = "AemPath";
+
+async function buildFieldsForKind(
+  kind: SanityKind,
+  nodeKey: string,
+  node: DialogNode,
+  group: string | undefined,
+  ctx: MappingContext,
+): Promise<SanityField[]> {
+  if (kind === "file" && stringAttr(node.fileReferenceParameter)) {
+    return buildFileUploadFieldPair(nodeKey, node, group, ctx);
+  }
+  const one = await buildField(kind, nodeKey, node, group, ctx);
+  return one ? [one] : [];
+}
+
+/**
+ * When `fileReferenceParameter` is set (typical fileupload), emit two fields:
+ * `{name}AemPath` read-only string (migrated DAM path) + `{name}` image/file
+ * (Sanity asset). Required validation applies only to the asset field.
+ */
+function buildFileUploadFieldPair(
+  nodeKey: string,
+  node: DialogNode,
+  group: string | undefined,
+  ctx: MappingContext,
+): SanityField[] {
+  const assetName = persistedFileLikeFieldName(node, nodeKey);
+  if (!assetName) {
+    ctx.unmapped.push({
+      name: nodeKey,
+      resourceType: node["sling:resourceType"] ?? "(none)",
+      reason: "missing-name",
+    });
+    return [];
+  }
+  const pathName = `${assetName}${AEM_FILE_UPLOAD_PATH_FIELD_SUFFIX}`;
+  const label =
+    stringAttr(node.fieldLabel) ??
+    stringAttr(node["jcr:title"]) ??
+    assetName;
+  const pathField: SanityField = {
+    name: pathName,
+    title: `${label} (AEM DAM path)`,
+    description:
+      "Original AEM path from migration (read-only). Use the Sanity asset field below for previews and delivery.",
+    required: false,
+    group,
+    type: "string",
+    readOnly: true,
+  };
+  const assetField: SanityField = {
+    name: assetName,
+    title: label,
+    description: stringAttr(node.fieldDescription),
+    required: isTruthyAttr(node.required) || undefined,
+    group,
+    type: isImageUpload(node) ? "image" : "file",
+  } as SanityField;
+  return [pathField, assetField];
+}
+
 async function buildField(
   kind: SanityKind,
   nodeKey: string,
@@ -281,7 +373,7 @@ async function buildField(
   group: string | undefined,
   ctx: MappingContext,
 ): Promise<SanityField | undefined> {
-  const name = fieldName(node) ?? toCamelCase(nodeKey);
+  const name = fieldNameForKind(kind, node, nodeKey);
   if (!name) {
     ctx.unmapped.push({
       name: nodeKey,
@@ -293,7 +385,10 @@ async function buildField(
 
   const common: CommonFieldProps = {
     name,
-    title: stringAttr(node.fieldLabel) ?? stringAttr(node["jcr:title"]),
+    title:
+      stringAttr(node.fieldLabel) ??
+      stringAttr(node["jcr:title"]) ??
+      (kind === "multifield" ? multifieldInnerFieldJcrTitle(node) : undefined),
     description: stringAttr(node.fieldDescription),
     required: isTruthyAttr(node.required) || undefined,
     group,
@@ -360,12 +455,18 @@ async function buildField(
       } as SanityField;
     case "pathfield":
       return { ...common, type: "string" };
-    case "multifield":
+    case "multifield": {
+      const itemTitle =
+        stringAttr(node.fieldLabel) ??
+        multifieldInnerFieldJcrTitle(node) ??
+        stringAttr(node["jcr:title"]);
       return {
         ...common,
         type: "array-of-object",
         itemFields: await extractMultifieldItems(node, ctx),
+        ...(itemTitle ? { itemTitle } : {}),
       };
+    }
     case "hidden":
     case "container":
     case "include":
@@ -410,6 +511,44 @@ function extractSelectItems(
   return out;
 }
 
+function fieldNameForKind(
+  kind: SanityKind,
+  node: DialogNode,
+  nodeKey: string,
+): string | undefined {
+  if (kind === "image" || kind === "file") {
+    return persistedFileLikeFieldName(node, nodeKey);
+  }
+  if (kind === "multifield") {
+    return multifieldArrayPropertyName(node, nodeKey);
+  }
+  return fieldName(node) ?? toCamelCase(nodeKey);
+}
+
+/**
+ * JCR stores multifield rows under the inner `field` node's `name` (e.g.
+ * `./textAsImages`), not the Granite sibling key under `items` (e.g. `images`).
+ */
+function multifieldArrayPropertyName(
+  node: DialogNode,
+  nodeKey: string,
+): string | undefined {
+  const field = node["field"];
+  if (field && typeof field === "object" && !Array.isArray(field)) {
+    const fromInner = fieldName(field as DialogNode);
+    if (fromInner) return fromInner;
+  }
+  return fieldName(node) ?? toCamelCase(nodeKey);
+}
+
+function multifieldInnerFieldJcrTitle(node: DialogNode): string | undefined {
+  const field = node["field"];
+  if (!field || typeof field !== "object" || Array.isArray(field)) {
+    return undefined;
+  }
+  return stringAttr((field as DialogNode)["jcr:title"]);
+}
+
 async function extractMultifieldItems(
   node: DialogNode,
   ctx: MappingContext,
@@ -437,9 +576,17 @@ async function extractMultifieldItems(
   }
 
   const singleKey = fieldName(fieldNode) ?? "value";
-  const built = entry
-    ? await buildField(entry.kind, singleKey, fieldNode, undefined, ctx)
-    : buildPlaceholder(singleKey, fieldNode, undefined);
+  if (entry) {
+    const parts = await buildFieldsForKind(
+      entry.kind,
+      singleKey,
+      fieldNode,
+      undefined,
+      ctx,
+    );
+    return parts;
+  }
+  const built = buildPlaceholder(singleKey, fieldNode, undefined);
   return built ? [built] : [];
 }
 
@@ -448,6 +595,23 @@ function fieldName(node: DialogNode): string | undefined {
   if (!raw) return undefined;
   const cleaned = raw.replace(/^\.\//, "").replace(/\//g, "_");
   return toCamelCase(cleaned);
+}
+
+/**
+ * cq/gui authoring fileupload stores the DAM path on the property named by
+ * `fileReferenceParameter` (e.g. `./fileReference`), not on `name` (`./video`).
+ * Match that so schemas align with page `.infinity.json` content.
+ */
+function persistedFileLikeFieldName(
+  node: DialogNode,
+  nodeKey: string,
+): string {
+  const refParam = stringAttr(node.fileReferenceParameter);
+  if (refParam) {
+    const cleaned = refParam.replace(/^\.\//, "").replace(/\//g, "_");
+    return toCamelCase(cleaned);
+  }
+  return fieldName(node) ?? toCamelCase(nodeKey);
 }
 
 function stringAttr(v: unknown): string | undefined {
@@ -473,18 +637,4 @@ function isImageUpload(node: DialogNode): boolean {
       : [];
   if (arr.length === 0) return false;
   return arr.every((m) => m.startsWith("image/"));
-}
-
-function toCamelCase(input: string): string {
-  const words = input
-    .replace(/[^a-zA-Z0-9]+/g, " ")
-    .trim()
-    .split(/\s+/);
-  if (words.length === 0) return "";
-  return words
-    .map((w, i) => {
-      const lower = w.toLowerCase();
-      return i === 0 ? lower : lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join("");
 }

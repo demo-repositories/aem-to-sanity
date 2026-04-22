@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import {
   DialogNodeSchema,
   createColors,
@@ -16,13 +17,29 @@ async function main(): Promise<void> {
   const logger = createLogger({ level: "info" });
 
   const componentPaths = await readComponentPaths(config.componentPathsFile);
-  if (componentPaths.length === 0) {
-    logger.error(`No component paths in ${config.componentPathsFile}`);
+  const exceptionsFile = resolve(
+    process.env.AEM_COMPONENT_EXCEPTIONS_FILE ?? "./aem-component-exceptions",
+  );
+  const exceptions = await readExceptionList(exceptionsFile);
+  const filtered = applyComponentExceptions(componentPaths, exceptions);
+
+  if (filtered.length === 0) {
+    logger.error(
+      `No component paths in ${config.componentPathsFile} after applying exceptions.`,
+    );
     process.exit(1);
   }
 
+  if (exceptions.size > 0) {
+    logger.info(
+      `Applied ${exceptions.size} exception(s) from ${exceptionsFile}; ${
+        componentPaths.length - filtered.length
+      } component(s) ignored.`,
+    );
+  }
+
   logger.info(
-    `Migrating ${componentPaths.length} component(s) from ${config.baseUrl} [env=${config.env}, auth=${config.auth.kind}]`,
+    `Migrating ${filtered.length} component(s) from ${config.baseUrl} [env=${config.env}, auth=${config.auth.kind}]`,
   );
 
   const fetcher = (jcrPath: string): Promise<DialogNode> =>
@@ -39,7 +56,7 @@ async function main(): Promise<void> {
     });
 
   const { report, reportFile } = await migrateSchemas({
-    componentPaths,
+    componentPaths: filtered,
     fetcher,
     outputDir: config.outputDir,
     concurrency: config.concurrency,
@@ -105,6 +122,45 @@ async function readComponentPaths(file: string): Promise<string[]> {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
+async function readExceptionList(file: string): Promise<Set<string>> {
+  try {
+    const raw = await readFile(file, "utf8");
+    return new Set(
+      raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith("#"))
+        .map(normalizeExceptionKey),
+    );
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return new Set();
+    throw err;
+  }
+}
+
+function normalizeExceptionKey(v: string): string {
+  const trimmed = v.trim().replace(/^\/+/, "");
+  if (trimmed.startsWith("apps/")) return trimmed.slice("apps/".length);
+  return trimmed;
+}
+
+function toResourceTypeFromPath(componentPath: string): string {
+  const noLead = componentPath.replace(/^\/+/, "");
+  return noLead.startsWith("apps/") ? noLead.slice("apps/".length) : noLead;
+}
+
+function applyComponentExceptions(
+  componentPaths: string[],
+  exceptions: Set<string>,
+): string[] {
+  if (exceptions.size === 0) return componentPaths;
+  return componentPaths.filter((p) => {
+    const pathKey = normalizeExceptionKey(p);
+    const resourceType = toResourceTypeFromPath(p);
+    return !(exceptions.has(pathKey) || exceptions.has(resourceType));
+  });
 }
 
 main().catch((err) => {

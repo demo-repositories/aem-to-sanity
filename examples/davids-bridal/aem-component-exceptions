@@ -1,0 +1,9 @@
+# Components/resourceTypes listed here are ignored by both:
+# - schema migration (`aem-to-sanity-schema`)
+# - content transform (`aem-transform`)
+#
+# Allowed formats per line:
+# - resource type: aem-integration/components/properties
+# - component path: /apps/aem-integration/components/properties
+
+aem-integration/components/properties

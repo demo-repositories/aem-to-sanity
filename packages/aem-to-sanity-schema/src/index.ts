@@ -5,7 +5,11 @@ export type {
 } from "./api.ts";
 export { emitSchemaFile } from "./emitter.ts";
 export type { EmitInput } from "./emitter.ts";
-export { mapDialog } from "./mapper.ts";
+export {
+  mapDialog,
+  flattenSchemaFieldNames,
+  AEM_FILE_UPLOAD_PATH_FIELD_SUFFIX,
+} from "./mapper.ts";
 export type {
   NodeFetcher,
   SanityField,
@@ -13,7 +17,12 @@ export type {
   RenamedField,
   CommonFieldProps,
 } from "./mapper.ts";
-export { componentPathToTypeName, toCamelCase, toTitleCase } from "./naming.ts";
+export {
+  componentPathToTypeName,
+  displayTitleFromAemComponentJcrTitle,
+  toCamelCase,
+  toTitleCase,
+} from "./naming.ts";
 export { MAPPING, lookup } from "./mapping-table.ts";
 export type { MappingEntry, SanityKind } from "./mapping-table.ts";
 export { Report } from "./report.ts";

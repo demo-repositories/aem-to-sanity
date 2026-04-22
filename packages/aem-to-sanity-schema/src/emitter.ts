@@ -1,6 +1,9 @@
 import prettier from "prettier";
 import type { SanityField } from "./mapper.ts";
-import { toTitleCase } from "./naming.ts";
+import {
+  displayTitleFromAemComponentJcrTitle,
+  toTitleCase,
+} from "./naming.ts";
 
 export interface EmitInput {
   typeName: string;
@@ -24,8 +27,9 @@ export interface EmitInput {
 export async function emitSchemaFile(input: EmitInput): Promise<string> {
   const { typeName, sourcePath, fields, groups } = input;
   const regenerateCommand = input.regenerateCommand ?? "pnpm migrate:schema";
-  const title =
-    input.schemaTitle?.trim() || toTitleCase(typeName);
+  const title = input.schemaTitle?.trim()
+    ? displayTitleFromAemComponentJcrTitle(input.schemaTitle.trim())
+    : toTitleCase(typeName);
   const titleLiteral = JSON.stringify(title);
 
   const groupsLiteral =
@@ -72,22 +76,9 @@ function isShortTextField(f: SanityField): boolean {
   );
 }
 
-function pickTitleFieldName(fields: SanityField[]): string | undefined {
-  const priority = ["title", "headline", "heading", "label", "name"];
-  for (const name of priority) {
-    const f = fields.find((x) => x.name === name);
-    if (f && isShortTextField(f)) return f.name;
-  }
-  for (const f of fields) {
-    if (isShortTextField(f) && /^headline\d*$/i.test(f.name)) return f.name;
-  }
-  for (const f of fields) {
-    if (isShortTextField(f) && /heading/i.test(f.name)) return f.name;
-  }
-  for (const f of fields) {
-    if (isShortTextField(f)) return f.name;
-  }
-  return undefined;
+/** Migrated AEM DAM path strings — never use as card title in Studio preview. */
+function isAemPathTraceField(f: SanityField): boolean {
+  return f.type === "string" && f.name.endsWith("AemPath");
 }
 
 function pickSubtitleFieldName(
@@ -97,13 +88,20 @@ function pickSubtitleFieldName(
   const priority = ["eyebrow", "kicker", "caption"];
   for (const name of priority) {
     const f = fields.find((x) => x.name === name);
-    if (f && isShortTextField(f) && f.name !== titleField) return f.name;
+    if (
+      f &&
+      isShortTextField(f) &&
+      f.name !== titleField &&
+      !isAemPathTraceField(f)
+    )
+      return f.name;
   }
   const desc = fields.find((x) => x.name === "description");
   if (
     desc &&
     (desc.type === "string" || desc.type === "text") &&
-    desc.name !== titleField
+    desc.name !== titleField &&
+    !isAemPathTraceField(desc)
   ) {
     return desc.name;
   }
@@ -119,7 +117,12 @@ function pickSubtitleFieldName(
       const next = fields.find(
         (x) => x.name.toLowerCase() === nextName.toLowerCase(),
       );
-      if (next && isShortTextField(next) && next.name !== titleField)
+      if (
+        next &&
+        isShortTextField(next) &&
+        next.name !== titleField &&
+        !isAemPathTraceField(next)
+      )
         return next.name;
     }
   }
@@ -129,30 +132,33 @@ function pickSubtitleFieldName(
 function pickMediaSelectPath(fields: SanityField[]): string | undefined {
   for (const f of fields) {
     if (f.type === "image") return f.name;
+    if (f.type === "file") return f.name;
   }
   for (const f of fields) {
     if (f.type === "array-of-object" && f.itemFields?.length) {
       const img = f.itemFields.find((i) => i.type === "image");
       if (img) return `${f.name}.0.${img.name}`;
+      const file = f.itemFields.find((i) => i.type === "file");
+      if (file) return `${f.name}.0.${file.name}`;
     }
   }
   return undefined;
 }
 
 /**
- * Studio list / array picker preview (`select` + `prepare`) from mapped fields.
+ * Studio list / array picker preview (`select` + `prepare`).
+ * Row title is always the AEM component `jcr:title` (see `displayTitleFromAemComponentJcrTitle`);
+ * subtitle / media still come from mapped fields when useful.
  */
 function renderPreviewBlock(
   fields: SanityField[],
   staticTitle: string,
 ): string {
-  const titleField = pickTitleFieldName(fields);
-  const subtitleField = pickSubtitleFieldName(fields, titleField);
+  const subtitleField = pickSubtitleFieldName(fields, undefined);
   const mediaPath = pickMediaSelectPath(fields);
   const staticLit = JSON.stringify(staticTitle);
 
   const select: Record<string, string> = {};
-  if (titleField) select.prTitle = titleField;
   if (subtitleField) select.prSubtitle = subtitleField;
   if (mediaPath) select.prMedia = mediaPath;
 
@@ -171,9 +177,7 @@ function renderPreviewBlock(
     .join(",\n");
   const destruct = keys.join(", ");
 
-  const titleLine = titleField
-    ? `      title:\n        (typeof prTitle === "string" && prTitle.trim()) || ${staticLit},`
-    : `      title: ${staticLit},`;
+  const titleLine = `      title: ${staticLit},`;
   const subtitleLine = subtitleField
     ? `      subtitle:\n        typeof prSubtitle === "string" && prSubtitle.trim()\n          ? prSubtitle.trim()\n          : undefined,`
     : "";
@@ -213,6 +217,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
   switch (field.type) {
     case "string": {
       props.type = '"string"';
+      if (field.readOnly) props.readOnly = "true";
       if (field.initialValue !== undefined)
         props.initialValue = JSON.stringify(field.initialValue);
       if (field.options?.list && field.options.list.length > 0) {
@@ -270,7 +275,10 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
       const itemFields = field.itemFields
         .map((f) => renderField(f, 0))
         .join(", ");
-      props.of = `[{ type: "object", fields: [${itemFields}] }]`;
+      const memberTitle = field.itemTitle
+        ? `, title: ${JSON.stringify(field.itemTitle)}`
+        : "";
+      props.of = `[{ type: "object"${memberTitle}, fields: [${itemFields}] }]`;
       break;
     }
     case "placeholder": {
@@ -305,6 +313,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     "description",
     "type",
     "group",
+    "readOnly",
     "rows",
     "initialValue",
     "options",

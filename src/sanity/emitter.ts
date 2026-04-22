@@ -1,12 +1,14 @@
 import prettier from "prettier";
 import type { SanityField } from "./mapper.ts";
-import { toTitleCase } from "./naming.ts";
+import { displayTitleFromAemComponentJcrTitle, toTitleCase } from "./naming.ts";
 
 export interface EmitInput {
   typeName: string;
   sourcePath: string;
   fields: SanityField[];
   groups: Array<{ name: string; title: string }>;
+  /** AEM `cq:Component` `jcr:title` when available. */
+  schemaTitle?: string;
 }
 
 /**
@@ -16,7 +18,9 @@ export interface EmitInput {
  */
 export async function emitSchemaFile(input: EmitInput): Promise<string> {
   const { typeName, sourcePath, fields, groups } = input;
-  const title = toTitleCase(typeName);
+  const title = input.schemaTitle?.trim()
+    ? displayTitleFromAemComponentJcrTitle(input.schemaTitle.trim())
+    : toTitleCase(typeName);
 
   const groupsLiteral = groups.length > 0
     ? `  groups: ${stringifyGroups(groups)},\n`
@@ -71,6 +75,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
   switch (field.type) {
     case "string": {
       props.type = '"string"';
+      if (field.readOnly) props.readOnly = "true";
       if (field.initialValue !== undefined)
         props.initialValue = JSON.stringify(field.initialValue);
       if (field.options?.list && field.options.list.length > 0) {
@@ -126,7 +131,10 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     case "array-of-object": {
       props.type = '"array"';
       const itemFields = field.itemFields.map((f) => renderField(f, 0)).join(", ");
-      props.of = `[{ type: "object", fields: [${itemFields}] }]`;
+      const memberTitle = field.itemTitle
+        ? `, title: ${JSON.stringify(field.itemTitle)}`
+        : "";
+      props.of = `[{ type: "object"${memberTitle}, fields: [${itemFields}] }]`;
       break;
     }
     case "placeholder": {
@@ -161,6 +169,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     "description",
     "type",
     "group",
+    "readOnly",
     "rows",
     "initialValue",
     "options",

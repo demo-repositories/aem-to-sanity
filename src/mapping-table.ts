@@ -74,11 +74,13 @@ export const MAPPING: Record<string, MappingEntry> = {
   },
   "cq/gui/components/authoring/dialog/fileupload": {
     kind: "file",
-    description: "File upload → Sanity image (if image mimeTypes) else file",
+    description:
+      "Image/video upload: read-only `{fileReferenceParameter}AemPath` (DAM path) + `{fileReference}` image/file asset; required only on asset when AEM required",
   },
   "granite/ui/components/coral/foundation/form/multifield": {
     kind: "multifield",
-    description: "Multifield → Sanity array of inline objects",
+    description:
+      "Composite multifield → array; persisted key from inner `field.name` (strip ./); JCR rows `item0`/`item1`; titles from `fieldLabel`",
   },
   "granite/ui/components/coral/foundation/container": {
     kind: "container",
@@ -111,6 +113,11 @@ export const MAPPING: Record<string, MappingEntry> = {
   "granite/ui/components/foundation/heading": {
     kind: "hidden",
     description: "Decorative UI heading inside a dialog → skipped (not a field)",
+  },
+  "aem-integration/components/dialog/space": {
+    kind: "hidden",
+    description:
+      "Authoring-only spacer in Granite dialogs → skipped (not content)",
   },
   "granite/ui/components/coral/foundation/form/colorfield": {
     kind: "string",

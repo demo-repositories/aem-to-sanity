@@ -53,6 +53,56 @@ const JCR_METADATA = new Set<string>([
 
 const MAX_DEPTH = 512;
 
+/**
+ * Read-only DAM path fields from fileupload mapping (`{name}AemPath`).
+ * Must match `AEM_FILE_UPLOAD_PATH_FIELD_SUFFIX` in `aem-to-sanity-schema` mapper.
+ */
+const AEM_FILE_UPLOAD_PATH_FIELD_SUFFIX = "AemPath";
+
+/** Sanity document / object attribute names; AEM often emits `cq:*` on nodes. */
+const SANITY_ATTRIBUTE_KEY = /^\$?[a-zA-Z0-9_-]+$/;
+
+function isValidSanityAttributeKey(key: string): boolean {
+  return SANITY_ATTRIBUTE_KEY.test(key);
+}
+
+/**
+ * Same camelCase rules as schema generation (`aem-to-sanity-schema` naming) so
+ * `./lineOneTextFontFamily` → `lineOneTextFontFamily`, not `lineonetextfontfamily`.
+ */
+function toCamelCase(input: string): string {
+  const spaced = input
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .trim();
+  const words = spaced.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "";
+  return words
+    .map((w, i) => {
+      const lower = w.toLowerCase();
+      return i === 0 ? lower : lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join("");
+}
+
+/**
+ * Granite dialog nodes declare the persisted property as `name` (often
+ * `./contentPosition`). Page `.infinity.json` usually already uses that final
+ * key, but when the JCR sibling key differs (e.g. `align` vs `./textAlign`),
+ * use `name` so migrated documents match emitted Sanity schemas.
+ */
+function sanityPropertyKeyFromAemChild(
+  child: AemNode,
+  jcrSiblingKey: string,
+): string {
+  const raw = asString(child.name);
+  if (!raw) return jcrSiblingKey;
+  const stripped = raw.replace(/^\.\//, "").replace(/\//g, "_");
+  if (!stripped) return jcrSiblingKey;
+  return toCamelCase(stripped);
+}
+
 function loadRegistry(path: string): Map<string, RegistryEntry> {
   const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
   const entries = Array.isArray(raw)
@@ -66,6 +116,28 @@ function loadRegistry(path: string): Map<string, RegistryEntry> {
   const map = new Map<string, RegistryEntry>();
   for (const e of entries) map.set(e.resourceType, e);
   return map;
+}
+
+function normalizeExceptionKey(v: string): string {
+  const trimmed = v.trim().replace(/^\/+/, "");
+  if (trimmed.startsWith("apps/")) return trimmed.slice("apps/".length);
+  return trimmed;
+}
+
+function readExceptionResourceTypes(file: string): Set<string> {
+  try {
+    const raw = readFileSync(file, "utf8");
+    return new Set(
+      raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith("#"))
+        .map(normalizeExceptionKey),
+    );
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return new Set();
+    throw err;
+  }
 }
 
 function pathToDocId(jcrPath: string): string {
@@ -102,6 +174,86 @@ interface TransformContext {
   audit: Audit;
 }
 
+/**
+ * AEM composite multifield (`granite/.../form/multifield` + `composite: true`):
+ * authored data lives under the inner `field.name` property (see schema
+ * `multifieldArrayPropertyName`); each row is `item0`, `item1`, … (or `0`, `1`)
+ * until we coerce to a JSON array below.
+ */
+const AEM_MULTIFIELD_ITEM_KEY = /^item\d+$/i;
+const AEM_MULTIFIELD_NUMERIC_KEY = /^\d+$/;
+
+function isAemMultifieldItemKey(k: string): boolean {
+  return AEM_MULTIFIELD_ITEM_KEY.test(k) || AEM_MULTIFIELD_NUMERIC_KEY.test(k);
+}
+
+function multifieldItemOrder(a: string, b: string): number {
+  const mA = a.match(/^item(\d+)$/i);
+  const mB = b.match(/^item(\d+)$/i);
+  const na = mA ? parseInt(mA[1]!, 10) : parseInt(a, 10);
+  const nb = mB ? parseInt(mB[1]!, 10) : parseInt(b, 10);
+  return (Number.isFinite(na) ? na : 0) - (Number.isFinite(nb) ? nb : 0);
+}
+
+function isAemMultifieldItemMap(o: Record<string, unknown>): boolean {
+  const keys = Object.keys(o);
+  if (keys.length === 0) return false;
+  const itemLike = keys.filter((k) => k !== "_key");
+  if (itemLike.length === 0) return false;
+  return itemLike.every((k) => isAemMultifieldItemKey(k));
+}
+
+/**
+ * Move migrated DAM strings from `{base}` → `{base}AemPath` so asset fields
+ * stay empty until `aem-assets` fills Sanity refs (see fileupload schema pair).
+ */
+function splitAemFileUploadDamPaths(
+  value: unknown,
+  registryFields: string[] | undefined,
+): void {
+  if (!registryFields?.length) return;
+  const fieldSet = new Set(registryFields);
+  function walk(o: unknown): void {
+    if (Array.isArray(o)) {
+      for (const x of o) walk(x);
+      return;
+    }
+    if (!o || typeof o !== "object") return;
+    if ((o as { __truncated?: unknown }).__truncated) return;
+    const rec = o as Record<string, unknown>;
+    for (const f of fieldSet) {
+      if (!f.endsWith(AEM_FILE_UPLOAD_PATH_FIELD_SUFFIX)) continue;
+      const base = f.slice(0, -AEM_FILE_UPLOAD_PATH_FIELD_SUFFIX.length);
+      if (!base) continue;
+      const v = rec[base];
+      if (typeof v === "string" && v.startsWith("/content/dam/")) {
+        if (rec[f] === undefined) rec[f] = v;
+        delete rec[base];
+      }
+    }
+    for (const v of Object.values(rec)) walk(v);
+  }
+  walk(value);
+}
+
+function deepCoerceAemMultifieldMapsToArrays(val: unknown): unknown {
+  if (val === null || typeof val !== "object") return val;
+  if (Array.isArray(val)) {
+    return val.map((x) => deepCoerceAemMultifieldMapsToArrays(x));
+  }
+  const o = val as Record<string, unknown>;
+  if (isAemMultifieldItemMap(o)) {
+    const keys = Object.keys(o).filter((k) => k !== "_key");
+    keys.sort(multifieldItemOrder);
+    return keys.map((ik) => deepCoerceAemMultifieldMapsToArrays(o[ik]));
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    out[k] = deepCoerceAemMultifieldMapsToArrays(v) as unknown;
+  }
+  return out;
+}
+
 // Transform a mapped component into an inline object. Children are recursively
 // inlined (each with a stable _key). Used for pageBuilder items and nested refs.
 function transformInline(node: AemNode, jcrPath: string, ctx: TransformContext): Record<string, unknown> {
@@ -115,22 +267,29 @@ function transformInline(node: AemNode, jcrPath: string, ctx: TransformContext):
 
   for (const [key, value] of Object.entries(node)) {
     if (JCR_METADATA.has(key)) continue;
-    if (out[key] !== undefined) continue;
     if (isChildNode(value)) {
+      const outKey = sanityPropertyKeyFromAemChild(value, key);
+      if (!isValidSanityAttributeKey(outKey)) continue;
+      if (out[outKey] !== undefined) continue;
       const childPath = `${jcrPath}/${key}`;
       if (ctx.depth + 1 > MAX_DEPTH) {
         ctx.audit.bail(childPath, "maxDepth", ctx.depth + 1);
-        out[key] = { __truncated: "maxDepth", jcrPath: childPath };
+        out[outKey] = { __truncated: "maxDepth", jcrPath: childPath };
         continue;
       }
       const inline = transformInline(value, childPath, { ...ctx, depth: ctx.depth + 1 });
-      out[key] = { ...inline, _key: stableKey(asString(value["jcr:uuid"]), childPath) };
+      out[outKey] = {
+        ...inline,
+        _key: stableKey(asString(value["jcr:uuid"]), childPath),
+      };
     } else {
+      if (!isValidSanityAttributeKey(key)) continue;
+      if (out[key] !== undefined) continue;
       out[key] = value;
     }
   }
 
-  return out;
+  return deepCoerceAemMultifieldMapsToArrays(out) as Record<string, unknown>;
 }
 
 // Walk the tree, collect every node whose sling:resourceType maps to a
@@ -142,6 +301,7 @@ function collectPageBuilder(
   rootPath: string,
   ctx: TransformContext,
   filter: Set<string> | undefined,
+  exceptions: Set<string>,
 ): PageBuilderItem[] {
   const out: PageBuilderItem[] = [];
   const stack: Array<{ node: AemNode; jcrPath: string }> = [{ node: root, jcrPath: rootPath }];
@@ -153,6 +313,10 @@ function collectPageBuilder(
     seen.add(frame.jcrPath);
 
     const resourceType = asString(frame.node["sling:resourceType"]);
+    if (resourceType && exceptions.has(resourceType)) {
+      // Explicitly ignored resource type: skip this node and its subtree.
+      continue;
+    }
     const entry = resourceType ? ctx.registry.get(resourceType) : undefined;
 
     if (entry?.sanityType && (!filter || filter.has(resourceType!))) {
@@ -162,6 +326,7 @@ function collectPageBuilder(
         visited: new WeakSet(),
       };
       const inline = transformInline(frame.node, frame.jcrPath, inlineCtx);
+      splitAemFileUploadDamPaths(inline, entry.fields);
       out.push({
         _type: entry.sanityType,
         _key: stableKey(asString(frame.node["jcr:uuid"]), frame.jcrPath),
@@ -300,6 +465,10 @@ function main(): void {
   const c = createColors({ stream: process.stderr });
   const outputDir = resolve(process.env.OUTPUT_DIR ?? "./output");
   const registryFile = resolve(getFlag("--registry") ?? "./content-type-registry.json");
+  const exceptionsFile = resolve(
+    process.env.AEM_COMPONENT_EXCEPTIONS_FILE ?? "./aem-component-exceptions",
+  );
+  const exceptions = readExceptionResourceTypes(exceptionsFile);
   const include = getFlag("--include")?.split(",").filter(Boolean);
   const allowed = include ? new Set(include) : undefined;
 
@@ -315,6 +484,11 @@ function main(): void {
   }
 
   console.error(`[transform] ${rawFiles.length} raw file(s) → ${cleanDir}`);
+  if (exceptions.size > 0) {
+    console.error(
+      `[transform] applying ${exceptions.size} exception(s) from ${exceptionsFile}`,
+    );
+  }
 
   const audit = createAudit();
   let pagesWritten = 0;
@@ -341,7 +515,7 @@ function main(): void {
 
     let pageBuilder: PageBuilderItem[];
     try {
-      pageBuilder = collectPageBuilder(tree, jcrPath, ctx, allowed);
+      pageBuilder = collectPageBuilder(tree, jcrPath, ctx, allowed, exceptions);
     } catch (err) {
       console.error(`[transform] ${jcrPath}: ${(err as Error).message}`);
       continue;
