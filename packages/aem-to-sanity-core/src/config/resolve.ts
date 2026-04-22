@@ -48,6 +48,7 @@ export function resolveConfig(env: NodeJS.ProcessEnv): Config {
     baseUrl: activeUrl.replace(/\/$/, ""),
     auth,
     componentPathsFile: data.AEM_COMPONENT_PATHS_FILE,
+    contentRootsFile: data.AEM_CONTENT_ROOTS_FILE,
     outputDir: data.OUTPUT_DIR,
     concurrency: data.CONCURRENCY,
   };

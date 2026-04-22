@@ -9,14 +9,9 @@ export {
   fetchInfinityJson,
   fetchComponentDialog,
 } from "./fetcher.ts";
-export type { AemFetchErrorKind, FetchDeps } from "./fetcher.ts";
-export {
-  fetchContentTree,
-  detectTruncations,
-  isTruncationMarker,
-} from "./infinity.ts";
 export type {
-  ContentNode,
-  TruncationFailureMarker,
-  FetchContentTreeOptions,
-} from "./infinity.ts";
+  AemFetchErrorKind,
+  AmbiguousResolution,
+  FetchDeps,
+  FetchInfinityOptions,
+} from "./fetcher.ts";

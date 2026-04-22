@@ -14,6 +14,7 @@ export const EnvSchema = z.object({
   AEM_TOKEN: z.string().optional(),
 
   AEM_COMPONENT_PATHS_FILE: z.string().default("./aem-component-paths"),
+  AEM_CONTENT_ROOTS_FILE: z.string().default("./aem-content-roots"),
   OUTPUT_DIR: z.string().default("./output"),
   CONCURRENCY: z.coerce.number().int().positive().default(4),
 });
@@ -29,6 +30,7 @@ export interface Config {
   baseUrl: string;
   auth: AuthMode;
   componentPathsFile: string;
+  contentRootsFile: string;
   outputDir: string;
   concurrency: number;
 }

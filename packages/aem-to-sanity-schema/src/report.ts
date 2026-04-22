@@ -24,6 +24,7 @@ export type FailureKind =
   | "network"
   | "auth"
   | "parseError"
+  | "tooLarge"
   | "mappingError"
   | "writeError";
 

@@ -1,0 +1,46 @@
+# Content roots to migrate from AEM → Sanity.
+#
+# This file defines the AEM pages the content CLI walks. For each page, the
+# resulting Sanity doc is populated with `slug: { _type: "slug", current: "..." }`
+# so the URL lines up with AEM.
+#
+# Syntax:
+#   # ...              → comment (also allowed inline after content)
+#   @base /content/... → sets the base path for subsequent slug lines
+#   home               → relative slug, joined with the current @base
+#   /content/other/top → absolute JCR path (slug = "top", the last segment)
+#
+# Multiple @base sections are allowed — each @base applies until the next one.
+#
+# Tip for discovering paths: hit `<AEM_AUTHOR_URL>/content.1.json` while
+# logged into AEM author to list top-level site roots. Drill down one level at
+# a time (`/content/<sitename>.1.json`, etc.) until you reach your locale.
+
+@base /content/dbi/en
+
+FAQ
+about-us
+bridal-party
+bridesmaids-guide
+brides
+bridesmaid
+categories
+designers
+gifts-and-decor
+help
+homepage
+inspiration
+inspiration-and-planning
+mother-of-the-bride-dress
+planning
+privacy-policy
+prom
+prom-trends
+promotions-coupons
+sale
+shoes-and-accessories
+sitemap
+special-occasion
+stores
+wedding-dresses
+wedding-dress-style

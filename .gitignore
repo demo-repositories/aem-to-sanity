@@ -13,8 +13,9 @@ dist/
 .env.local
 .env.*.local
 
-# Project-specific input (contains customer component paths)
+# Project-specific input (contains customer component paths + content roots)
 aem-component-paths
+aem-content-roots
 
 # Logs
 *.log

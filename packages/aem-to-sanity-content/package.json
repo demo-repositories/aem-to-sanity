@@ -1,18 +1,9 @@
 {
   "name": "aem-to-sanity-content",
   "version": "0.0.0",
-  "description": "Migrate AEM content (via .infinity.json) into Sanity documents, with drift audit.",
+  "description": "Three flat scripts to migrate AEM content (.infinity.json) into Sanity: extract → transform → import.",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
-    }
-  },
   "files": [
     "dist",
     "README.md"
@@ -21,11 +12,13 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist .turbo",
-    "migrate:content": "node dist/cli.js"
+    "clean": "rm -rf dist .turbo"
   },
   "bin": {
-    "aem-to-sanity-content": "./dist/cli.js"
+    "aem-extract": "./dist/extract.js",
+    "aem-transform": "./dist/transform.js",
+    "aem-assets": "./dist/assets.js",
+    "aem-import": "./dist/import.js"
   },
   "dependencies": {
     "aem-to-sanity-core": "workspace:*",

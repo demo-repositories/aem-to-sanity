@@ -8,7 +8,11 @@
     "migrate:schema": "aem-to-sanity-schema",
     "typegen": "aem-to-sanity-typegen",
     "pagebuilder:refresh": "aem-to-sanity-pagebuilder",
-    "migrate:content": "aem-to-sanity-content --root /content/davidsbridal/us/en --registry ./output/content-type-registry.json",
+    "extract": "aem-extract",
+    "transform": "aem-transform --registry ./output/content-type-registry.json",
+    "assets": "aem-assets",
+    "import": "aem-import",
+    "migrate:content": "pnpm run extract && pnpm run transform && pnpm run assets && pnpm run import",
     "migrate:all": "pnpm run migrate:schema && pnpm run typegen"
   },
   "devDependencies": {
