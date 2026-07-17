@@ -1,6 +1,6 @@
 {
   "name": "aem-to-sanity-schema",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Generate Sanity object schemas (and TypeScript types) from AEM Granite UI component dialog definitions.",
   "license": "MIT",
   "type": "module",

@@ -1,0 +1,57 @@
+name: Release
+
+# Two-step release flow driven by Changesets:
+#
+# 1. Pushes to main that carry pending changesets (`.changeset/*.md`) cause
+#    this workflow to open/update a "Version Packages" PR. That PR bumps the
+#    fixed version line across all publishable packages and rolls the
+#    changeset summaries into each package's CHANGELOG.md.
+# 2. Merging the Version Packages PR triggers this workflow again; with no
+#    pending changesets left it runs `pnpm release` (`changeset tag`), pushes
+#    the new `<pkg>@<version>` tags, and publishes GitHub Releases whose notes
+#    come from the CHANGELOG entries.
+#
+# Consumers pin to a release by checking out a tag; nothing is published to npm.
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create release PR or tag release
+        uses: changesets/action@v1
+        with:
+          version: pnpm run version
+          publish: pnpm run release
+          title: "chore: version packages"
+          commit: "chore: version packages"
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

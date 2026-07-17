@@ -190,6 +190,7 @@ Five CLIs (`aem-extract`, `aem-tags`, `aem-transform`, `aem-assets`, `aem-import
 | [`docs/overview.md`](docs/overview.md) | Architecture, design principles, minimum commands — one page. |
 | [`docs/running-the-migration.md`](docs/running-the-migration.md) | Operator's runbook — every env var, every flag, per-stage outputs, troubleshooting. |
 | [`docs/aem-to-sanity-mapping.md`](docs/aem-to-sanity-mapping.md) | Auto-generated field-level mapping (AEM Granite UI ↔ Sanity types). |
+| [`docs/releasing.md`](docs/releasing.md) | Versioning & releases — how to pin a release, how to ship one. |
 | Per-package READMEs | API contracts, flag tables, output shapes for each runtime package. |
 | [`CLAUDE.md`](CLAUDE.md) | Project conventions for AI assistants (and a useful map for new contributors). |
 
@@ -237,9 +238,22 @@ pnpm migrate:doctor --all
 
 ---
 
+## Versioning & releases
+
+The three runtime packages share one version line (currently **1.0.0**), managed with [Changesets](https://github.com/changesets/changesets). Every release ships as git tags + [GitHub Releases](https://github.com/demo-repositories/aem-to-sanity/releases) with release notes, so you decide when to move:
+
+```bash
+git fetch --tags
+git checkout aem-to-sanity-core@1.0.0   # pin to a release; read its notes first
+```
+
+User-facing PRs must include a changeset (`pnpm changeset`); merging the auto-opened "chore: version packages" PR cuts the release. Full guide: [`docs/releasing.md`](docs/releasing.md).
+
+---
+
 ## Status & contributing
 
-The three runtime packages and the Studio app are production-shaped — `tenants/davids-bridal/` and `tenants/t-mobile/` are the integration suites. CI publish via Changesets is wired but not yet automated. See [`CLAUDE.md`](CLAUDE.md) for contribution conventions (doc-refresh rules, commit discipline, regeneration recipes).
+The three runtime packages and the Studio app are production-shaped — `tenants/davids-bridal/` and `tenants/t-mobile/` are the integration suites. Releases are automated via Changesets + GitHub Actions (see [`docs/releasing.md`](docs/releasing.md)). See [`CLAUDE.md`](CLAUDE.md) for contribution conventions (doc-refresh rules, commit discipline, regeneration recipes).
 
 ```bash
 pnpm -r typecheck

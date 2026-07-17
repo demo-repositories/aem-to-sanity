@@ -145,6 +145,14 @@ pnpm -r typecheck
 pnpm -r test
 ```
 
+## Versioning & releases
+
+The three runtime packages are versioned in lockstep with Changesets (a `fixed` group in `.changeset/config.json`); releases are git tags + GitHub Releases with notes, cut by `.github/workflows/release.yml` when the auto-opened "chore: version packages" PR merges. Full flow in `docs/releasing.md`.
+
+- **Every user-facing change needs a changeset in the same PR** — run `pnpm changeset`, pick the bump (major = breaking CLI/env/artifact/schema shape, minor = new capability, patch = fix), and write the summary as operator-facing release notes: what changed, what they must do. Internal-only changes (refactors, CI, docs-only) skip it.
+- Don't hand-edit `packages/*/CHANGELOG.md` or bump versions in `package.json` — `changeset version` owns both.
+- Private workspaces (studio, tenants) are excluded via `privatePackages` in the config, **not** the `ignore` list — tenant folders are gitignored, so naming them in `ignore` breaks every changeset command on a fresh clone.
+
 ## Commit discipline
 
 - Small, focused commits. One logical change per commit.

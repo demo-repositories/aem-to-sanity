@@ -1,11 +1,18 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
-  "changelog": "@changesets/cli/changelog",
+  "changelog": [
+    "@changesets/changelog-github",
+    { "repo": "demo-repositories/aem-to-sanity" }
+  ],
   "commit": false,
-  "fixed": [],
+  "fixed": [["aem-to-sanity-core", "aem-to-sanity-schema", "aem-to-sanity-content"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["studio", "tenant-davids-bridal", "tenant-t-mobile", "tenant-template"]
+  "ignore": [],
+  "privatePackages": {
+    "version": false,
+    "tag": false
+  }
 }
