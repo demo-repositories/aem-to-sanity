@@ -106,7 +106,7 @@ Tooling: **pnpm workspaces + Turborepo**, TypeScript strict/NodeNext, `tsup` for
 
 ## Minimum commands to run it end to end
 
-From the repo root, assuming `pnpm` ≥ 9 and Node ≥ 20:
+From the repo root, assuming `pnpm` ≥ 9 and Node ≥ 22.12:
 
 ```bash
 # 0. Install + build all three packages

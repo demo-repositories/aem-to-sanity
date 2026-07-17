@@ -14,7 +14,7 @@ A fourth, one-time step scaffolds the **Studio** that consumes the emitted schem
 
 ## 0. Prerequisites
 
-- **Node** ≥ 20
+- **Node** ≥ 22.12 (required by `sanity` v6, used in `apps/studio`)
 - **pnpm** ≥ 9 (this repo is pnpm-only; npm/yarn will not resolve `workspace:*`)
 - **AEM access** — an account that can `GET` both `*.infinity.json` on component paths and content paths, or an equivalent bearer token.
 - **Sanity project** — create at [sanity.io/manage](https://www.sanity.io/manage). You need the project id, dataset name, and a write token (role: Editor or higher).
@@ -98,6 +98,7 @@ cp tenants/<your-tenant>/.env.example tenants/<your-tenant>/.env
 | `CONCURRENCY` | optional | Parallel AEM fetches. Default: `4`. |
 | `MIGRATION_DRY_RUN` | optional | `aem-assets` and `aem-import` are dry-run unless this is explicitly set to `false`. Default (unset): dry-run. |
 | `MIGRATION_LINK_ONLY` | optional | `aem-assets` only. `true` ⇔ passing `--link-only`. Skips phases 1 + 2 (download + upload) and relies on phase 0 to find assets already in the Media Library. See § 4c. |
+| `MIGRATION_ASSETS_DOWNLOAD_ONLY` | optional | `aem-assets` only. `true` ⇔ passing `--download-only`. Runs phase 1 (real AEM download) then stops — no ML dedup, upload, link, or rewrite, regardless of `MIGRATION_DRY_RUN`. No Sanity env vars required. For operators without Media Library access or migrating to a different asset platform. See § 4c-quinquies. |
 | `MIGRATION_ASSETS_PLACEHOLDERS` | optional | `aem-assets` only. `true` ⇔ passing `--placeholders`. Skips AEM download; copies local SVG placeholders instead. See § 4c-ter. |
 | `AEM_FIXTURES_DIR` | optional | When set, all AEM fetch CLIs (`aem-extract`, `aem-tags`, `migrate:schema`) read captured responses from this directory instead of HTTP. Paths mirror AEM URLs (`content/foo/bar.infinity.json`, `apps/.../_cq_dialog.infinity.json`). `aem-assets` also reads `assets/` under this dir when set. Capture with `capture-fixtures.ts` or `pnpm build:demo-fixtures`. Legacy flat `__`-encoded files are still read. See § 1-pre-bis. |
 | `ASSET_CONCURRENCY` | optional | `aem-assets` only. Number of parallel workers used across phases 0 (ML dedup), 1 (AEM download), 2 (ML upload), 3 (dataset link). Default: `4`. Dedup in phase 0 guarantees each DAM path is processed by exactly one worker, so the shared manifest is never contended at the same key. |
@@ -642,6 +643,7 @@ interface ManifestEntry {
 - **Flags:**
   - `--upload-only` — skip phase 1 (download). Assumes the local cache already exists.
   - `--link-only` (or `MIGRATION_LINK_ONLY=true`) — skip phases 1 + 2 entirely. Phase 0's ML lookup resolves existing assets by `aemSource.damPath`; phases 3 + 4 run as normal. Dry-run + `--link-only` = preview of which DAM paths would be linked vs. missing from the ML. Mutually exclusive with `--upload-only`. Intended for re-runs against an ML that already holds the binaries (either from a prior pipeline run or stamped out-of-band). Any DAM path that phase 0 can't resolve stays in `/content/dam/*` form in clean docs and is listed in `output/cache/assets-report.json → rewrite.unresolved`. Caveat: phase 0 keys on the `aemSource` aspect stamped by this pipeline on upload, so assets uploaded through the Studio UI without that aspect will not be found by DAM path.
+  - `--download-only` (or `MIGRATION_ASSETS_DOWNLOAD_ONLY=true`) — run phase 1 for real and stop; phases 0, 2, 3, 4 are skipped unconditionally (independent of `MIGRATION_DRY_RUN`). No Sanity env vars required at all. Mutually exclusive with `--link-only` and `--upload-only`. See § 4c-quinquies.
   - When `AEM_FIXTURES_DIR` is set, phase 1 copies DAM binaries from `{AEM_FIXTURES_DIR}/assets/` instead of downloading from AEM. Used by the offline demo tenant. See § 4c-quater.
   - `--placeholders` (or `MIGRATION_ASSETS_PLACEHOLDERS=true`) — legacy: skip AEM download (phase 1). Copies SVG files from `./placeholders/` into the local asset cache instead, hashing each DAM path to one of 12 slots. Mutually exclusive with `--link-only`, `--upload-only`, and `AEM_FIXTURES_DIR`. See § 4c-ter.
   - `--no-rewrite` — skip phase 4 (in-place rewrite of `clean/*.json`).
@@ -715,6 +717,16 @@ When `AEM_FIXTURES_DIR` is set, `aem-assets` phase 1 copies DAM binaries from `{
 - **Flag:** `--placeholders` or `MIGRATION_ASSETS_PLACEHOLDERS=true`
 - **Mutually exclusive with:** `--link-only`, `--upload-only`, `AEM_FIXTURES_DIR`
 - **Requires:** `placeholders/` directory in the tenant cwd
+
+### 4c-quinquies. `--download-only` mode (non-Media-Library asset platforms)
+
+`aem-assets --download-only` runs phase 1 for real — a genuine AEM DAM download into `output/cache/assets/`, not a dry-run preview — then stops. Phases 0 (ML dedup), 2 (upload), 3 (link), and 4 (rewrite) never run, regardless of `MIGRATION_DRY_RUN`. None of `SANITY_MEDIA_LIBRARY_ID`, `SANITY_TOKEN`, `SANITY_PROJECT_ID`, or `SANITY_ML_LINK_TOKEN` are read.
+
+This exists for two cases: operators whose Sanity project/plan doesn't have Media Library access, and future integrations with a different asset management platform (e.g. Bynder) instead of the Sanity ML. `output/cache/assets/manifest.json` still records `damPath → cachedFile → mimeType → fileSize` for every asset, so a separate uploader script can read the manifest, push each `cachedFile` to the target platform, and perform its own DAM-path → asset-ref rewrite over `output/cache/clean/*.json` (the same shape `rewriteDamRefs` produces — `{_type:'image'|'file', asset:{_ref:'<ref>'}}`). No such uploader ships today; this flag only produces the handoff artifacts.
+
+- **Flag:** `--download-only` or `MIGRATION_ASSETS_DOWNLOAD_ONLY=true`
+- **Mutually exclusive with:** `--link-only`, `--upload-only`
+- **Composable with:** `--placeholders` / `AEM_FIXTURES_DIR` (they only change where phase 1 sources binaries from)
 
 ### 4d. `aem-import` — `output/cache/categories/` + `output/cache/clean/` → Sanity
 

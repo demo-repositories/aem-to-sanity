@@ -243,7 +243,10 @@ function checkEnv(dir: string, slug: string): void {
       buildHint: "run pnpm build:demo-fixtures",
     });
 
-    if (tenantEnv.get("MIGRATION_DRY_RUN") === "false") {
+    if (
+      tenantEnv.get("MIGRATION_DRY_RUN") === "false" &&
+      tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") !== "true"
+    ) {
       if (!isMeaningfulValue(tenantEnv.get("SANITY_MEDIA_LIBRARY_ID"))) {
         record(
           "error",
@@ -297,7 +300,10 @@ function checkEnv(dir: string, slug: string): void {
     }
   }
 
-  if (tenantEnv.get("MIGRATION_DRY_RUN") === "false") {
+  if (
+    tenantEnv.get("MIGRATION_DRY_RUN") === "false" &&
+    tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") !== "true"
+  ) {
     if (!isMeaningfulValue(tenantEnv.get("SANITY_MEDIA_LIBRARY_ID"))) {
       record(
         "error",

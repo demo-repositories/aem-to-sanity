@@ -59,7 +59,7 @@ For the full operator's runbook (every env var, every flag, troubleshooting), se
 ## Quickstart
 
 ```bash
-# 0. Install + build (pnpm ≥ 9, Node ≥ 20)
+# 0. Install + build (pnpm ≥ 9, Node ≥ 22.12)
 pnpm install
 pnpm build
 

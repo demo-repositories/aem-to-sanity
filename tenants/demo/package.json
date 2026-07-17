@@ -21,7 +21,7 @@
   "devDependencies": {
     "aem-to-sanity-content": "workspace:*",
     "aem-to-sanity-schema": "workspace:*",
-    "sanity": "^5.26.0",
+    "sanity": "^6.5.0",
     "tsx": "^4.21.0"
   }
 }

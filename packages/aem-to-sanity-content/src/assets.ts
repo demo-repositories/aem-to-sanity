@@ -716,6 +716,13 @@ async function main(): Promise<void> {
   const linkOnly =
     process.argv.includes("--link-only") ||
     process.env.MIGRATION_LINK_ONLY === "true";
+  // `--download-only` is for operators without Media Library access, or who
+  // plan to hand cached binaries off to a different asset platform (Bynder,
+  // etc.) instead of the ML. Runs phase 1 for real, then stops — no ML dedup
+  // lookup, no upload, no link, no rewrite. Independent of `MIGRATION_DRY_RUN`.
+  const downloadOnly =
+    process.argv.includes("--download-only") ||
+    process.env.MIGRATION_ASSETS_DOWNLOAD_ONLY === "true";
   const usePlaceholders =
     process.argv.includes("--placeholders") ||
     process.env.MIGRATION_ASSETS_PLACEHOLDERS === "true";
@@ -723,6 +730,10 @@ async function main(): Promise<void> {
   const useFixtureImages = fixturesRoot.length > 0;
   if (linkOnly && uploadOnly) {
     console.error("--link-only and --upload-only are mutually exclusive.");
+    process.exit(2);
+  }
+  if (downloadOnly && (linkOnly || uploadOnly)) {
+    console.error("--download-only is mutually exclusive with --link-only and --upload-only.");
     process.exit(2);
   }
   if (usePlaceholders && (linkOnly || uploadOnly)) {
@@ -761,11 +772,15 @@ async function main(): Promise<void> {
         ? " [link-only: skip download + upload]"
         : uploadOnly
           ? " [upload-only: skip download]"
-          : "";
+          : downloadOnly
+            ? " [download-only: skip ML dedup + upload + link + rewrite]"
+            : "";
   console.error(
     `[assets] ${c.green(sortedPaths.length)} unique asset(s) across ${c.green(cleanFiles.length)} page(s)${c.dim(modeLabel)}`,
   );
-  if (dryRun) {
+  if (downloadOnly) {
+    console.error(c.dim("DOWNLOAD ONLY — no Media Library upload/link, no doc rewrite"));
+  } else if (dryRun) {
     console.error(c.dim("DRY RUN — set MIGRATION_DRY_RUN=false to upload + link + rewrite"));
   } else {
     console.error(c.dim("Target Media Library + dataset link — MIGRATION_DRY_RUN=false"));
@@ -788,7 +803,7 @@ async function main(): Promise<void> {
   // now useful.
   const aspectStamped = new Set<string>();
   const phaseTimings: Record<string, number> = {};
-  if (!dryRun || linkOnly) {
+  if (!downloadOnly && (!dryRun || linkOnly)) {
     const mlId = mustEnv("SANITY_MEDIA_LIBRARY_ID");
     const token = mustEnv("SANITY_TOKEN");
     const apiVersion = process.env.SANITY_API_VERSION ?? "2025-02-19";
@@ -934,10 +949,10 @@ async function main(): Promise<void> {
   }
 
   // ── Phase 2: upload to Media Library ────────────────────────────────
-  if (linkOnly) {
+  if (linkOnly || downloadOnly) {
     console.error(
       c.bold("\n── 2. Upload to Sanity Media Library ──") +
-        c.dim(" (skipped: --link-only)"),
+        c.dim(linkOnly ? " (skipped: --link-only)" : " (skipped: --download-only)"),
     );
   } else {
   const uploadConcurrency = assetConcurrency();
@@ -1001,6 +1016,11 @@ async function main(): Promise<void> {
   } // end of !linkOnly upload block
 
   // ── Phase 3: link to project dataset ────────────────────────────────
+  if (downloadOnly) {
+    console.error(
+      c.bold("\n── 3. Link to project dataset ──") + c.dim(" (skipped: --download-only)"),
+    );
+  } else {
   const linkConcurrency = assetConcurrency();
   console.error(
     c.bold("\n── 3. Link to project dataset ──") +
@@ -1046,11 +1066,12 @@ async function main(): Promise<void> {
     });
   }
   phaseTimings.phase3 = phase3.elapsedMs();
+  } // end of !downloadOnly link block
 
   // ── Phase 4: rewrite clean docs in place ────────────────────────────
   let patched = 0;
   const rewriteStats: RewriteStats = { rewrites: 0, unresolved: new Set() };
-  if (!skipRewrite && !dryRun) {
+  if (!skipRewrite && !dryRun && !downloadOnly) {
     console.error(c.bold("\n── 4. Rewrite clean docs ──"));
     const phase4 = startTimer();
     for (const { absPath } of cleanFiles) {
