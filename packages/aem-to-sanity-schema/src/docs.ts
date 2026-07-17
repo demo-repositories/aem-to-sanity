@@ -233,6 +233,15 @@ AEM's buttongroup renders a row of toggle buttons; it persists like a select —
 
 **Content** — single-mode values pass through as strings; multiple-mode values are coerced to arrays (see \`array-of-string\` under "Type-aware coercion at transform").
 
+## Dialog structure: tabs vs. accordions
+
+Both Coral \`tabs\` and \`accordion\` nodes flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:
+
+- **Tab panels** (titled containers directly under a \`tabs\` node) become **Studio groups**: one tab per panel at the top of the object's editor.
+- **Accordion panels** (titled containers directly under an \`accordion\` node) become **collapsible fieldsets** *inside* whatever tab the accordion sits in — an accordion in AEM is a fold-out section within a tab, not a sibling tab. Fields inside the panel keep the surrounding tab's \`group\` and additionally get the panel's \`fieldset\`. The fieldset starts collapsed unless the panel node carries a truthy \`active\` attribute (Coral's expanded-by-default flag).
+
+Example: uxp \`promocard\` nests an accordion titled "Height" inside its "Display" tab. The six height fields emit with \`group: "display"\` + \`fieldset: "height"\`, so the Studio shows them as a collapsible "Height" section on the Display tab — not as a stray top-level "Height" tab.
+
 ## AEM tagfield (\`cq/gui/components/coral/common/form/tagfield\`)
 
 AEM tagfields multiselect from the canonical tag tree at \`/content/cq:tags/<namespace>/...\`. The migration maps them to **arrays of references to a \`category\` document type** that implements Sanity's [parent-child taxonomy pattern](https://www.sanity.io/docs/developer-guides/parent-child-taxonomy).

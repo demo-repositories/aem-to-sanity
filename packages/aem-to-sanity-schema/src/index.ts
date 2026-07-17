@@ -14,6 +14,7 @@ export {
 export type {
   NodeFetcher,
   SanityField,
+  SanityFieldset,
   SchemaFieldInfo,
   UnmappedField,
   RenamedField,

@@ -87,12 +87,19 @@ describe("mapping-table: accordion", () => {
 });
 
 describe("mapDialog: accordion", () => {
-  it("flattens panel fields and puts them in a group named after the panel title", async () => {
+  it("flattens panel fields into a collapsible fieldset named after the panel title", async () => {
     const dialog = dialogWith("accordionHeight", accordionHeightNode());
-    const { fields, unmapped, groups } = await mapDialog(dialog, noFetch);
+    const { fields, unmapped, groups, fieldsets } = await mapDialog(
+      dialog,
+      noFetch,
+    );
 
     assert.equal(unmapped.length, 0);
-    assert.deepEqual(groups, [{ name: "height", title: "Height" }]);
+    // Accordion panels are collapsible sections, not tabs — no group.
+    assert.deepEqual(groups, []);
+    assert.deepEqual(fieldsets, [
+      { name: "height", title: "Height", collapsed: true },
+    ]);
 
     assert.deepEqual(
       fields.map((f) => f.name),
@@ -106,7 +113,8 @@ describe("mapDialog: accordion", () => {
       ],
     );
     for (const f of fields) {
-      assert.equal(f.group, "height");
+      assert.equal(f.group, undefined);
+      assert.equal(f.fieldset, "height");
     }
     assert.equal(fields[0].type, "number");
     const unit = fields[1];
@@ -114,6 +122,52 @@ describe("mapDialog: accordion", () => {
     assert.deepEqual((unit as { options?: { list?: unknown } }).options?.list, [
       { title: "Pixels(px)", value: "px" },
       { title: "Percent(%)", value: "%" },
+    ]);
+  });
+
+  it("keeps the surrounding tab group when the accordion is nested inside a tab (uxp promocard shape)", async () => {
+    const dialog = {
+      "sling:resourceType": "cq/gui/components/authoring/dialog",
+      items: {
+        tabs: {
+          "sling:resourceType": "granite/ui/components/coral/foundation/tabs",
+          items: {
+            display: {
+              "jcr:title": "Display",
+              "sling:resourceType":
+                "granite/ui/components/coral/foundation/container",
+              items: {
+                accordionHeight: accordionHeightNode(),
+              },
+            },
+          },
+        },
+      },
+    } as unknown as DialogNode;
+
+    const { fields, groups, fieldsets } = await mapDialog(dialog, noFetch);
+
+    // The tab stays a group; the accordion panel does NOT become a second tab.
+    assert.deepEqual(groups, [{ name: "display", title: "Display" }]);
+    assert.deepEqual(fieldsets, [
+      { name: "height", title: "Height", collapsed: true },
+    ]);
+    for (const f of fields) {
+      assert.equal(f.group, "display");
+      assert.equal(f.fieldset, "height");
+    }
+  });
+
+  it("emits an expanded fieldset when the panel carries a truthy `active` attribute", async () => {
+    const node = accordionHeightNode() as unknown as {
+      items: { columns: Record<string, unknown> };
+    };
+    node.items.columns.active = true;
+    const dialog = dialogWith("accordionHeight", node as unknown as DialogNode);
+
+    const { fieldsets } = await mapDialog(dialog, noFetch);
+    assert.deepEqual(fieldsets, [
+      { name: "height", title: "Height", collapsed: false },
     ]);
   });
 });

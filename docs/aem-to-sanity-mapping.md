@@ -28,7 +28,7 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `cq/gui/components/authoring/dialog` | `container` | Dialog root → walked for top-level fields |
 | `granite/ui/components/coral/foundation/tabs` | `container` | Tabs → flattened; tab titles become fieldset groups |
 | `granite/ui/components/coral/foundation/well` | `container` | Well → flattened; children hoist up |
-| `granite/ui/components/coral/foundation/accordion` | `container` | Accordion → flattened; panel titles become fieldset groups (same as tabs) |
+| `granite/ui/components/coral/foundation/accordion` | `container` | Accordion → flattened; panel titles become collapsible fieldsets inside the surrounding tab group (collapsed unless the panel is `active`) |
 | `granite/ui/components/coral/foundation/fixedcolumns` | `container` | Fixed columns → flattened; children hoist up |
 | `granite/ui/components/coral/foundation/form/fieldset` | `container` | Fieldset → flattened with group label |
 | `granite/ui/components/coral/foundation/form/hidden` | `hidden` | Hidden → skipped |
@@ -250,6 +250,15 @@ AEM's buttongroup renders a row of toggle buttons; it persists like a select —
 **Studio** — the example Studio (`apps/studio`) routes fields carrying the `aemWidget: "buttonGroup"` marker to a toggle-button-group input (`components/inputs/StringToggleGroupInput.tsx`, wired through `form.components.input` in `sanity.config.ts`) so authors get the same one-click row of buttons they had in AEM. Studios without that resolver fall back to Sanity's default dropdown — the marker is additive and the persisted value shape is unaffected.
 
 **Content** — single-mode values pass through as strings; multiple-mode values are coerced to arrays (see `array-of-string` under "Type-aware coercion at transform").
+
+## Dialog structure: tabs vs. accordions
+
+Both Coral `tabs` and `accordion` nodes flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:
+
+- **Tab panels** (titled containers directly under a `tabs` node) become **Studio groups**: one tab per panel at the top of the object's editor.
+- **Accordion panels** (titled containers directly under an `accordion` node) become **collapsible fieldsets** *inside* whatever tab the accordion sits in — an accordion in AEM is a fold-out section within a tab, not a sibling tab. Fields inside the panel keep the surrounding tab's `group` and additionally get the panel's `fieldset`. The fieldset starts collapsed unless the panel node carries a truthy `active` attribute (Coral's expanded-by-default flag).
+
+Example: uxp `promocard` nests an accordion titled "Height" inside its "Display" tab. The six height fields emit with `group: "display"` + `fieldset: "height"`, so the Studio shows them as a collapsible "Height" section on the Display tab — not as a stray top-level "Height" tab.
 
 ## AEM tagfield (`cq/gui/components/coral/common/form/tagfield`)
 

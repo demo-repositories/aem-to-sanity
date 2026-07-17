@@ -1,5 +1,5 @@
 import prettier from "prettier";
-import type { SanityField } from "./mapper.ts";
+import type { SanityField, SanityFieldset } from "./mapper.ts";
 import {
   displayTitleFromAemComponentJcrTitle,
   toTitleCase,
@@ -10,6 +10,8 @@ export interface EmitInput {
   sourcePath: string;
   fields: SanityField[];
   groups: Array<{ name: string; title: string }>;
+  /** Collapsible sections from Coral accordion panels (see {@link SanityFieldset}). */
+  fieldsets?: SanityFieldset[];
   /**
    * Studio document title, usually from the AEM component node's `jcr:title`.
    * When omitted, derived from `typeName` via {@link toTitleCase}.
@@ -26,6 +28,7 @@ export interface EmitInput {
  */
 export async function emitSchemaFile(input: EmitInput): Promise<string> {
   const { typeName, sourcePath, groups } = input;
+  const fieldsets = input.fieldsets ?? [];
   // AEM authors sometimes give multiple dialog widgets the same `fieldLabel`
   // (e.g. a page-shell that declares both `./cq:tags` and `./tags` with
   // `fieldLabel="Tags"`). Sanity renders the title verbatim, so authors end
@@ -47,6 +50,10 @@ export async function emitSchemaFile(input: EmitInput): Promise<string> {
 
   const groupsLiteral =
     groups.length > 0 ? `  groups: ${stringifyGroups(groups)},\n` : "";
+  const fieldsetsLiteral =
+    fieldsets.length > 0
+      ? `  fieldsets: ${stringifyFieldsets(fieldsets)},\n`
+      : "";
   const previewBlock = renderPreviewBlock(fields, title);
 
   const src = `import { defineField, defineType } from "sanity";
@@ -59,7 +66,7 @@ export const ${typeName} = defineType({
   name: "${typeName}",
   title: ${titleLiteral},
   type: "object",
-${groupsLiteral}${previewBlock}  fields: [
+${groupsLiteral}${fieldsetsLiteral}${previewBlock}  fields: [
 ${fields.map((f) => renderField(f, 2)).join(",\n")}
   ],
 });
@@ -125,6 +132,19 @@ function stringifyGroups(
       .map(
         (g) =>
           `{ name: ${JSON.stringify(g.name)}, title: ${JSON.stringify(g.title)} }`,
+      )
+      .join(", ") +
+    "]"
+  );
+}
+
+function stringifyFieldsets(fieldsets: SanityFieldset[]): string {
+  return (
+    "[" +
+    fieldsets
+      .map(
+        (f) =>
+          `{ name: ${JSON.stringify(f.name)}, title: ${JSON.stringify(f.title)}, options: { collapsible: true, collapsed: ${f.collapsed} } }`,
       )
       .join(", ") +
     "]"
@@ -280,6 +300,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
   if (field.title) props.title = JSON.stringify(field.title);
   if (field.description) props.description = JSON.stringify(field.description);
   if (field.group) props.group = JSON.stringify(field.group);
+  if (field.fieldset) props.fieldset = JSON.stringify(field.fieldset);
 
   switch (field.type) {
     case "string": {
@@ -431,6 +452,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     "description",
     "type",
     "group",
+    "fieldset",
     "readOnly",
     "rows",
     "initialValue",
