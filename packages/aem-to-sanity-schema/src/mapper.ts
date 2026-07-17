@@ -20,10 +20,40 @@ export type NodeFetcher = (jcrPath: string) => Promise<DialogNode>;
 interface MappingContext {
   unmapped: UnmappedField[];
   groups: Array<{ name: string; title: string }>;
+  fieldsets: SanityFieldset[];
   renamed: RenamedField[];
   fetcher: NodeFetcher;
   visitedIncludes: Set<string>;
 }
+
+/**
+ * Collapsible fieldset emitted for a Coral accordion panel. Unlike titled
+ * tab containers (which become Studio groups, i.e. tabs), an accordion is a
+ * collapsible section *within* its surrounding tab — Sanity's fieldset is
+ * the matching primitive. `collapsed` mirrors Coral behavior: panels start
+ * closed unless the panel node carries a truthy `active` attribute.
+ */
+export interface SanityFieldset {
+  name: string;
+  title: string;
+  collapsed: boolean;
+}
+
+/**
+ * Where a mapped field lands in the Studio UI, threaded down the dialog walk.
+ * `group` comes from the nearest titled tab-like container; `fieldset` from
+ * the nearest accordion panel. `accordionPanels` is set while walking the
+ * direct children of a Coral accordion so titled panel containers there
+ * become fieldsets instead of new groups.
+ */
+interface Placement {
+  group?: string;
+  fieldset?: string;
+  accordionPanels?: boolean;
+}
+
+const CORAL_ACCORDION_RESOURCE_TYPE =
+  "granite/ui/components/coral/foundation/accordion";
 
 export type SanityField =
   | (CommonFieldProps & StringField)
@@ -48,6 +78,7 @@ export interface CommonFieldProps {
   description?: string;
   required?: boolean;
   group?: string;
+  fieldset?: string;
 }
 
 interface StringField {
@@ -220,22 +251,25 @@ export async function mapDialog(
   fields: SanityField[];
   unmapped: UnmappedField[];
   groups: Array<{ name: string; title: string }>;
+  fieldsets: SanityFieldset[];
   renamed: RenamedField[];
 }> {
   const ctx: MappingContext = {
     unmapped: [],
     groups: [],
+    fieldsets: [],
     renamed: [],
     fetcher,
     visitedIncludes: new Set(),
   };
   const fields: SanityField[] = [];
-  await walk(root, ctx, fields, undefined);
+  await walk(root, ctx, fields, {});
   dedupeFieldNames(fields, ctx.renamed);
   return {
     fields,
     unmapped: ctx.unmapped,
     groups: ctx.groups,
+    fieldsets: ctx.fieldsets,
     renamed: ctx.renamed,
   };
 }
@@ -295,10 +329,10 @@ async function walk(
   node: DialogNode,
   ctx: MappingContext,
   out: SanityField[],
-  currentGroup: string | undefined,
+  placement: Placement,
 ): Promise<void> {
   for (const { key, value: child } of childNodes(node)) {
-    await processNode(key, child, ctx, out, currentGroup);
+    await processNode(key, child, ctx, out, placement);
   }
 }
 
@@ -308,7 +342,7 @@ async function processNode(
   child: DialogNode,
   ctx: MappingContext,
   out: SanityField[],
-  currentGroup: string | undefined,
+  placement: Placement,
 ): Promise<void> {
   const resourceType = child["sling:resourceType"];
   const entry = lookup(resourceType);
@@ -325,18 +359,18 @@ async function processNode(
   //     fields buried several levels down.
   if (!entry && !resourceType) {
     if (key === "items") {
-      await walk(child, ctx, out, currentGroup);
+      await walk(child, ctx, out, placement);
       return;
     }
     const itemsChild = child["items"];
     if (itemsChild && typeof itemsChild === "object" && !Array.isArray(itemsChild)) {
-      await walk(itemsChild as DialogNode, ctx, out, currentGroup);
+      await walk(itemsChild as DialogNode, ctx, out, placement);
       return;
     }
   }
 
   if (!entry) {
-    const placeholder = buildPlaceholder(key, child, currentGroup);
+    const placeholder = buildPlaceholder(key, child, placement);
     if (placeholder) {
       out.push(placeholder);
       ctx.unmapped.push({
@@ -358,19 +392,38 @@ async function processNode(
   }
 
   if (entry.kind === "include") {
-    await resolveInclude(child, ctx, out, currentGroup);
+    await resolveInclude(child, ctx, out, placement);
     return;
   }
 
   if (entry.kind === "container") {
-    let groupForChildren = currentGroup;
+    const childPlacement: Placement = {
+      group: placement.group,
+      fieldset: placement.fieldset,
+      // A Coral accordion's direct item children are its panels — their
+      // titles become collapsible fieldsets, not Studio groups (tabs).
+      // Any other container resets the flag: only immediate panels count.
+      accordionPanels: resourceType === CORAL_ACCORDION_RESOURCE_TYPE,
+    };
     const title = child["jcr:title"];
     if (title && typeof title === "string") {
-      const groupName = toCamelCase(title);
-      if (!ctx.groups.find((g) => g.name === groupName)) {
-        ctx.groups.push({ name: groupName, title });
+      if (placement.accordionPanels) {
+        const fieldsetName = toCamelCase(title);
+        if (!ctx.fieldsets.find((f) => f.name === fieldsetName)) {
+          ctx.fieldsets.push({
+            name: fieldsetName,
+            title,
+            collapsed: !isTruthyAttr(child.active),
+          });
+        }
+        childPlacement.fieldset = fieldsetName;
+      } else {
+        const groupName = toCamelCase(title);
+        if (!ctx.groups.find((g) => g.name === groupName)) {
+          ctx.groups.push({ name: groupName, title });
+        }
+        childPlacement.group = groupName;
       }
-      groupForChildren = groupName;
     }
     const itemsChild = child["items"];
     if (
@@ -378,9 +431,9 @@ async function processNode(
       typeof itemsChild === "object" &&
       !Array.isArray(itemsChild)
     ) {
-      await walk(itemsChild as DialogNode, ctx, out, groupForChildren);
+      await walk(itemsChild as DialogNode, ctx, out, childPlacement);
     } else {
-      await walk(child, ctx, out, groupForChildren);
+      await walk(child, ctx, out, childPlacement);
     }
     return;
   }
@@ -389,7 +442,7 @@ async function processNode(
     entry.kind,
     key,
     child,
-    currentGroup,
+    placement,
     ctx,
   );
   for (const built of builtList) {
@@ -401,7 +454,7 @@ async function resolveInclude(
   includeNode: DialogNode,
   ctx: MappingContext,
   out: SanityField[],
-  currentGroup: string | undefined,
+  placement: Placement,
 ): Promise<void> {
   const path = stringAttr(includeNode["path"]);
   if (!path) {
@@ -441,10 +494,10 @@ async function resolveInclude(
   const rootEntry = lookup(included["sling:resourceType"]);
   if (rootEntry) {
     const rootKey = path.split("/").filter(Boolean).pop() ?? "include";
-    await processNode(rootKey, included, ctx, out, currentGroup);
+    await processNode(rootKey, included, ctx, out, placement);
     return;
   }
-  await walk(included, ctx, out, currentGroup);
+  await walk(included, ctx, out, placement);
 }
 
 /** Suffix for read-only DAM path string paired with `fileReference`-style asset fields. */
@@ -454,13 +507,13 @@ async function buildFieldsForKind(
   kind: SanityKind,
   nodeKey: string,
   node: DialogNode,
-  group: string | undefined,
+  placement: Placement,
   ctx: MappingContext,
 ): Promise<SanityField[]> {
   if (kind === "file" && stringAttr(node.fileReferenceParameter)) {
-    return buildFileUploadFieldPair(nodeKey, node, group, ctx);
+    return buildFileUploadFieldPair(nodeKey, node, placement, ctx);
   }
-  const one = await buildField(kind, nodeKey, node, group, ctx);
+  const one = await buildField(kind, nodeKey, node, placement, ctx);
   return one ? [one] : [];
 }
 
@@ -472,7 +525,7 @@ async function buildFieldsForKind(
 function buildFileUploadFieldPair(
   nodeKey: string,
   node: DialogNode,
-  group: string | undefined,
+  placement: Placement,
   ctx: MappingContext,
 ): SanityField[] {
   const assetName = persistedFileLikeFieldName(node, nodeKey);
@@ -495,7 +548,8 @@ function buildFileUploadFieldPair(
     description:
       "Original AEM path from migration (read-only). Use the Sanity asset field below for previews and delivery.",
     required: false,
-    group,
+    group: placement.group,
+    fieldset: placement.fieldset,
     type: "string",
     readOnly: true,
   };
@@ -504,7 +558,8 @@ function buildFileUploadFieldPair(
     title: label,
     description: stringAttr(node.fieldDescription),
     required: isTruthyAttr(node.required) || undefined,
-    group,
+    group: placement.group,
+    fieldset: placement.fieldset,
     type: isImageUpload(node) ? "image" : "file",
   } as SanityField;
   return [pathField, assetField];
@@ -514,7 +569,7 @@ async function buildField(
   kind: SanityKind,
   nodeKey: string,
   node: DialogNode,
-  group: string | undefined,
+  placement: Placement,
   ctx: MappingContext,
 ): Promise<SanityField | undefined> {
   const name = fieldNameForKind(kind, node, nodeKey);
@@ -535,7 +590,8 @@ async function buildField(
       (kind === "multifield" ? multifieldInnerFieldJcrTitle(node) : undefined),
     description: stringAttr(node.fieldDescription),
     required: isTruthyAttr(node.required) || undefined,
-    group,
+    group: placement.group,
+    fieldset: placement.fieldset,
   };
 
   switch (kind) {
@@ -662,7 +718,7 @@ async function buildField(
 function buildPlaceholder(
   nodeKey: string,
   node: DialogNode,
-  group: string | undefined,
+  placement: Placement,
 ): (CommonFieldProps & PlaceholderField) | undefined {
   const name = fieldName(node) ?? toCamelCase(nodeKey);
   if (!name) return undefined;
@@ -671,7 +727,8 @@ function buildPlaceholder(
     title:
       stringAttr(node.fieldLabel) ?? stringAttr(node["jcr:title"]) ?? name,
     description: `TODO: no Sanity mapping for AEM resource type "${node["sling:resourceType"] ?? "unknown"}". Falling back to string.`,
-    group,
+    group: placement.group,
+    fieldset: placement.fieldset,
     type: "placeholder",
     originalResourceType: node["sling:resourceType"] ?? "unknown",
   };
@@ -773,9 +830,9 @@ async function extractMultifieldItems(
       typeof itemsChild === "object" &&
       !Array.isArray(itemsChild)
     ) {
-      await walk(itemsChild as DialogNode, ctx, inner, undefined);
+      await walk(itemsChild as DialogNode, ctx, inner, {});
     } else {
-      await walk(fieldNode, ctx, inner, undefined);
+      await walk(fieldNode, ctx, inner, {});
     }
     return inner;
   }
@@ -786,12 +843,12 @@ async function extractMultifieldItems(
       entry.kind,
       singleKey,
       fieldNode,
-      undefined,
+      {},
       ctx,
     );
     return parts;
   }
-  const built = buildPlaceholder(singleKey, fieldNode, undefined);
+  const built = buildPlaceholder(singleKey, fieldNode, {});
   return built ? [built] : [];
 }
 

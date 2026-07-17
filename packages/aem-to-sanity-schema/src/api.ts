@@ -679,6 +679,7 @@ async function processOne(
       sourcePath: componentPath,
       fields: mapped.fields,
       groups: mapped.groups,
+      fieldsets: mapped.fieldsets,
       schemaTitle,
       regenerateCommand,
     });

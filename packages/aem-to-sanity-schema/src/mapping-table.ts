@@ -132,6 +132,11 @@ export const MAPPING: Record<string, MappingEntry> = {
     kind: "container",
     description: "Well → flattened; children hoist up",
   },
+  "granite/ui/components/coral/foundation/accordion": {
+    kind: "container",
+    description:
+      "Accordion → flattened; panel titles become collapsible fieldsets inside the surrounding tab group (collapsed unless the panel is `active`)",
+  },
   "granite/ui/components/coral/foundation/fixedcolumns": {
     kind: "container",
     description: "Fixed columns → flattened; children hoist up",
