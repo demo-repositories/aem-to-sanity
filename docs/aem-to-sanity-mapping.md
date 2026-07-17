@@ -28,6 +28,7 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `cq/gui/components/authoring/dialog` | `container` | Dialog root → walked for top-level fields |
 | `granite/ui/components/coral/foundation/tabs` | `container` | Tabs → flattened; tab titles become fieldset groups |
 | `granite/ui/components/coral/foundation/well` | `container` | Well → flattened; children hoist up |
+| `granite/ui/components/coral/foundation/accordion` | `container` | Accordion → flattened; panel titles become fieldset groups (same as tabs) |
 | `granite/ui/components/coral/foundation/fixedcolumns` | `container` | Fixed columns → flattened; children hoist up |
 | `granite/ui/components/coral/foundation/form/fieldset` | `container` | Fieldset → flattened with group label |
 | `granite/ui/components/coral/foundation/form/hidden` | `hidden` | Hidden → skipped |
