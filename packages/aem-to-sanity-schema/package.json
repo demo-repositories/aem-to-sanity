@@ -43,8 +43,8 @@
     "prettier": "^3.3.3"
   },
   "devDependencies": {
-    "@sanity/schema": "^5.26.0",
-    "sanity": "^5.26.0",
+    "@sanity/schema": "^6.5.0",
+    "sanity": "^6.5.0",
     "tsup": "^8.3.5",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3"

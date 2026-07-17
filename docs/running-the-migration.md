@@ -14,7 +14,7 @@ A fourth, one-time step scaffolds the **Studio** that consumes the emitted schem
 
 ## 0. Prerequisites
 
-- **Node** ≥ 20
+- **Node** ≥ 22.12 (required by `sanity` v6, used in `apps/studio`)
 - **pnpm** ≥ 9 (this repo is pnpm-only; npm/yarn will not resolve `workspace:*`)
 - **AEM access** — an account that can `GET` both `*.infinity.json` on component paths and content paths, or an equivalent bearer token.
 - **Sanity project** — create at [sanity.io/manage](https://www.sanity.io/manage). You need the project id, dataset name, and a write token (role: Editor or higher).
