@@ -264,7 +264,13 @@ ${returnBody}
 function renderField(field: SanityField, indentLevel: number): string {
   const indent = "  ".repeat(indentLevel);
   const body = fieldBody(field, indentLevel + 1);
-  return `${indent}defineField(${body})`;
+  // `options.aemWidget` is not a standard Sanity string option, so the
+  // defineField call opts out of strict definition typing for that field.
+  const defineOptions =
+    field.type === "string" && field.options?.aemWidget
+      ? ", { strict: false }"
+      : "";
+  return `${indent}defineField(${body}${defineOptions})`;
 }
 
 function fieldBody(field: SanityField, _indentLevel: number): string {
@@ -285,7 +291,10 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
         const layout = field.options.layout
           ? `, layout: ${JSON.stringify(field.options.layout)}`
           : "";
-        props.options = `{ list: ${JSON.stringify(field.options.list)}${layout} }`;
+        const aemWidget = field.options.aemWidget
+          ? `, aemWidget: ${JSON.stringify(field.options.aemWidget)}`
+          : "";
+        props.options = `{ list: ${JSON.stringify(field.options.list)}${layout}${aemWidget} }`;
       }
       break;
     }
@@ -329,6 +338,16 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     case "array-of-blocks": {
       props.type = '"array"';
       props.of = '[{ type: "block" }]';
+      break;
+    }
+    case "array-of-string": {
+      // Multi-select buttongroup → array of strings; `options.list` on the
+      // array renders Sanity's built-in checkbox list.
+      props.type = '"array"';
+      props.of = '[{ type: "string" }]';
+      if (field.options?.list && field.options.list.length > 0) {
+        props.options = `{ list: ${JSON.stringify(field.options.list)} }`;
+      }
       break;
     }
     case "array-of-object": {
@@ -389,6 +408,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     field.required &&
     props.validation === undefined &&
     field.type !== "array-of-blocks" &&
+    field.type !== "array-of-string" &&
     field.type !== "array-of-object" &&
     field.type !== "array-of-reference"
   ) {
@@ -397,6 +417,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
   if (
     field.required &&
     (field.type === "array-of-blocks" ||
+      field.type === "array-of-string" ||
       field.type === "array-of-object" ||
       field.type === "array-of-reference") &&
     props.validation === undefined
