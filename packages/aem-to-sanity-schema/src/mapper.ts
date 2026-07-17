@@ -298,91 +298,102 @@ async function walk(
   currentGroup: string | undefined,
 ): Promise<void> {
   for (const { key, value: child } of childNodes(node)) {
-    const resourceType = child["sling:resourceType"];
-    const entry = lookup(resourceType);
+    await processNode(key, child, ctx, out, currentGroup);
+  }
+}
 
-    // Transparent wrapper handling. Two patterns show up in real AEM dialogs:
-    //  1. Literal `items` grouping node — walk its children directly.
-    //  2. A named wrapper (e.g. outer `content`, `columns`, `column`) that
-    //     lacks `sling:resourceType` but nests an `items` child. David's
-    //     Bridal `aem-integration/components/content` is the motivating
-    //     example: every structural level omits the
-    //     `cq/gui/components/authoring/dialog` / granite container markup,
-    //     so without this descent we'd stop at the first child and emit a
-    //     single placeholder string instead of the real richtext + option
-    //     fields buried several levels down.
-    if (!entry && !resourceType) {
-      if (key === "items") {
-        await walk(child, ctx, out, currentGroup);
-        continue;
-      }
-      const itemsChild = child["items"];
-      if (itemsChild && typeof itemsChild === "object" && !Array.isArray(itemsChild)) {
-        await walk(itemsChild as DialogNode, ctx, out, currentGroup);
-        continue;
-      }
+/** Map one dialog node — a widget, container, include, or wrapper — into `out`. */
+async function processNode(
+  key: string,
+  child: DialogNode,
+  ctx: MappingContext,
+  out: SanityField[],
+  currentGroup: string | undefined,
+): Promise<void> {
+  const resourceType = child["sling:resourceType"];
+  const entry = lookup(resourceType);
+
+  // Transparent wrapper handling. Two patterns show up in real AEM dialogs:
+  //  1. Literal `items` grouping node — walk its children directly.
+  //  2. A named wrapper (e.g. outer `content`, `columns`, `column`) that
+  //     lacks `sling:resourceType` but nests an `items` child. David's
+  //     Bridal `aem-integration/components/content` is the motivating
+  //     example: every structural level omits the
+  //     `cq/gui/components/authoring/dialog` / granite container markup,
+  //     so without this descent we'd stop at the first child and emit a
+  //     single placeholder string instead of the real richtext + option
+  //     fields buried several levels down.
+  if (!entry && !resourceType) {
+    if (key === "items") {
+      await walk(child, ctx, out, currentGroup);
+      return;
     }
-
-    if (!entry) {
-      const placeholder = buildPlaceholder(key, child, currentGroup);
-      if (placeholder) {
-        out.push(placeholder);
-        ctx.unmapped.push({
-          name: placeholder.name,
-          resourceType: resourceType ?? "(none)",
-          reason: "unknown-type",
-        });
-      }
-      continue;
+    const itemsChild = child["items"];
+    if (itemsChild && typeof itemsChild === "object" && !Array.isArray(itemsChild)) {
+      await walk(itemsChild as DialogNode, ctx, out, currentGroup);
+      return;
     }
+  }
 
-    if (entry.kind === "hidden") {
+  if (!entry) {
+    const placeholder = buildPlaceholder(key, child, currentGroup);
+    if (placeholder) {
+      out.push(placeholder);
       ctx.unmapped.push({
-        name: fieldName(child) ?? key,
+        name: placeholder.name,
         resourceType: resourceType ?? "(none)",
-        reason: "hidden",
+        reason: "unknown-type",
       });
-      continue;
     }
+    return;
+  }
 
-    if (entry.kind === "include") {
-      await resolveInclude(child, ctx, out, currentGroup);
-      continue;
-    }
+  if (entry.kind === "hidden") {
+    ctx.unmapped.push({
+      name: fieldName(child) ?? key,
+      resourceType: resourceType ?? "(none)",
+      reason: "hidden",
+    });
+    return;
+  }
 
-    if (entry.kind === "container") {
-      let groupForChildren = currentGroup;
-      const title = child["jcr:title"];
-      if (title && typeof title === "string") {
-        const groupName = toCamelCase(title);
-        if (!ctx.groups.find((g) => g.name === groupName)) {
-          ctx.groups.push({ name: groupName, title });
-        }
-        groupForChildren = groupName;
+  if (entry.kind === "include") {
+    await resolveInclude(child, ctx, out, currentGroup);
+    return;
+  }
+
+  if (entry.kind === "container") {
+    let groupForChildren = currentGroup;
+    const title = child["jcr:title"];
+    if (title && typeof title === "string") {
+      const groupName = toCamelCase(title);
+      if (!ctx.groups.find((g) => g.name === groupName)) {
+        ctx.groups.push({ name: groupName, title });
       }
-      const itemsChild = child["items"];
-      if (
-        itemsChild &&
-        typeof itemsChild === "object" &&
-        !Array.isArray(itemsChild)
-      ) {
-        await walk(itemsChild as DialogNode, ctx, out, groupForChildren);
-      } else {
-        await walk(child, ctx, out, groupForChildren);
-      }
-      continue;
+      groupForChildren = groupName;
     }
+    const itemsChild = child["items"];
+    if (
+      itemsChild &&
+      typeof itemsChild === "object" &&
+      !Array.isArray(itemsChild)
+    ) {
+      await walk(itemsChild as DialogNode, ctx, out, groupForChildren);
+    } else {
+      await walk(child, ctx, out, groupForChildren);
+    }
+    return;
+  }
 
-    const builtList = await buildFieldsForKind(
-      entry.kind,
-      key,
-      child,
-      currentGroup,
-      ctx,
-    );
-    for (const built of builtList) {
-      if (built) out.push(built);
-    }
+  const builtList = await buildFieldsForKind(
+    entry.kind,
+    key,
+    child,
+    currentGroup,
+    ctx,
+  );
+  for (const built of builtList) {
+    if (built) out.push(built);
   }
 }
 
@@ -417,8 +428,22 @@ async function resolveInclude(
     });
     return;
   }
-  // The fetched node is itself a dialog fragment — walk its children into the
-  // current output, preserving the current group.
+  // Two fragment shapes exist in the wild. Most fragments are structural —
+  // an unmarked root whose children are the fields — and get walked as such.
+  // But shared single-widget dialogs (e.g. uxp's
+  // `.../textstyle/v1/dialogs/textAlignment`, a bare buttongroup with its own
+  // `name`/`items`) put the widget's `sling:resourceType` on the fragment
+  // ROOT. Walking that root's children would skip the widget mapping and leak
+  // its option items out as placeholder fields, so route the root through the
+  // same per-node logic as a regular dialog child. The synthetic key is the
+  // fragment path's last segment; the widget's `name` attribute still wins
+  // for the emitted field name.
+  const rootEntry = lookup(included["sling:resourceType"]);
+  if (rootEntry) {
+    const rootKey = path.split("/").filter(Boolean).pop() ?? "include";
+    await processNode(rootKey, included, ctx, out, currentGroup);
+    return;
+  }
   await walk(included, ctx, out, currentGroup);
 }
 

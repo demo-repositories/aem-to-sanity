@@ -124,6 +124,65 @@ describe("mapDialog: buttongroup", () => {
     ]);
   });
 
+  it("maps a buttongroup reached through a coral include whose fragment root IS the widget", async () => {
+    // Real-world shape: uxp's shared textstyle dialogs. The dialog references
+    // the fragment via granite include, and the fetched fragment's ROOT node
+    // is the buttongroup itself (not a wrapper with field children).
+    const fragmentPath =
+      "/apps/uxp/components/commons/textstyle/v1/dialogs/textAlignment";
+    const dialog = dialogWith("textAlignment", {
+      "jcr:primaryType": "nt:unstructured",
+      path: fragmentPath,
+      "sling:resourceType":
+        "granite/ui/components/coral/foundation/include",
+    } as unknown as DialogNode);
+    const fetcher = async (jcrPath: string) => {
+      assert.equal(jcrPath, fragmentPath);
+      return textAlignmentNode();
+    };
+    const { fields, unmapped } = await mapDialog(dialog, fetcher);
+
+    assert.equal(unmapped.length, 0);
+    assert.equal(fields.length, 1);
+    const f = fields[0];
+    assert.equal(f.name, "textAlignment");
+    assert.equal(f.type, "string");
+    if (f.type !== "string") throw new Error("unreachable");
+    assert.equal(f.options?.aemWidget, "buttonGroup");
+    assert.equal(f.options?.list?.length, 4);
+    assert.equal(f.initialValue, "tdds:ta-inherit");
+  });
+
+  it("still walks structural include fragments whose fields are children", async () => {
+    const fragmentPath = "/apps/demo/dialogs/shared-fields";
+    const dialog = dialogWith("sharedFields", {
+      path: fragmentPath,
+      "sling:resourceType":
+        "granite/ui/components/coral/foundation/include",
+    } as unknown as DialogNode);
+    const fetcher = async () =>
+      ({
+        "jcr:primaryType": "nt:unstructured",
+        heading: {
+          name: "./heading",
+          fieldLabel: "Heading",
+          "sling:resourceType":
+            "granite/ui/components/coral/foundation/form/textfield",
+        },
+        alignment: textAlignmentNode(),
+      }) as unknown as DialogNode;
+    const { fields, unmapped } = await mapDialog(dialog, fetcher);
+
+    assert.equal(unmapped.length, 0);
+    assert.deepEqual(
+      fields.map((f) => [f.name, f.type]),
+      [
+        ["heading", "string"],
+        ["textAlignment", "string"],
+      ],
+    );
+  });
+
   it("falls back to a plain string when items come from a datasource", async () => {
     const dialog = dialogWith("mobileColumnAlign", {
       name: "./mobilecolumnAlign",

@@ -34,7 +34,7 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `granite/ui/components/foundation/heading` | `hidden` | Decorative UI heading inside a dialog → skipped (not a field) |
 | `aem-integration/components/dialog/space` | `hidden` | Authoring-only spacer in Granite dialogs → skipped (not content) |
 | `granite/ui/components/coral/foundation/form/colorfield` | `string` | Color picker → Sanity string (hex value) |
-| `granite/ui/components/foundation/include` | `include` | Reference to another dialog fragment → fetched and inlined |
+| `granite/ui/components/foundation/include` | `include` | Reference to another dialog fragment → fetched and inlined. Structural fragments contribute their child fields; a fragment whose root node is itself a widget (e.g. a shared buttongroup dialog like uxp's textstyle `textAlignment`) maps as that single field. |
 
 ## Fallback behaviour
 

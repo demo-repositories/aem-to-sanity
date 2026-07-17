@@ -159,7 +159,8 @@ export const MAPPING: Record<string, MappingEntry> = {
   },
   "granite/ui/components/foundation/include": {
     kind: "include",
-    description: "Reference to another dialog fragment → fetched and inlined",
+    description:
+      "Reference to another dialog fragment → fetched and inlined. Structural fragments contribute their child fields; a fragment whose root node is itself a widget (e.g. a shared buttongroup dialog like uxp's textstyle `textAlignment`) maps as that single field.",
   },
 };
 
