@@ -756,6 +756,15 @@ function coerceFieldTypes(
       else if (v === "false") inline[name] = false;
       continue;
     }
+    if (node.type === "array-of-string") {
+      // Multi-select buttongroup: JCR stores a multi-value string property,
+      // which `.infinity.json` serializes as a JSON array when the author
+      // picked several values but as a bare string when they picked exactly
+      // one. Wrap the single-string case; any other shape keeps the
+      // original value so Studio validation surfaces the mismatch.
+      if (typeof v === "string") inline[name] = [v];
+      continue;
+    }
     if (node.type === "array-of-reference") {
       // AEM tagfield: authored as an array of tag id strings
       // (`namespace:parent/child` or `parent/child` for default namespace).

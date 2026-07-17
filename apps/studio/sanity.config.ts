@@ -2,6 +2,7 @@ import { defineConfig } from "sanity";
 import { structureTool } from "sanity/structure";
 import { sanitizeSchemaTypes } from "aem-to-sanity-schema/sanitize";
 import { allSchemaTypes } from "./schemas/index.ts";
+import { aemFormComponents } from "./components/inputs/StringToggleGroupInput.tsx";
 
 /**
  * Example Studio that consumes the schemas emitted by `aem-to-sanity-schema`.
@@ -24,5 +25,11 @@ export default defineConfig({
   plugins: [structureTool()],
   schema: {
     types: sanitizeSchemaTypes(allSchemaTypes),
+  },
+  // Custom inputs for migrated AEM widgets (e.g. buttongroup → toggle
+  // buttons). Fields are routed by the `options.aemWidget` marker the schema
+  // emitter writes; everything else renders the Studio default.
+  form: {
+    components: aemFormComponents,
   },
 });

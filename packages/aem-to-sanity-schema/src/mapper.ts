@@ -34,6 +34,7 @@ export type SanityField =
   | (CommonFieldProps & ImageField)
   | (CommonFieldProps & FileField)
   | (CommonFieldProps & RichTextField)
+  | (CommonFieldProps & ArrayOfStringField)
   | (CommonFieldProps & ArrayOfObjectField)
   | (CommonFieldProps & ReferenceArrayField)
   | (CommonFieldProps & ContainerChildrenField)
@@ -57,6 +58,15 @@ interface StringField {
   options?: {
     list?: Array<{ title: string; value: string }>;
     layout?: "radio";
+    /**
+     * Marker for AEM widgets whose Studio rendering needs a custom input
+     * component (resolved via `form.components.input` in the consuming
+     * Studio's config — see `apps/studio/components/inputs/`). Emitted with
+     * `{ strict: false }` on the `defineField` call since it's not a
+     * standard Sanity option. Studios without the resolver fall back to the
+     * default dropdown; the persisted value shape is unaffected.
+     */
+    aemWidget?: "buttonGroup";
   };
 }
 interface TextField {
@@ -85,6 +95,17 @@ interface FileField {
 }
 interface RichTextField {
   type: "array-of-blocks";
+}
+/**
+ * Multi-value option picker (buttongroup with `selectionMode="multiple"`).
+ * JCR persists a multi-value string property; Sanity renders `array` of
+ * `string` with `options.list` as its built-in checkbox list.
+ */
+interface ArrayOfStringField {
+  type: "array-of-string";
+  options?: {
+    list?: Array<{ title: string; value: string }>;
+  };
 }
 interface ArrayOfObjectField {
   type: "array-of-object";
@@ -544,6 +565,30 @@ async function buildField(
         type: "string",
         options: { list: extractSelectItems(node), layout: "radio" },
       };
+    case "buttongroup": {
+      // Coral buttongroup persists like a select: one string in `single`
+      // mode, a multi-value string property in `multiple` mode. Items may
+      // come from a literal `items` node (extractable) or a `datasource`
+      // resolved server-side at dialog render time — the latter is opaque
+      // over `.infinity.json`, so those fields keep the value but get no
+      // options list (same fallback the select widget has today).
+      const list = extractSelectItems(node);
+      if (stringAttr(node.selectionMode) === "multiple") {
+        return {
+          ...common,
+          type: "array-of-string",
+          ...(list.length > 0 ? { options: { list } } : {}),
+        };
+      }
+      return {
+        ...common,
+        type: "string",
+        initialValue: selectedItemValue(node),
+        ...(list.length > 0
+          ? { options: { list, aemWidget: "buttonGroup" as const } }
+          : {}),
+      };
+    }
     case "image":
       return { ...common, type: "image" };
     case "file":
@@ -624,6 +669,26 @@ function extractSelectItems(
     if (value !== undefined) out.push({ title: text ?? value, value });
   }
   return out;
+}
+
+/**
+ * The `value` of the option item flagged `selected` (buttongroup / select
+ * items mark their default that way) → Sanity `initialValue`. First match
+ * wins; `undefined` when no item carries the flag.
+ */
+function selectedItemValue(node: DialogNode): string | undefined {
+  const items = node["items"];
+  if (!items || typeof items !== "object" || Array.isArray(items)) {
+    return undefined;
+  }
+  for (const child of Object.values(items as Record<string, unknown>)) {
+    if (!child || typeof child !== "object" || Array.isArray(child)) continue;
+    const c = child as DialogNode;
+    if (isTruthyAttr(c.selected)) {
+      return stringAttr(c.value);
+    }
+  }
+  return undefined;
 }
 
 function fieldNameForKind(

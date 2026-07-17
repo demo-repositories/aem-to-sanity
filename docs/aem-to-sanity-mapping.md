@@ -15,6 +15,7 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `granite/ui/components/coral/foundation/form/switch` | `boolean` | Switch → Sanity boolean (rendered as a toggle in Studio v3+) |
 | `granite/ui/components/coral/foundation/form/select` | `select` | Dropdown → Sanity string with options.list |
 | `granite/ui/components/coral/foundation/form/radiogroup` | `radio` | Radio group → Sanity string with options.list and layout:'radio' |
+| `granite/ui/components/coral/foundation/form/buttongroup` | `buttongroup` | Button group → single mode: Sanity string with options.list rendered as a toggle-button group in the Studio (options.aemWidget:'buttonGroup'); multiple mode: array of strings with options.list. Datasource-driven items (no literal `items` node) fall back to a plain field without options. |
 | `granite/ui/components/coral/foundation/form/datepicker` | `date` | Date picker → Sanity date or datetime based on `type` |
 | `granite/ui/components/coral/foundation/form/pathfield` | `pathfield` | AEM pathfield → Sanity string (reference migration is future work) |
 | `granite/ui/components/coral/foundation/form/pathbrowser` | `pathbrowser` | Coral pathbrowser → Sanity image when rootPath is under /content/dam or field name matches /image/i, else string (same as pathfield) |
@@ -135,6 +136,7 @@ AEM stores numberfield values as strings (`"10"`) and checkbox / switch values a
 
 - `number` → `Number(v)`; kept as-is on `NaN`.
 - `boolean` → `true` when value is the literal string `"true"`, `false` when `"false"`; kept as-is otherwise. Unrecognized literals surface as Studio validation errors rather than being silently remapped (e.g. `"yes"`, `"1"`, `""` are not assumed).
+- `array-of-string` → multi-select buttongroup values. JCR persists a multi-value string property, which `.infinity.json` serializes as a JSON array when several values are picked but as a bare string when exactly one is. The bare-string case is wrapped into a one-item array; any other shape keeps the original value so the mismatch surfaces in the Studio.
 - `array-of-reference` → AEM tagfield values arrive as string arrays of canonical tag ids (e.g. `["promotion:payout/recurring-device-credits", "promotion:status/in-market"]`). Resolved through the categories manifest produced by `aem-tags` into `[{_type:"reference", _key:..., _ref:"category-..."}]`. Follows `cq:movedTo` aliases when AEM has redirected the source tag. Page-level `cq:tags` on the `jcr:content` node are lifted onto the page doc's `tags` field via the same resolver. Authored tag ids not present in the manifest get dropped (no opaque string left dangling in a reference array) and surfaced in `transform-report.json → unresolvedTagRefs` so the operator can either include the missing namespace in `aem-tag-roots` or accept that AEM had a stale reference.
 
 ### Legacy registries
@@ -237,6 +239,16 @@ The page-shell object itself is automatically excluded from `pageBuilder.of[]` �
 **Audit** — Pages whose `jcr:content` carries a declared page-shell `sling:resourceType` but a *undeclared* `cq:template` fall back to the generic `_type: "page"` and surface as `unknownPageTemplates` findings in `transform-report.json`. Add the template to `aem-page-components.json` and re-run `migrate:schema` + `transform` + `import` to upgrade them.
 
 Missing / empty file → no per-template documents; every page uses the generic `page` doc (today's behavior). Fully backwards compatible.
+
+## Coral buttongroup (`granite/ui/components/coral/foundation/form/buttongroup`)
+
+AEM's buttongroup renders a row of toggle buttons; it persists like a select — one string in `selectionMode="single"`, a multi-value string property in `selectionMode="multiple"`.
+
+**Schema** — single mode emits a Sanity `string` with `options.list` built from the literal `items` children (item `text` → title, `value` → value; an item flagged `selected` becomes the field's `initialValue`), plus a non-standard `options.aemWidget: "buttonGroup"` marker (the `defineField` call carries `{ strict: false }` so the extra option typechecks). Multiple mode emits `array` of `string` with the same `options.list`, which the Studio renders as its built-in checkbox list. Dialogs whose items come from a `datasource` (e.g. ACS Commons generic lists) are resolved server-side at dialog render time and are opaque over `.infinity.json` — those fields fall back to a plain `string` (or plain array) without options; authored values still migrate.
+
+**Studio** — the example Studio (`apps/studio`) routes fields carrying the `aemWidget: "buttonGroup"` marker to a toggle-button-group input (`components/inputs/StringToggleGroupInput.tsx`, wired through `form.components.input` in `sanity.config.ts`) so authors get the same one-click row of buttons they had in AEM. Studios without that resolver fall back to Sanity's default dropdown — the marker is additive and the persisted value shape is unaffected.
+
+**Content** — single-mode values pass through as strings; multiple-mode values are coerced to arrays (see `array-of-string` under "Type-aware coercion at transform").
 
 ## AEM tagfield (`cq/gui/components/coral/common/form/tagfield`)
 

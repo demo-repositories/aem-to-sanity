@@ -15,6 +15,7 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `granite/ui/components/coral/foundation/form/switch` | `boolean` | Switch → Sanity boolean (rendered as a toggle in Studio v3+) |
 | `granite/ui/components/coral/foundation/form/select` | `select` | Dropdown → Sanity string with options.list |
 | `granite/ui/components/coral/foundation/form/radiogroup` | `radio` | Radio group → Sanity string with options.list and layout:'radio' |
+| `granite/ui/components/coral/foundation/form/buttongroup` | `buttongroup` | Button group → single mode: Sanity string with options.list rendered as a toggle-button group in the Studio (options.aemWidget:'buttonGroup'); multiple mode: array of strings with options.list. Datasource-driven items (no literal `items` node) fall back to a plain field without options. |
 | `granite/ui/components/coral/foundation/form/datepicker` | `date` | Date picker → Sanity date or datetime based on `type` |
 | `granite/ui/components/coral/foundation/form/pathfield` | `pathfield` | AEM pathfield → Sanity string (reference migration is future work) |
 | `granite/ui/components/coral/foundation/form/pathbrowser` | `pathbrowser` | Coral pathbrowser → Sanity image when rootPath is under /content/dam or field name matches /image/i, else string (same as pathfield) |
@@ -71,15 +72,20 @@ When a dialog node has `sling:resourceType`: `granite/ui/components/coral/founda
 
 Some AEM components embed a **single named child component** under a fixed JCR key — e.g. `aem-integration/components/media-paragraph` has a `content` child whose own `sling:resourceType` is `aem-integration/components/content`. That's not a dialog field, and it's not a `cq:isContainer` drop-zone either; it's a named slot. The dialog itself doesn't describe it, so the shape only shows up in authored content.
 
-`migrate:schema` runs a post-extract scan of `output/cache/aem/content/` (the output of `aem-extract` and tag roots from `aem-tags`) and records every `parentResourceType → slotKey → childResourceType` combo it sees. For each one it appends a `defineField({ name: slotKey, type: childTypeName })` to the parent schema so the Studio shows the slot as a first-class typed field rather than flagging it as an "Unknown field found".
+`migrate:schema` runs a post-extract scan of `output/cache/aem/content/` (the output of `aem-extract` and tag roots from `aem-tags`) and records every `parentResourceType → slotKey → childResourceType` combo it sees. It then appends one `defineField` per **logical** slot to the parent schema so the Studio shows the slot as a first-class typed field rather than flagging it as an "Unknown field found".
+
+**Repeated slots collapse to one array field.** AEM auto-names every authored instance of the same child — `content`, `content_1793623844`, `content_1893078103_c`, `content…_copy_copy`, `title_1967938466_cop_1581547696`, … — so a single logical slot surfaces under hundreds of distinct JCR keys on content-heavy pages. Emitting one field per key would produce one `defineField` per author-drop and blow past Sanity's per-dataset attribute limit. Instead the scan groups keys by their **logical base** (suffix-stripped: timestamps, paste ids, and `_c`/`_co`/`_cop`/`_copy`/`C…` copy markers all peeled off), and emits:
+
+- a single **array** field (`array of <childType>`) when the base was authored more than once or under an auto-generated key — the common case for drop-zone-style slots, and
+- a single inline **reference** field when it's a lone, hand-named slot (key equals base, seen once).
 
 - **First run has no extracted content** → scan returns empty, no slot fields emitted. Run `aem-extract` then re-run `migrate:schema`; the second pass picks up every slot.
 - **Dialog field with the same name** → dialog field wins; slot synthesis skipped.
-- **Container parents** (listed in `aem-component-containers.json`) skip slot synthesis entirely — their drop-zone children are already claimed by `childrenField`, and author-generated JCR keys like `item_1657754806454` would otherwise pollute the schema with one defineField per instance.
-- **Multiple child types** seen at the same slot → skipped + warned; the pipeline won't guess which type to reference. Transform still writes the nested block under the JCR key so data isn't lost; the Studio keeps flagging "Unknown field" until a human authors the field.
+- **Container parents** (listed in `aem-component-containers.json`) skip slot synthesis entirely — their drop-zone children are already claimed by `childrenField`.
+- **Multiple child types** seen under one base → skipped + warned; the pipeline won't guess which type to reference. Transform still writes the nested blocks under their JCR keys so data isn't lost; the Studio keeps flagging "Unknown field" until a human authors the field.
 - **Unmapped child type** (not in `aem-component-paths`) → skipped + warned. Add the path to the list, re-run `migrate:schema`.
 
-The content transform always emits nested child components under their JCR key (single-object under the slot key, same `_type` + `_key` + coercion pipeline as top-level blocks), regardless of whether the schema has a matching `slot-reference` field yet. So data flows correctly on the first run; the second `migrate:schema` upgrades "Unknown field" warnings to typed fields in the Studio.
+The content transform mirrors this offline: it groups a node's child components by the same logical base and emits them under the base field name — an **array** when the registry marks the field as a repeated slot, a single inline object otherwise — using the same `_type` + `_key` + coercion pipeline as top-level blocks. The schema makes the array-vs-single decision once (from its global view of every page) and records it in `content-type-registry.json`; the transform obeys it, so both sides agree on the shape regardless of how many instances any single page happens to carry. Data flows correctly on the first run; the second `migrate:schema` upgrades "Unknown field" warnings to typed fields in the Studio.
 
 ## Container components (`cq:isContainer`)
 
@@ -130,6 +136,7 @@ AEM stores numberfield values as strings (`"10"`) and checkbox / switch values a
 
 - `number` → `Number(v)`; kept as-is on `NaN`.
 - `boolean` → `true` when value is the literal string `"true"`, `false` when `"false"`; kept as-is otherwise. Unrecognized literals surface as Studio validation errors rather than being silently remapped (e.g. `"yes"`, `"1"`, `""` are not assumed).
+- `array-of-string` → multi-select buttongroup values. JCR persists a multi-value string property, which `.infinity.json` serializes as a JSON array when several values are picked but as a bare string when exactly one is. The bare-string case is wrapped into a one-item array; any other shape keeps the original value so the mismatch surfaces in the Studio.
 - `array-of-reference` → AEM tagfield values arrive as string arrays of canonical tag ids (e.g. `["promotion:payout/recurring-device-credits", "promotion:status/in-market"]`). Resolved through the categories manifest produced by `aem-tags` into `[{_type:"reference", _key:..., _ref:"category-..."}]`. Follows `cq:movedTo` aliases when AEM has redirected the source tag. Page-level `cq:tags` on the `jcr:content` node are lifted onto the page doc's `tags` field via the same resolver. Authored tag ids not present in the manifest get dropped (no opaque string left dangling in a reference array) and surfaced in `transform-report.json → unresolvedTagRefs` so the operator can either include the missing namespace in `aem-tag-roots` or accept that AEM had a stale reference.
 
 ### Legacy registries
@@ -232,6 +239,16 @@ The page-shell object itself is automatically excluded from `pageBuilder.of[]` �
 **Audit** — Pages whose `jcr:content` carries a declared page-shell `sling:resourceType` but a *undeclared* `cq:template` fall back to the generic `_type: "page"` and surface as `unknownPageTemplates` findings in `transform-report.json`. Add the template to `aem-page-components.json` and re-run `migrate:schema` + `transform` + `import` to upgrade them.
 
 Missing / empty file → no per-template documents; every page uses the generic `page` doc (today's behavior). Fully backwards compatible.
+
+## Coral buttongroup (`granite/ui/components/coral/foundation/form/buttongroup`)
+
+AEM's buttongroup renders a row of toggle buttons; it persists like a select — one string in `selectionMode="single"`, a multi-value string property in `selectionMode="multiple"`.
+
+**Schema** — single mode emits a Sanity `string` with `options.list` built from the literal `items` children (item `text` → title, `value` → value; an item flagged `selected` becomes the field's `initialValue`), plus a non-standard `options.aemWidget: "buttonGroup"` marker (the `defineField` call carries `{ strict: false }` so the extra option typechecks). Multiple mode emits `array` of `string` with the same `options.list`, which the Studio renders as its built-in checkbox list. Dialogs whose items come from a `datasource` (e.g. ACS Commons generic lists) are resolved server-side at dialog render time and are opaque over `.infinity.json` — those fields fall back to a plain `string` (or plain array) without options; authored values still migrate.
+
+**Studio** — the example Studio (`apps/studio`) routes fields carrying the `aemWidget: "buttonGroup"` marker to a toggle-button-group input (`components/inputs/StringToggleGroupInput.tsx`, wired through `form.components.input` in `sanity.config.ts`) so authors get the same one-click row of buttons they had in AEM. Studios without that resolver fall back to Sanity's default dropdown — the marker is additive and the persisted value shape is unaffected.
+
+**Content** — single-mode values pass through as strings; multiple-mode values are coerced to arrays (see `array-of-string` under "Type-aware coercion at transform").
 
 ## AEM tagfield (`cq/gui/components/coral/common/form/tagfield`)
 

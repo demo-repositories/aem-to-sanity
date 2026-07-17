@@ -18,6 +18,7 @@ export type SanityKind =
   | "richtext"
   | "select"
   | "radio"
+  | "buttongroup"
   | "image"
   | "file"
   | "multifield"
@@ -70,6 +71,11 @@ export const MAPPING: Record<string, MappingEntry> = {
     kind: "radio",
     description:
       "Radio group → Sanity string with options.list and layout:'radio'",
+  },
+  "granite/ui/components/coral/foundation/form/buttongroup": {
+    kind: "buttongroup",
+    description:
+      "Button group → single mode: Sanity string with options.list rendered as a toggle-button group in the Studio (options.aemWidget:'buttonGroup'); multiple mode: array of strings with options.list. Datasource-driven items (no literal `items` node) fall back to a plain field without options.",
   },
   "granite/ui/components/coral/foundation/form/datepicker": {
     kind: "date",
