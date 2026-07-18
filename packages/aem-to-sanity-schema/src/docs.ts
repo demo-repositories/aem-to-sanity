@@ -233,6 +233,16 @@ AEM's buttongroup renders a row of toggle buttons; it persists like a select —
 
 **Content** — single-mode values pass through as strings; multiple-mode values are coerced to arrays (see \`array-of-string\` under "Type-aware coercion at transform").
 
+## Coral text (\`granite/ui/components/coral/foundation/text\`)
+
+AEM dialogs use the Coral \`text\` widget for static author-facing copy — inline instructions and warnings (e.g. uxp promocard's note about aspect-ratio behavior in split mode). The node has no \`name\` and persists nothing in JCR; it exists purely to be read.
+
+**Schema** — maps to a display-only **note**: a read-only \`string\` field whose \`description\` carries the message, marked \`options.aemWidget: "note"\` (the \`defineField\` call carries \`{ strict: false }\` for the non-standard option). A text node without a \`text\` attribute renders nothing in AEM either and is skipped as hidden.
+
+**Studio** — the example Studio routes marked fields through a \`form.components.field\` resolver to a caution-toned banner (\`apps/studio/components/inputs/NoteField.tsx\`) that replaces the entire field — no label, no input box, just the message, mirroring AEM's yellow inline warning. Studios without the resolver fall back to an empty read-only string input with the message as its description.
+
+**Content** — nothing to migrate: no authored value ever exists for these fields, so the transform and import are unaffected.
+
 ## Dialog structure: tabs vs. accordions
 
 Both Coral \`tabs\` and \`accordion\` nodes flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:

@@ -32,6 +32,7 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `granite/ui/components/coral/foundation/fixedcolumns` | `container` | Fixed columns → flattened; children hoist up |
 | `granite/ui/components/coral/foundation/form/fieldset` | `container` | Fieldset → flattened with group label |
 | `granite/ui/components/coral/foundation/form/hidden` | `hidden` | Hidden → skipped |
+| `granite/ui/components/coral/foundation/text` | `note` | Static dialog text (author instructions / warnings) → read-only Studio note banner via `options.aemWidget: "note"`; nothing is persisted |
 | `granite/ui/components/foundation/heading` | `hidden` | Decorative UI heading inside a dialog → skipped (not a field) |
 | `aem-integration/components/dialog/space` | `hidden` | Authoring-only spacer in Granite dialogs → skipped (not content) |
 | `granite/ui/components/coral/foundation/form/colorfield` | `string` | Color picker → Sanity string (hex value) |
@@ -250,6 +251,16 @@ AEM's buttongroup renders a row of toggle buttons; it persists like a select —
 **Studio** — the example Studio (`apps/studio`) routes fields carrying the `aemWidget: "buttonGroup"` marker to a toggle-button-group input (`components/inputs/StringToggleGroupInput.tsx`, wired through `form.components.input` in `sanity.config.ts`) so authors get the same one-click row of buttons they had in AEM. Studios without that resolver fall back to Sanity's default dropdown — the marker is additive and the persisted value shape is unaffected.
 
 **Content** — single-mode values pass through as strings; multiple-mode values are coerced to arrays (see `array-of-string` under "Type-aware coercion at transform").
+
+## Coral text (`granite/ui/components/coral/foundation/text`)
+
+AEM dialogs use the Coral `text` widget for static author-facing copy — inline instructions and warnings (e.g. uxp promocard's note about aspect-ratio behavior in split mode). The node has no `name` and persists nothing in JCR; it exists purely to be read.
+
+**Schema** — maps to a display-only **note**: a read-only `string` field whose `description` carries the message, marked `options.aemWidget: "note"` (the `defineField` call carries `{ strict: false }` for the non-standard option). A text node without a `text` attribute renders nothing in AEM either and is skipped as hidden.
+
+**Studio** — the example Studio routes marked fields through a `form.components.field` resolver to a caution-toned banner (`apps/studio/components/inputs/NoteField.tsx`) that replaces the entire field — no label, no input box, just the message, mirroring AEM's yellow inline warning. Studios without the resolver fall back to an empty read-only string input with the message as its description.
+
+**Content** — nothing to migrate: no authored value ever exists for these fields, so the transform and import are unaffected.
 
 ## Dialog structure: tabs vs. accordions
 
