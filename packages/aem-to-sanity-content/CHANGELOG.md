@@ -1,5 +1,12 @@
 # aem-to-sanity-content
 
+## 1.4.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - aem-to-sanity-core@1.4.0
+
 ## 1.3.0
 
 ### Patch Changes
