@@ -1,5 +1,9 @@
 import prettier from "prettier";
-import type { SanityField, SanityFieldset } from "./mapper.ts";
+import type {
+  SanityField,
+  SanityFieldset,
+  ShowHideCondition,
+} from "./mapper.ts";
 import {
   displayTitleFromAemComponentJcrTitle,
   toTitleCase,
@@ -438,6 +442,10 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     }
   }
 
+  if (field.hiddenConditions && field.hiddenConditions.length > 0) {
+    props.hidden = renderHiddenCallback(field.hiddenConditions);
+  }
+
   // Don't double-apply validation if it was already set for number min/max.
   if (
     field.required &&
@@ -468,6 +476,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     "group",
     "fieldset",
     "readOnly",
+    "hidden",
     "rows",
     "initialValue",
     "options",
@@ -479,4 +488,54 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     if (props[key] !== undefined) lines.push(`${key}: ${props[key]}`);
   }
   return `{ ${lines.join(", ")} }`;
+}
+
+/**
+ * ACS show/hide conditions → Sanity `hidden` callback. Each condition says
+ * "visible when the sibling controller holds one of these values"; the
+ * callback returns true (hidden) when ANY condition fails, so nested ACS
+ * wrappers AND together.
+ *
+ * Dropdown predicates emit the minimal equivalent form:
+ * - `parent?.x !== "v"` for a single value — the common case.
+ * - `!["a", "b"].includes(parent?.x)` for multiple values.
+ * - The `?? "<default>"` fallback appears ONLY when the controller's AEM
+ *   default option is itself one of the visible values — that's the one
+ *   case where an unset select must count as the default, or a fresh
+ *   document would hide fields AEM shows. Otherwise unset is hidden with
+ *   or without the fallback, so it's omitted.
+ *
+ * Checkbox predicates apply the same default rule: an unset boolean counts
+ * as the controller's `checked` default. Default-unchecked (the common
+ * case) compares against `true` (`x !== true` / `x === true`); a
+ * default-CHECKED controller flips the comparison to `false`
+ * (`x === false` / `x !== false`) so unset lands on the visible side —
+ * migrated documents where AEM never persisted the property show what a
+ * fresh AEM dialog shows.
+ */
+function renderHiddenCallback(conditions: ShowHideCondition[]): string {
+  const parts = conditions.map(renderConditionExpr);
+  return `({ parent }) => ${parts.join(" || ")}`;
+}
+
+function renderConditionExpr(c: ShowHideCondition): string {
+  const access = `parent?.${c.controllerField}`;
+  if (c.kind === "checkbox") {
+    if (c.controllerDefaultChecked) {
+      return c.visibleWhenChecked
+        ? `${access} === false`
+        : `${access} !== false`;
+    }
+    return c.visibleWhenChecked ? `${access} !== true` : `${access} === true`;
+  }
+  const values = c.values ?? [];
+  const fallback = c.controllerDefault ?? "";
+  const visibleWhenUnset = values.includes(fallback);
+  const subject = visibleWhenUnset
+    ? `(${access} ?? ${JSON.stringify(fallback)})`
+    : access;
+  if (values.length === 1) {
+    return `${subject} !== ${JSON.stringify(values[0])}`;
+  }
+  return `!${JSON.stringify(values)}.includes(${subject})`;
 }

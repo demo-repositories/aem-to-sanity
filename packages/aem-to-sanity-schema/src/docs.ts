@@ -243,6 +243,23 @@ AEM dialogs use the Coral \`text\` widget for static author-facing copy — inli
 
 **Content** — nothing to migrate: no authored value ever exists for these fields, so the transform and import are unaffected.
 
+## ACS Commons show/hide widgets (conditional fields)
+
+[ACS AEM Commons show/hide](https://adobe-consulting-services.github.io/acs-aem-commons/features/ui-widgets/show-hide-widgets/index.html) lets a dialog select or checkbox toggle the visibility of other dialog fields via \`granite:data\` attributes. The migration maps the pattern onto Sanity's conditional \`hidden\` callback so the Studio dialog folds the same way the AEM dialog did.
+
+**Detection** — a widget whose \`granite:data\` carries \`acs-cq-dialog-dropdown-checkbox-showhide-target\` (a \`.class\` selector) is a **controller**; selects / radio groups / button groups drive dropdown conditions, checkboxes / switches drive checkbox conditions. Any node whose \`granite:class\` contains that class is a **target**; its \`granite:data\` names the values that make it visible:
+
+- \`acs-dropdownshowhidetargetvalue\` — one or more select values, space-separated.
+- \`acs-checkboxshowhidetargetvalue\` — \`"true"\` → visible when checked, \`""\` → visible when unchecked.
+
+Targets may be individual widgets or whole containers (wells, tab items) — every field mapped underneath a target container inherits its condition, and nested targets AND together (e.g. uxp promocard's split-mode warning is visible only when \`cardStyle == "flood"\` **and** \`isSplit\` is checked).
+
+**Schema** — each conditioned field emits \`hidden: ({ parent }) => …\` reading the controller off the sibling scope. An unset controller counts as its AEM default, matching what an author sees opening a fresh dialog: dropdown conditions fall back to the \`selected\` option, checkbox conditions to the widget's \`checked\` attribute (a default-checked controller flips the emitted comparison to \`=== false\` / \`!== false\` so unset lands on the visible side; absent or Granite EL \`\${...}\` defaults count as unchecked).
+
+Predicates compare **raw values, deliberately without type coercion** — select controllers hold strings and checkbox controllers hold booleans after \`aem-transform\`'s type-aware coercion, so stringifying in the callback would only mask a wrongly-typed value. If a controller ever carries a mismatched type (e.g. a JCR Boolean on a select-backed property), its targets hide and the controller itself surfaces a Studio validation error — consistent with the pipeline-wide keep-original-on-failure contract. Don't re-add defensive \`String(...)\` wrapping; fix the value or the schema type instead. Controllers and targets resolve **within the same object scope only** — a top-level select can't toggle a multifield row field (Sanity's \`hidden\` reads \`parent\`), which also matches ACS semantics where checkbox/select state only affects the current multifield row. Unmatched targets (no controller owns the class, or the selector isn't a simple \`.class\`) stay unconditionally visible.
+
+**Content** — nothing changes at transform/import: AEM persists authored values even while their widget is hidden, and so does Sanity — the \`hidden\` callback is purely a Studio display concern.
+
 ## Dialog structure: tabs vs. accordions
 
 Both Coral \`tabs\` and \`accordion\` nodes flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:
