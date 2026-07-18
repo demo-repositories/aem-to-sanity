@@ -44,12 +44,58 @@ export interface SanityFieldset {
  * `group` comes from the nearest titled tab-like container; `fieldset` from
  * the nearest accordion panel. `accordionPanels` is set while walking the
  * direct children of a Coral accordion so titled panel containers there
- * become fieldsets instead of new groups.
+ * become fieldsets instead of new groups. `showHide` accumulates the ACS
+ * Commons show/hide target wrappers the walk has descended through — every
+ * field built under them inherits their visibility conditions.
  */
 interface Placement {
   group?: string;
   fieldset?: string;
   accordionPanels?: boolean;
+  showHide?: RawShowHideTarget[];
+}
+
+/**
+ * ACS Commons show/hide (https://adobe-consulting-services.github.io/acs-aem-commons/features/ui-widgets/show-hide-widgets/):
+ * a select or checkbox marked with `granite:data.acs-cq-dialog-dropdown-checkbox-showhide-target`
+ * (a `.class` selector) toggles every dialog node carrying that class. This
+ * raw record captures one target node's linkage as authored — the class
+ * tokens on the node plus the values that make it visible — before we know
+ * which widget (if any) owns the selector.
+ */
+interface RawShowHideTarget {
+  /** Class tokens from the node's `granite:class`, matched against controller selectors. */
+  classTokens: string[];
+  /** `acs-dropdownshowhidetargetvalue`, space-split: select values that show this node. */
+  dropdownValues?: string[];
+  /** `acs-checkboxshowhidetargetvalue`: `"true"` → visible when checked, `""` → visible when unchecked. */
+  checkboxVisibleWhenChecked?: boolean;
+}
+
+/** Show/hide controller metadata attached to the widget field that drives targets. */
+interface ShowHideControllerMeta {
+  /** The target selector's class name (leading `.` stripped). */
+  selectorClass: string;
+  kind: "dropdown" | "checkbox";
+  /** Dropdown controller's default option value (`selected` item), used as the unset-value fallback. */
+  defaultValue?: string;
+}
+
+/**
+ * One resolved visibility condition on a field: the field is visible only
+ * when the sibling `controllerField` holds a matching value. Multiple
+ * conditions on one field AND together (nested show/hide wrappers). The
+ * emitter renders these as a Sanity `hidden: ({ parent }) => …` callback.
+ */
+export interface ShowHideCondition {
+  controllerField: string;
+  kind: "dropdown" | "checkbox";
+  /** Dropdown: values that make the field visible. */
+  values?: string[];
+  /** Dropdown: controller's default value, applied when the document has none. */
+  controllerDefault?: string;
+  /** Checkbox: true → visible when checked, false → visible when unchecked. */
+  visibleWhenChecked?: boolean;
 }
 
 const CORAL_ACCORDION_RESOURCE_TYPE =
@@ -80,6 +126,12 @@ export interface CommonFieldProps {
   required?: boolean;
   group?: string;
   fieldset?: string;
+  /** Resolved ACS show/hide visibility conditions (ANDed) → emitted `hidden` callback. */
+  hiddenConditions?: ShowHideCondition[];
+  /** @internal Raw target linkage; resolved into `hiddenConditions` and removed before mapDialog returns. */
+  showHideTargets?: RawShowHideTarget[];
+  /** @internal Controller linkage; consumed during resolution and removed before mapDialog returns. */
+  showHideController?: ShowHideControllerMeta;
 }
 
 interface StringField {
@@ -277,6 +329,8 @@ export async function mapDialog(
   const fields: SanityField[] = [];
   await walk(root, ctx, fields, {});
   dedupeFieldNames(fields, ctx.renamed);
+  // After dedupe so conditions reference final controller field names.
+  resolveShowHideConditions(fields);
   return {
     fields,
     unmapped: ctx.unmapped,
@@ -354,10 +408,21 @@ async function processNode(
   child: DialogNode,
   ctx: MappingContext,
   out: SanityField[],
-  placement: Placement,
+  incomingPlacement: Placement,
 ): Promise<void> {
   const resourceType = child["sling:resourceType"];
   const entry = lookup(resourceType);
+
+  // ACS show/hide target: this node (widget or container) carries a target
+  // class + target value. Fields built from it — and everything under it,
+  // for containers — inherit the visibility condition.
+  const showHideTarget = showHideTargetRecord(child);
+  const placement: Placement = showHideTarget
+    ? {
+        ...incomingPlacement,
+        showHide: [...(incomingPlacement.showHide ?? []), showHideTarget],
+      }
+    : incomingPlacement;
 
   // Transparent wrapper handling. Two patterns show up in real AEM dialogs:
   //  1. Literal `items` grouping node — walk its children directly.
@@ -412,6 +477,7 @@ async function processNode(
     const childPlacement: Placement = {
       group: placement.group,
       fieldset: placement.fieldset,
+      showHide: placement.showHide,
       // A Coral accordion's direct item children are its panels — their
       // titles become collapsible fieldsets, not Studio groups (tabs).
       // Any other container resets the flag: only immediate panels count.
@@ -554,6 +620,9 @@ function buildFileUploadFieldPair(
     stringAttr(node.fieldLabel) ??
     stringAttr(node["jcr:title"]) ??
     assetName;
+  const showHideTargets = placement.showHide?.length
+    ? { showHideTargets: placement.showHide }
+    : {};
   const pathField: SanityField = {
     name: pathName,
     title: `${label} (AEM DAM path)`,
@@ -564,6 +633,7 @@ function buildFileUploadFieldPair(
     fieldset: placement.fieldset,
     type: "string",
     readOnly: true,
+    ...showHideTargets,
   };
   const assetField: SanityField = {
     name: assetName,
@@ -573,6 +643,7 @@ function buildFileUploadFieldPair(
     group: placement.group,
     fieldset: placement.fieldset,
     type: isImageUpload(node) ? "image" : "file",
+    ...showHideTargets,
   } as SanityField;
   return [pathField, assetField];
 }
@@ -604,7 +675,12 @@ async function buildField(
     required: isTruthyAttr(node.required) || undefined,
     group: placement.group,
     fieldset: placement.fieldset,
+    ...(placement.showHide?.length
+      ? { showHideTargets: placement.showHide }
+      : {}),
   };
+  const controller = showHideControllerMeta(kind, node);
+  if (controller) common.showHideController = controller;
 
   switch (kind) {
     case "string":
@@ -758,6 +834,9 @@ function buildPlaceholder(
     fieldset: placement.fieldset,
     type: "placeholder",
     originalResourceType: node["sling:resourceType"] ?? "unknown",
+    ...(placement.showHide?.length
+      ? { showHideTargets: placement.showHide }
+      : {}),
   };
 }
 
@@ -798,6 +877,135 @@ function selectedItemValue(node: DialogNode): string | undefined {
     }
   }
   return undefined;
+}
+
+function graniteData(node: DialogNode): Record<string, unknown> | undefined {
+  const data = node["granite:data"];
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return undefined;
+  }
+  return data as Record<string, unknown>;
+}
+
+/**
+ * ACS show/hide target detection: a node whose `granite:data` carries
+ * `acs-dropdownshowhidetargetvalue` and/or `acs-checkboxshowhidetargetvalue`
+ * is shown/hidden by a controller widget. Which controller is unknown here —
+ * the linkage is the class token shared with the controller's selector, so
+ * we record the raw attributes and match after the walk completes (targets
+ * can precede their controller in dialog order).
+ */
+function showHideTargetRecord(
+  node: DialogNode,
+): RawShowHideTarget | undefined {
+  const data = graniteData(node);
+  if (!data) return undefined;
+  const dropdownRaw = data["acs-dropdownshowhidetargetvalue"];
+  const checkboxRaw = data["acs-checkboxshowhidetargetvalue"];
+  const hasDropdown = typeof dropdownRaw === "string";
+  const hasCheckbox = typeof checkboxRaw === "string";
+  if (!hasDropdown && !hasCheckbox) return undefined;
+  const classAttr = stringAttr(node["granite:class"]);
+  const classTokens = classAttr ? classAttr.split(/\s+/).filter(Boolean) : [];
+  if (classTokens.length === 0) return undefined;
+  const record: RawShowHideTarget = { classTokens };
+  if (hasDropdown) {
+    // Multiple values are space-separated; an empty attribute means the
+    // target shows when the select's value is the empty string.
+    const values = dropdownRaw.split(/\s+/).filter(Boolean);
+    record.dropdownValues = values.length > 0 ? values : [""];
+  }
+  if (hasCheckbox) {
+    // "true" → visible when checked; "" (ACS maps false to empty) → visible
+    // when unchecked.
+    record.checkboxVisibleWhenChecked = isTruthyAttr(checkboxRaw);
+  }
+  return record;
+}
+
+/**
+ * ACS show/hide controller detection: a select/radio/buttongroup or
+ * checkbox/switch whose `granite:data` carries
+ * `acs-cq-dialog-dropdown-checkbox-showhide-target` drives target visibility.
+ * Only simple `.class` selectors are supported (the documented usage);
+ * anything else is ignored and the targets stay unconditionally visible.
+ */
+function showHideControllerMeta(
+  kind: SanityKind,
+  node: DialogNode,
+): ShowHideControllerMeta | undefined {
+  const data = graniteData(node);
+  if (!data) return undefined;
+  const selector = data["acs-cq-dialog-dropdown-checkbox-showhide-target"];
+  if (typeof selector !== "string") return undefined;
+  const match = /^\.([A-Za-z0-9_-]+)$/.exec(selector.trim());
+  if (!match) return undefined;
+  const controllerKind =
+    kind === "boolean"
+      ? ("checkbox" as const)
+      : kind === "select" || kind === "radio" || kind === "buttongroup"
+        ? ("dropdown" as const)
+        : undefined;
+  if (!controllerKind) return undefined;
+  const meta: ShowHideControllerMeta = {
+    selectorClass: match[1]!,
+    kind: controllerKind,
+  };
+  if (controllerKind === "dropdown") {
+    meta.defaultValue = selectedItemValue(node);
+  }
+  return meta;
+}
+
+/**
+ * Match every field's raw show/hide target records against the controllers
+ * in the SAME sibling scope, producing the `hiddenConditions` the emitter
+ * turns into `hidden: ({ parent }) => …`. Scoping matters: the callback
+ * reads the controller off `parent`, so a controller outside the field's
+ * object (e.g. top-level select vs. a multifield row target) can't be
+ * expressed — such records are dropped and the field stays visible, which
+ * also matches ACS semantics (checkbox/select state only affects the
+ * current multifield row). Recurses into array-of-object item fields as
+ * their own scope. Internal linkage props are removed either way so the
+ * returned field tree carries only the resolved conditions.
+ */
+function resolveShowHideConditions(fields: SanityField[]): void {
+  const controllers = fields.filter((f) => f.showHideController);
+  for (const field of fields) {
+    const conditions: ShowHideCondition[] = [];
+    for (const raw of field.showHideTargets ?? []) {
+      for (const controller of controllers) {
+        if (controller === field) continue;
+        const meta = controller.showHideController!;
+        if (!raw.classTokens.includes(meta.selectorClass)) continue;
+        if (meta.kind === "dropdown" && raw.dropdownValues) {
+          conditions.push({
+            controllerField: controller.name,
+            kind: "dropdown",
+            values: raw.dropdownValues,
+            ...(meta.defaultValue !== undefined
+              ? { controllerDefault: meta.defaultValue }
+              : {}),
+          });
+        } else if (
+          meta.kind === "checkbox" &&
+          raw.checkboxVisibleWhenChecked !== undefined
+        ) {
+          conditions.push({
+            controllerField: controller.name,
+            kind: "checkbox",
+            visibleWhenChecked: raw.checkboxVisibleWhenChecked,
+          });
+        }
+      }
+    }
+    if (conditions.length > 0) field.hiddenConditions = conditions;
+    delete field.showHideTargets;
+    if (field.type === "array-of-object") {
+      resolveShowHideConditions(field.itemFields);
+    }
+  }
+  for (const field of fields) delete field.showHideController;
 }
 
 function fieldNameForKind(

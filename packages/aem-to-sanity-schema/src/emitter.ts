@@ -1,5 +1,9 @@
 import prettier from "prettier";
-import type { SanityField, SanityFieldset } from "./mapper.ts";
+import type {
+  SanityField,
+  SanityFieldset,
+  ShowHideCondition,
+} from "./mapper.ts";
 import {
   displayTitleFromAemComponentJcrTitle,
   toTitleCase,
@@ -438,6 +442,10 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     }
   }
 
+  if (field.hiddenConditions && field.hiddenConditions.length > 0) {
+    props.hidden = renderHiddenCallback(field.hiddenConditions);
+  }
+
   // Don't double-apply validation if it was already set for number min/max.
   if (
     field.required &&
@@ -468,6 +476,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     "group",
     "fieldset",
     "readOnly",
+    "hidden",
     "rows",
     "initialValue",
     "options",
@@ -479,4 +488,27 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     if (props[key] !== undefined) lines.push(`${key}: ${props[key]}`);
   }
   return `{ ${lines.join(", ")} }`;
+}
+
+/**
+ * ACS show/hide conditions → Sanity `hidden` callback. Each condition says
+ * "visible when the sibling controller holds one of these values"; the
+ * callback returns true (hidden) when ANY condition fails, so nested ACS
+ * wrappers AND together. Dropdown controllers fall back to their AEM default
+ * option when the document has no value yet — matching what an author sees
+ * when they open a fresh AEM dialog. Checkbox controllers treat an unset
+ * boolean as unchecked for the same reason.
+ */
+function renderHiddenCallback(conditions: ShowHideCondition[]): string {
+  const parts = conditions.map((c) => {
+    const access = `parent?.${c.controllerField}`;
+    if (c.kind === "checkbox") {
+      return c.visibleWhenChecked
+        ? `${access} !== true`
+        : `${access} === true`;
+    }
+    const fallback = JSON.stringify(c.controllerDefault ?? "");
+    return `!${JSON.stringify(c.values ?? [])}.includes(String(${access} ?? ${fallback}))`;
+  });
+  return `({ parent }) => ${parts.join(" || ")}`;
 }
