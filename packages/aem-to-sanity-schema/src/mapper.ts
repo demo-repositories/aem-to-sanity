@@ -704,15 +704,16 @@ async function buildField(
         min: numberAttr(node.min),
         max: numberAttr(node.max),
       };
-    case "boolean":
+    case "boolean": {
+      const defaultChecked = checkboxDefaultChecked(node);
       return {
         ...common,
         type: "boolean",
-        initialValue:
-          typeof node.value === "boolean"
-            ? node.value
-            : isTruthyAttr(node.value),
+        ...(defaultChecked !== undefined
+          ? { initialValue: defaultChecked }
+          : {}),
       };
+    }
     case "date":
       return {
         ...common,
@@ -875,6 +876,29 @@ function selectedItemValue(node: DialogNode): string | undefined {
     if (isTruthyAttr(c.selected)) {
       return stringAttr(c.value);
     }
+  }
+  return undefined;
+}
+
+/**
+ * An AEM checkbox/switch's default state lives on the `checked` attribute —
+ * NOT `value`, which is the constant persisted when the box is checked
+ * (`"true"` on virtually every widget). Deriving `initialValue` from `value`
+ * flipped nearly every boolean default to `true`.
+ *
+ * Returns `undefined` (emit no initialValue) when the default is unknowable
+ * offline: `checked` absent (AEM renders unchecked and persists nothing
+ * until dialog save — the Studio's unset boolean behaves the same) or a
+ * Granite EL expression (`${...}`, resolved server-side against design
+ * config). Literal `true`/`"true"` → `true`; literal `false`/`"false"` →
+ * `false`.
+ */
+function checkboxDefaultChecked(node: DialogNode): boolean | undefined {
+  const checked = node["checked"];
+  if (typeof checked === "boolean") return checked;
+  if (typeof checked === "string") {
+    if (checked.includes("${")) return undefined;
+    return isTruthyAttr(checked);
   }
   return undefined;
 }

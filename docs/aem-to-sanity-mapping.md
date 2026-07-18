@@ -11,8 +11,8 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `granite/ui/components/coral/foundation/form/richtext` | `richtext` | Rich text → Sanity array of PortableText blocks |
 | `cq/gui/components/authoring/dialog/richtext` | `richtext` | Legacy rich text → Sanity array of PortableText blocks |
 | `granite/ui/components/coral/foundation/form/numberfield` | `number` | Number → Sanity number (min/max → validation) |
-| `granite/ui/components/coral/foundation/form/checkbox` | `boolean` | Checkbox → Sanity boolean |
-| `granite/ui/components/coral/foundation/form/switch` | `boolean` | Switch → Sanity boolean (rendered as a toggle in Studio v3+) |
+| `granite/ui/components/coral/foundation/form/checkbox` | `boolean` | Checkbox → Sanity boolean. `initialValue` from the `checked` attribute (the default state), not `value` (the constant persisted when checked); omitted when `checked` is absent or a Granite EL expression (`${...}`, unresolvable offline). |
+| `granite/ui/components/coral/foundation/form/switch` | `boolean` | Switch → Sanity boolean (rendered as a toggle in Studio v3+). Same `checked`-based default handling as checkbox. |
 | `granite/ui/components/coral/foundation/form/select` | `select` | Dropdown → Sanity string with options.list |
 | `granite/ui/components/coral/foundation/form/radiogroup` | `radio` | Radio group → Sanity string with options.list and layout:'radio' |
 | `granite/ui/components/coral/foundation/form/buttongroup` | `buttongroup` | Button group → single mode: Sanity string with options.list rendered as a toggle-button group in the Studio (options.aemWidget:'buttonGroup'); multiple mode: array of strings with options.list. Datasource-driven items (no literal `items` node) fall back to a plain field without options. |

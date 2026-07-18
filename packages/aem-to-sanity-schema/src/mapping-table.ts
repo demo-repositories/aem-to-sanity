@@ -58,11 +58,13 @@ export const MAPPING: Record<string, MappingEntry> = {
   },
   "granite/ui/components/coral/foundation/form/checkbox": {
     kind: "boolean",
-    description: "Checkbox → Sanity boolean",
+    description:
+      "Checkbox → Sanity boolean. `initialValue` from the `checked` attribute (the default state), not `value` (the constant persisted when checked); omitted when `checked` is absent or a Granite EL expression (`${...}`, unresolvable offline).",
   },
   "granite/ui/components/coral/foundation/form/switch": {
     kind: "boolean",
-    description: "Switch → Sanity boolean (rendered as a toggle in Studio v3+)",
+    description:
+      "Switch → Sanity boolean (rendered as a toggle in Studio v3+). Same `checked`-based default handling as checkbox.",
   },
   "granite/ui/components/coral/foundation/form/select": {
     kind: "select",
