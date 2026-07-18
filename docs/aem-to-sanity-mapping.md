@@ -27,13 +27,14 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `granite/ui/components/coral/foundation/container` | `container` | Container → flattened; children hoist up |
 | `cq/gui/components/authoring/dialog` | `container` | Dialog root → walked for top-level fields |
 | `granite/ui/components/coral/foundation/tabs` | `container` | Tabs → flattened; tab titles become fieldset groups |
-| `granite/ui/components/coral/foundation/well` | `container` | Well → flattened; children hoist up |
+| `granite/ui/components/coral/foundation/well` | `container` | Well (static grouping box) → non-collapsible fieldset titled from `jcr:title` or the first `heading` widget inside the well (wrapper containers are searched through); untitled wells flatten and children hoist up |
 | `granite/ui/components/coral/foundation/accordion` | `container` | Accordion → flattened; panel titles become collapsible fieldsets inside the surrounding tab group (collapsed unless the panel is `active`) |
 | `granite/ui/components/coral/foundation/fixedcolumns` | `container` | Fixed columns → flattened; children hoist up |
 | `granite/ui/components/coral/foundation/form/fieldset` | `container` | Fieldset → flattened with group label |
 | `granite/ui/components/coral/foundation/form/hidden` | `hidden` | Hidden → skipped |
 | `granite/ui/components/coral/foundation/text` | `note` | Static dialog text (author instructions / warnings) → read-only Studio note banner via `options.aemWidget: "note"`; nothing is persisted |
 | `granite/ui/components/foundation/heading` | `hidden` | Decorative UI heading inside a dialog → skipped (not a field) |
+| `granite/ui/components/coral/foundation/heading` | `hidden` | Coral heading → not a field itself; the first heading inside a well supplies the well's fieldset title via its `text` |
 | `aem-integration/components/dialog/space` | `hidden` | Authoring-only spacer in Granite dialogs → skipped (not content) |
 | `granite/ui/components/coral/foundation/form/colorfield` | `string` | Color picker → Sanity string (hex value) |
 | `granite/ui/components/foundation/include` | `include` | Reference to another dialog fragment → fetched and inlined. Structural fragments contribute their child fields; a fragment whose root node is itself a widget (e.g. a shared buttongroup dialog like uxp's textstyle `textAlignment`) maps as that single field. |
@@ -279,12 +280,13 @@ Predicates compare **raw values, deliberately without type coercion** — select
 
 **Content** — nothing changes at transform/import: AEM persists authored values even while their widget is hidden, and so does Sanity — the `hidden` callback is purely a Studio display concern.
 
-## Dialog structure: tabs vs. accordions
+## Dialog structure: tabs, accordions, wells
 
-Both Coral `tabs` and `accordion` nodes flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:
+Coral `tabs`, `accordion`, and `well` nodes all flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:
 
 - **Tab panels** (titled containers directly under a `tabs` node) become **Studio groups**: one tab per panel at the top of the object's editor.
 - **Accordion panels** (titled containers directly under an `accordion` node) become **collapsible fieldsets** *inside* whatever tab the accordion sits in — an accordion in AEM is a fold-out section within a tab, not a sibling tab. Fields inside the panel keep the surrounding tab's `group` and additionally get the panel's `fieldset`. The fieldset starts collapsed unless the panel node carries a truthy `active` attribute (Coral's expanded-by-default flag).
+- **Wells** (`granite/ui/components/coral/foundation/well`) become **non-collapsible fieldsets** — AEM renders a well as a static bordered box grouping related fields. The title comes from the well's `jcr:title` when present, otherwise from the `text` of the first `heading` widget rendered inside the well (the common authoring pattern, e.g. an "Overlay Options:" heading; a trailing colon is stripped). Structural wrappers between the well and its heading are searched through — uxp promocard nests `well > column > heading` — but a nested well's heading belongs to that inner well. A well with no title source stays transparent: its fields hoist up ungrouped, exactly as before. The heading widget itself persists nothing and emits no field.
 
 Example: uxp `promocard` nests an accordion titled "Height" inside its "Display" tab. The six height fields emit with `group: "display"` + `fieldset: "height"`, so the Studio shows them as a collapsible "Height" section on the Display tab — not as a stray top-level "Height" tab.
 
