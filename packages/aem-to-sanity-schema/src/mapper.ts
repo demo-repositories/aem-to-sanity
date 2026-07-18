@@ -58,17 +58,19 @@ interface Placement {
 }
 
 /**
- * ACS Commons show/hide (https://adobe-consulting-services.github.io/acs-aem-commons/features/ui-widgets/show-hide-widgets/):
- * a select or checkbox marked with `granite:data.acs-cq-dialog-dropdown-checkbox-showhide-target`
- * (a `.class` selector) toggles every dialog node carrying that class. This
- * raw record captures one target node's linkage as authored — the class
- * tokens on the node plus the values that make it visible — before we know
- * which widget (if any) owns the selector.
+ * Dialog show/hide: a select or checkbox marked with a target selector in
+ * `granite:data` (a `.class` selector) toggles every dialog node carrying
+ * that class. Two attribute vocabularies implement the same mechanism —
+ * ACS Commons (https://adobe-consulting-services.github.io/acs-aem-commons/features/ui-widgets/show-hide-widgets/)
+ * and core AEM's stock `cq-dialog-dropdown-showhide` — and both resolve
+ * through this record. It captures one target node's linkage as authored —
+ * the class tokens on the node plus the values that make it visible —
+ * before we know which widget (if any) owns the selector.
  */
 interface RawShowHideTarget {
   /** Class tokens from the node's `granite:class`, matched against controller selectors. */
   classTokens: string[];
-  /** `acs-dropdownshowhidetargetvalue`, space-split: select values that show this node. */
+  /** `acs-dropdownshowhidetargetvalue` / core `showhidetargetvalue`, space-split: select values that show this node. */
   dropdownValues?: string[];
   /** `acs-checkboxshowhidetargetvalue`: `"true"` → visible when checked, `""` → visible when unchecked. */
   checkboxVisibleWhenChecked?: boolean;
@@ -949,28 +951,41 @@ function graniteData(node: DialogNode): Record<string, unknown> | undefined {
 }
 
 /**
- * ACS show/hide target detection: a node whose `granite:data` carries
- * `acs-dropdownshowhidetargetvalue` and/or `acs-checkboxshowhidetargetvalue`
- * is shown/hidden by a controller widget. Which controller is unknown here —
- * the linkage is the class token shared with the controller's selector, so
- * we record the raw attributes and match after the walk completes (targets
- * can precede their controller in dialog order).
+ * Show/hide target detection: a node whose `granite:data` carries a
+ * target-value attribute is shown/hidden by a controller widget. Two
+ * attribute vocabularies exist for the same mechanism:
+ *
+ *  - ACS Commons: `acs-dropdownshowhidetargetvalue` /
+ *    `acs-checkboxshowhidetargetvalue`.
+ *  - Core AEM (`cq-dialog-dropdown-showhide`): `showhidetargetvalue`
+ *    (dropdown only — the value(s) of the select that show this node).
+ *
+ * Which controller is unknown here — the linkage is the class token shared
+ * with the controller's selector, so we record the raw attributes and match
+ * after the walk completes (targets can precede their controller in dialog
+ * order).
  */
 function showHideTargetRecord(
   node: DialogNode,
 ): RawShowHideTarget | undefined {
   const data = graniteData(node);
   if (!data) return undefined;
-  const dropdownRaw = data["acs-dropdownshowhidetargetvalue"];
+  const acsDropdownRaw = data["acs-dropdownshowhidetargetvalue"];
+  const coreDropdownRaw = data["showhidetargetvalue"];
+  const dropdownRaw =
+    typeof acsDropdownRaw === "string"
+      ? acsDropdownRaw
+      : typeof coreDropdownRaw === "string"
+        ? coreDropdownRaw
+        : undefined;
   const checkboxRaw = data["acs-checkboxshowhidetargetvalue"];
-  const hasDropdown = typeof dropdownRaw === "string";
   const hasCheckbox = typeof checkboxRaw === "string";
-  if (!hasDropdown && !hasCheckbox) return undefined;
+  if (dropdownRaw === undefined && !hasCheckbox) return undefined;
   const classAttr = stringAttr(node["granite:class"]);
   const classTokens = classAttr ? classAttr.split(/\s+/).filter(Boolean) : [];
   if (classTokens.length === 0) return undefined;
   const record: RawShowHideTarget = { classTokens };
-  if (hasDropdown) {
+  if (dropdownRaw !== undefined) {
     // Multiple values are space-separated; an empty attribute means the
     // target shows when the select's value is the empty string.
     const values = dropdownRaw.split(/\s+/).filter(Boolean);
@@ -985,9 +1000,15 @@ function showHideTargetRecord(
 }
 
 /**
- * ACS show/hide controller detection: a select/radio/buttongroup or
- * checkbox/switch whose `granite:data` carries
- * `acs-cq-dialog-dropdown-checkbox-showhide-target` drives target visibility.
+ * Show/hide controller detection: a select/radio/buttongroup or
+ * checkbox/switch whose `granite:data` carries a target selector drives
+ * target visibility. Two attribute vocabularies exist:
+ *
+ *  - ACS Commons: `acs-cq-dialog-dropdown-checkbox-showhide-target`
+ *    (dropdown and checkbox controllers).
+ *  - Core AEM: `cq-dialog-dropdown-showhide-target` (the stock
+ *    `cq-dialog-dropdown-showhide` pattern — dropdown controllers only).
+ *
  * Only simple `.class` selectors are supported (the documented usage);
  * anything else is ignored and the targets stay unconditionally visible.
  */
@@ -997,7 +1018,9 @@ function showHideControllerMeta(
 ): ShowHideControllerMeta | undefined {
   const data = graniteData(node);
   if (!data) return undefined;
-  const selector = data["acs-cq-dialog-dropdown-checkbox-showhide-target"];
+  const selector =
+    data["acs-cq-dialog-dropdown-checkbox-showhide-target"] ??
+    data["cq-dialog-dropdown-showhide-target"];
   if (typeof selector !== "string") return undefined;
   const match = /^\.([A-Za-z0-9_-]+)$/.exec(selector.trim());
   if (!match) return undefined;

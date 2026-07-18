@@ -418,3 +418,138 @@ describe("emitSchemaFile: ACS show/hide", () => {
     );
   });
 });
+
+describe("mapDialog: core AEM cq-dialog-dropdown-showhide", () => {
+  /**
+   * Real-world shape from davids-bridal `hero-video-banner`: a `textType`
+   * select carrying `granite:class: cq-dialog-dropdown-showhide` +
+   * `cq-dialog-dropdown-showhide-target`, toggling two sibling containers
+   * marked with the selector's class and `showhidetargetvalue`.
+   */
+  function textTypeSelect(): Record<string, unknown> {
+    return {
+      name: "./textType",
+      fieldLabel: "Text type",
+      "sling:resourceType":
+        "granite/ui/components/coral/foundation/form/select",
+      "granite:class": "cq-dialog-dropdown-showhide",
+      items: {
+        image: { text: "Image", value: "type_image", selected: true },
+        text: { text: "Text", value: "type_text" },
+      },
+      "granite:data": {
+        "jcr:primaryType": "nt:unstructured",
+        "cq-dialog-dropdown-showhide-target": ".textType-showhide-target",
+      },
+    };
+  }
+
+  it("attaches dropdown conditions to fields inside core-pattern target containers", async () => {
+    const dialog = dialogWith({
+      textType: textTypeSelect(),
+      imageContainer: {
+        "granite:class": "textType-showhide-target",
+        "sling:resourceType":
+          "granite/ui/components/coral/foundation/container",
+        "granite:data": {
+          "jcr:primaryType": "nt:unstructured",
+          showhidetargetvalue: "type_image",
+        },
+        items: {
+          textImage: textfield("textImage"),
+        },
+      },
+      textContainer: {
+        "granite:class": "textType-showhide-target",
+        "sling:resourceType":
+          "granite/ui/components/coral/foundation/container",
+        "granite:data": {
+          "jcr:primaryType": "nt:unstructured",
+          showhidetargetvalue: "type_text",
+        },
+        items: {
+          textLine: textfield("textLine"),
+        },
+      },
+    });
+    const { fields } = await mapDialog(dialog, noFetch);
+
+    const textImage = fields.find((f) => f.name === "textImage")!;
+    assert.deepEqual(conditionsOf(textImage), [
+      {
+        controllerField: "textType",
+        kind: "dropdown",
+        values: ["type_image"],
+        controllerDefault: "type_image",
+      },
+    ]);
+    const textLine = fields.find((f) => f.name === "textLine")!;
+    assert.deepEqual(conditionsOf(textLine), [
+      {
+        controllerField: "textType",
+        kind: "dropdown",
+        values: ["type_text"],
+        controllerDefault: "type_image",
+      },
+    ]);
+    const textType = fields.find((f) => f.name === "textType")!;
+    assert.equal(textType.hiddenConditions, undefined);
+    for (const f of fields) {
+      assert.equal(f.showHideTargets, undefined);
+      assert.equal(f.showHideController, undefined);
+    }
+  });
+
+  it("emits hidden callbacks for the core pattern", async () => {
+    const dialog = dialogWith({
+      textType: textTypeSelect(),
+      textContainer: {
+        "granite:class": "textType-showhide-target",
+        "sling:resourceType":
+          "granite/ui/components/coral/foundation/container",
+        "granite:data": { showhidetargetvalue: "type_text" },
+        items: {
+          textLine: textfield("textLine"),
+        },
+      },
+    });
+    const { fields, groups } = await mapDialog(dialog, noFetch);
+    const src = await emitSchemaFile({
+      typeName: "heroVideoBanner",
+      sourcePath: "/apps/aem-integration/components/hero-video-banner",
+      fields,
+      groups,
+    });
+
+    // Default "type_image" is not in the visible set, so unset already
+    // lands on the hidden side — no `?? fallback` wrapping.
+    assert.match(src, /hidden: \({ parent }\) => parent\?\.textType !== "type_text"/);
+  });
+
+  it("core target on the widget itself (not a container) conditions just that field", async () => {
+    const dialog = dialogWith({
+      textType: textTypeSelect(),
+      caption: {
+        ...textfield("caption"),
+        "granite:class": "hide textType-showhide-target",
+        "granite:data": { showhidetargetvalue: "type_text" },
+      },
+      always: textfield("always"),
+    });
+    const { fields } = await mapDialog(dialog, noFetch);
+
+    const caption = fields.find((f) => f.name === "caption")!;
+    assert.deepEqual(conditionsOf(caption), [
+      {
+        controllerField: "textType",
+        kind: "dropdown",
+        values: ["type_text"],
+        controllerDefault: "type_image",
+      },
+    ]);
+    assert.deepEqual(
+      conditionsOf(fields.find((f) => f.name === "always")!),
+      [],
+    );
+  });
+});
