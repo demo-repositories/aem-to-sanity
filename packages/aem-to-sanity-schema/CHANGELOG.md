@@ -1,5 +1,26 @@
 # aem-to-sanity-schema
 
+## 1.3.0
+
+### Minor Changes
+
+- [#29](https://github.com/demo-repositories/aem-to-sanity/pull/29) [`59766b5`](https://github.com/demo-repositories/aem-to-sanity/commit/59766b52e3c2dc84dbc24f9ef40be9fc3aa3c0da) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Support ACS Commons [show/hide widgets](https://adobe-consulting-services.github.io/acs-aem-commons/features/ui-widgets/show-hide-widgets/index.html) — dialog fields toggled by a select or checkbox now emit as Sanity conditional fields:
+  - A select / radio group / button group or checkbox / switch whose `granite:data` carries `acs-cq-dialog-dropdown-checkbox-showhide-target` (a `.class` selector) is detected as a **controller**; any dialog node whose `granite:class` includes that class and whose `granite:data` names `acs-dropdownshowhidetargetvalue` (space-separated select values) or `acs-checkboxshowhidetargetvalue` (`"true"` → visible when checked, `""` → visible when unchecked) is a **target**.
+  - Every field mapped from or under a target emits `hidden: ({ parent }) => …` reading the controller off its sibling scope, so the Studio dialog folds the same way the AEM one did. Target containers (wells, tab items) condition all fields inside them; nested targets AND together; a target carrying both attributes combines dropdown + checkbox conditions.
+  - An unset controller counts as its AEM default — matching what an author sees opening a fresh AEM dialog: dropdown conditions fall back to the controller's default (`selected`) option, checkbox conditions to the widget's `checked` attribute (absent or Granite EL `${...}` defaults count as unchecked).
+  - Resolution is scoped per object: a controller and its targets must be siblings in the emitted Sanity object (same rule inside multifield rows, mirroring ACS's row-local semantics). Unmatched targets stay unconditionally visible.
+
+  Visibility is a Studio display concern only — authored values migrate and import regardless of whether their field is currently shown. Re-run `migrate:schema` to pick up the conditional callbacks (previously these fields were always visible).
+
+### Patch Changes
+
+- [#29](https://github.com/demo-repositories/aem-to-sanity/pull/29) [`3e9d897`](https://github.com/demo-repositories/aem-to-sanity/commit/3e9d8974cfa87b32f2bffda938a36a677f94d276) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Fix boolean `initialValue` emission: checkbox / switch defaults now come from the AEM `checked` attribute (the widget's actual default state) instead of `value` (the constant persisted when checked — `"true"` on virtually every widget). Previously nearly every generated boolean field carried `initialValue: true`, so documents created fresh in the Studio got toggles flipped on that AEM would have defaulted off. Literal `checked` values map directly (`true`/`"true"` → `true`, `false`/`"false"` → `false`); when `checked` is absent or a Granite EL expression (`${...}`, resolved server-side against design config and unresolvable offline), no `initialValue` is emitted — the Studio's unset boolean behaves as unchecked, matching AEM.
+
+  Migrated documents are unaffected (`initialValue` only applies at Studio document creation). Re-run `migrate:schema` to regenerate.
+
+- Updated dependencies []:
+  - aem-to-sanity-core@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes
