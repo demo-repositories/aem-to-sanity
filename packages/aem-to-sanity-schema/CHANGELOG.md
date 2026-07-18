@@ -1,5 +1,16 @@
 # aem-to-sanity-schema
 
+## 1.5.0
+
+### Minor Changes
+
+- [#37](https://github.com/demo-repositories/aem-to-sanity/pull/37) [`d23d24b`](https://github.com/demo-repositories/aem-to-sanity/commit/d23d24b1eb0f2479581786bc362c1f9bbc77b114) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Core AEM's stock `cq-dialog-dropdown-showhide` pattern now emits conditional Studio fields, same as the ACS Commons show/hide support: a select whose `granite:data` carries `cq-dialog-dropdown-showhide-target` (a `.class` selector) conditions every field under nodes marked with that class and `granite:data.showhidetargetvalue` — they emit `hidden: ({ parent }) => …` callbacks so the Studio dialog folds like the AEM one. Both vocabularies resolve through the same machinery (same scoping, default-value fallbacks, and AND-ing of nested targets). Re-run `pnpm migrate:schema` to pick it up; persisted content is unaffected.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - aem-to-sanity-core@1.5.0
+
 ## 1.4.0
 
 ### Minor Changes
