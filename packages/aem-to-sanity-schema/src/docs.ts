@@ -243,14 +243,19 @@ AEM dialogs use the Coral \`text\` widget for static author-facing copy — inli
 
 **Content** — nothing to migrate: no authored value ever exists for these fields, so the transform and import are unaffected.
 
-## ACS Commons show/hide widgets (conditional fields)
+## Show/hide widgets (conditional fields)
 
-[ACS AEM Commons show/hide](https://adobe-consulting-services.github.io/acs-aem-commons/features/ui-widgets/show-hide-widgets/index.html) lets a dialog select or checkbox toggle the visibility of other dialog fields via \`granite:data\` attributes. The migration maps the pattern onto Sanity's conditional \`hidden\` callback so the Studio dialog folds the same way the AEM dialog did.
+Two dialog show/hide idioms — [ACS AEM Commons show/hide](https://adobe-consulting-services.github.io/acs-aem-commons/features/ui-widgets/show-hide-widgets/index.html) and core AEM's stock \`cq-dialog-dropdown-showhide\` — let a dialog select or checkbox toggle the visibility of other dialog fields via \`granite:data\` attributes. Both use the same mechanism (a \`.class\` selector on the controller, the class + a target value on each toggled node) with different attribute names, and both map onto Sanity's conditional \`hidden\` callback so the Studio dialog folds the same way the AEM dialog did.
 
-**Detection** — a widget whose \`granite:data\` carries \`acs-cq-dialog-dropdown-checkbox-showhide-target\` (a \`.class\` selector) is a **controller**; selects / radio groups / button groups drive dropdown conditions, checkboxes / switches drive checkbox conditions. Any node whose \`granite:class\` contains that class is a **target**; its \`granite:data\` names the values that make it visible:
+**Detection** — a widget whose \`granite:data\` carries a target selector (a \`.class\` selector) is a **controller**:
 
-- \`acs-dropdownshowhidetargetvalue\` — one or more select values, space-separated.
-- \`acs-checkboxshowhidetargetvalue\` — \`"true"\` → visible when checked, \`""\` → visible when unchecked.
+- \`acs-cq-dialog-dropdown-checkbox-showhide-target\` (ACS) — selects / radio groups / button groups drive dropdown conditions, checkboxes / switches drive checkbox conditions.
+- \`cq-dialog-dropdown-showhide-target\` (core AEM) — the stock dropdown pattern; the controller select also carries \`granite:class: cq-dialog-dropdown-showhide\`.
+
+Any node whose \`granite:class\` contains the selector's class is a **target**; its \`granite:data\` names the values that make it visible:
+
+- \`acs-dropdownshowhidetargetvalue\` (ACS) or \`showhidetargetvalue\` (core AEM) — one or more select values, space-separated.
+- \`acs-checkboxshowhidetargetvalue\` (ACS) — \`"true"\` → visible when checked, \`""\` → visible when unchecked.
 
 Targets may be individual widgets or whole containers (wells, tab items) — every field mapped underneath a target container inherits its condition, and nested targets AND together (e.g. uxp promocard's split-mode warning is visible only when \`cardStyle == "flood"\` **and** \`isSplit\` is checked).
 
