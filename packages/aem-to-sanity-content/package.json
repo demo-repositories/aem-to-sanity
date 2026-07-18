@@ -1,6 +1,6 @@
 {
   "name": "aem-to-sanity-content",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Three flat scripts to migrate AEM content (.infinity.json) into Sanity: extract → transform → import.",
   "license": "MIT",
   "type": "module",
