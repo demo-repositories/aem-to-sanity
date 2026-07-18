@@ -47,3 +47,6 @@ export type {
   DialogResolution,
   ResolveDialogOptions,
 } from "./dialog-resolution.ts";
+export { mergeDialogs } from "./dialog-merge.ts";
+export type { MergeDialogsOptions } from "./dialog-merge.ts";
+export { memoizeFetcher } from "./fetcher-memo.ts";

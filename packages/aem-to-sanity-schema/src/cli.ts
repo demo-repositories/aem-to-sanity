@@ -12,6 +12,7 @@ import {
   loadContainerConfig,
   loadPageComponentConfig,
   logStartupBanner,
+  memoizeFetcher,
   resolveConfig,
   startTimer,
   type DialogNode,
@@ -168,18 +169,23 @@ async function main(): Promise<void> {
     `Migrating ${filtered.length} component(s) from ${config.baseUrl} [env=${config.env}, auth=${config.auth.kind}]`,
   );
 
-  const fetcher = (jcrPath: string): Promise<DialogNode> =>
-    fetchInfinityJson(applyFixturesFromEnv({ config, logger }), jcrPath, (raw) => {
-      const parsed = DialogNodeSchema.safeParse(raw);
-      if (!parsed.success) {
-        throw new Error(
-          parsed.error.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; "),
-        );
-      }
-      return parsed.data;
-    });
+  // Memoized per run: supertype-chain merging revisits shared ancestors
+  // (every proxy component walks the same /libs/core/wcm/... paths), so
+  // successes and 404s are fetched once. Transient failures are retried.
+  const fetcher = memoizeFetcher(
+    (jcrPath: string): Promise<DialogNode> =>
+      fetchInfinityJson(applyFixturesFromEnv({ config, logger }), jcrPath, (raw) => {
+        const parsed = DialogNodeSchema.safeParse(raw);
+        if (!parsed.success) {
+          throw new Error(
+            parsed.error.issues
+              .map((i) => `${i.path.join(".")}: ${i.message}`)
+              .join("; "),
+          );
+        }
+        return parsed.data;
+      }),
+  );
 
   const { report, reportFile, missingPageComponentPaths } = await migrateSchemas({
     componentPaths: filtered,

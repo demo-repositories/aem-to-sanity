@@ -96,7 +96,7 @@ aem-migration/
 ├── tenants/
 │   ├── template/                 committed template — copy to start a new migration
 │   └── <your-tenant>/            operator working copy (gitignored): env, path lists, pnpm scripts, output/
-├── docs/
+├── docs/                  # operator guides + docs/prd/ (design records for larger features)
 └── turbo.json / pnpm-workspace.yaml / tsconfig.base.json
 ```
 

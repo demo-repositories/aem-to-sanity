@@ -26,12 +26,20 @@ export type Outcome =
       unmapped: UnmappedField[];
       renamed: RenamedField[];
       /**
-       * Set when the dialog was resolved via the `sling:resourceSuperType`
-       * chain rather than the component's own `cq:dialog`. First entry is
-       * the original `path` above; last is where the dialog was actually
-       * found. Omitted (or single-entry) for direct dialog hits.
+       * Set when the dialog involved the `sling:resourceSuperType` chain
+       * rather than only the component's own `cq:dialog`. First entry is
+       * the original `path` above; the walk continues past the nearest
+       * dialog, so the chain covers every ancestor visited. Omitted for
+       * direct dialog hits with no supertype.
        */
       supertypeChain?: string[];
+      /**
+       * Chain entries that actually supplied a dialog (most-derived first).
+       * More than one entry means the emitted schema came from a Sling
+       * Resource Merger-style merge of those dialogs. Set alongside
+       * `supertypeChain`.
+       */
+      contributingPaths?: string[];
     }
   | {
       status: "failure";

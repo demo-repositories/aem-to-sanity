@@ -705,10 +705,20 @@ async function buildField(
         stringAttr(node.fieldLabel) ??
         multifieldInnerFieldJcrTitle(node) ??
         stringAttr(node["jcr:title"]);
+      const itemFields = await extractMultifieldItems(node, ctx);
+      if (itemFields.length === 0) {
+        // Multifield whose inner field yields no mappable children — e.g.
+        // core accordion's `expandedItems`, a hidden input written by a
+        // dialog edit hook. Non-composite multifields persist a multi-value
+        // scalar property in JCR, so `array of string` matches the authored
+        // shape; an empty object array would be invalid Sanity schema
+        // ("Object should have at least one field").
+        return { ...common, type: "array-of-string" };
+      }
       return {
         ...common,
         type: "array-of-object",
-        itemFields: await extractMultifieldItems(node, ctx),
+        itemFields,
         ...(itemTitle ? { itemTitle } : {}),
       };
     }

@@ -65,9 +65,17 @@ export async function auditUnmappedTypes(
     for (const componentPath of comps) {
       let dialog: DialogNode;
       try {
-        // Use the same supertype-aware resolution the main migrator uses, so
-        // proxy components don't silently miss audit examples.
-        const resolution = await resolveDialogViaSuperType(componentPath, dialogFetcher);
+        // Use the same supertype-aware (merging) resolution the main
+        // migrator uses, so proxy components don't silently miss audit
+        // examples — including examples inherited from ancestor dialogs.
+        const resolution = await resolveDialogViaSuperType(
+          componentPath,
+          dialogFetcher,
+          {
+            onWarning: (message) =>
+              logger?.debug(`audit: ${componentPath}: ${message}`),
+          },
+        );
         dialog = resolution.dialog;
       } catch (err) {
         logger?.debug(

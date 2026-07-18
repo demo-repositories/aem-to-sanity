@@ -1,0 +1,6 @@
+---
+"aem-to-sanity-core": minor
+"aem-to-sanity-schema": minor
+---
+
+Dialog resolution now merges the **full** `sling:resourceSuperType` chain with Sling Resource Merger semantics instead of stopping at the first `cq:dialog` found. Tabs and fields defined only in an ancestor's dialog (e.g. Core Components' Properties tab under a `title` proxy whose own dialog just adds Display/Styles) previously vanished from the generated Sanity schemas; they now migrate intact. Child dialogs win property collisions, same-named nodes merge recursively, inherited children keep the ancestor's order with child-only nodes appended, and `sling:orderBefore` / `sling:hideProperties` / `sling:hideChildren` / `sling:hideResource` are honored then stripped. Components with an embedded `cq:dialog` AND a supertype now merge too. A broken ancestor past the first dialog degrades to a logged warning instead of failing the component. `migration-report.json` gains `contributingPaths` (which chain entries supplied a dialog) alongside `supertypeChain`, which now records the full walk. Dialog fetches are memoized per run, so shared `/libs` ancestors are fetched once. Re-run `pnpm migrate:schema` to pick up inherited fields.

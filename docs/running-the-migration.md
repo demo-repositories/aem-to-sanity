@@ -439,33 +439,36 @@ Example: `/apps/aem-integration/components/image` → `aemImage.ts` on disk, `ae
 
 The Studio-side `sanitizeSchemaTypes` still exists and runs the same rename as a defense-in-depth pass for hand-authored schemas, but for the emitter path it's a no-op.
 
-### Dialog inheritance via `sling:resourceSuperType`
+### Dialog inheritance via `sling:resourceSuperType` (Sling Resource Merger)
 
-`migrate:schema` resolves each component's Granite UI dialog using the same chain-walking AEM does at request time:
+`migrate:schema` resolves each component's Granite UI dialog the same way AEM does at request time through `/mnt/override`: it walks the **entire** `sling:resourceSuperType` chain, collects every `cq:dialog` found along it (including the component's own), and **merges** them — the more-derived dialog overlaying its ancestors':
 
-1. Try the component's own `cq:dialog` (either embedded in the component node or fetched at `{componentPath}/_cq_dialog.infinity.json`).
-2. On 404, read `sling:resourceSuperType` off the component itself. Absent → the component is genuinely dialogless and `migrate:schema` records a `failure` for it.
+1. At every hop, try the component's `cq:dialog` (embedded in the component node or fetched at `{componentPath}/_cq_dialog.infinity.json`). A hit is collected; a 404 just means "no dialog at this level".
+2. Read `sling:resourceSuperType` off the component. Absent → the chain ends: merge what was collected, or record a `failure` when nothing was (genuinely dialogless component).
 3. Resolve the supertype:
    - **Absolute** (`/apps/...`, `/libs/...`) — used as-is.
    - **Relative** (`<namespace>/components/...`) — AEM's lookup order is `/apps/<rt>` first (project + AMS overrides take precedence), `/libs/<rt>` second (Adobe defaults).
-4. Recurse with the resolved path. A 10-hop cap and per-component cycle guard prevent runaway walks.
+4. Recurse with the resolved path. A 10-hop cap and per-component cycle guard prevent runaway walks. A failure **after** the first dialog was found (broken ancestor, cycle, hop cap) degrades to a logged warning and merges what was collected — a broken ancestor costs the inherited fields, not the component.
 
-Why this matters in practice: **proxy components are the norm in AEMaaCS.** A site at `/apps/<site>/components/proxy/content/pageinfo` typically has no `cq:dialog` of its own — it extends a versioned base under `/apps/<site>/components/content/pageinfo/v1/pageinfo` (or, for Adobe-shipped components, something under `/libs`). Without chain resolution, those proxies fail with a 404 and the operator has to hand-list the supertype path in `aem-component-paths` — losing the proxy's identity in the process. With chain resolution, you list the proxy and the migrator finds the inherited dialog automatically.
+Merge semantics follow the [Sling Resource Merger](https://experienceleague.adobe.com/en/docs/experience-manager-cloud-service/content/implementing/developing/full-stack/sling-resource-merger): child wins property collisions, same-named nodes merge recursively, inherited children keep the ancestor's order with child-only nodes appended, and `sling:orderBefore` / `sling:hideProperties` / `sling:hideChildren` / `sling:hideResource` are honored (then stripped from the merged output).
 
-The resolved chain is recorded in `migration-report.json` under each successful component's `supertypeChain` field (omitted for direct hits). Operators auditing emitted schemas can see exactly which ancestor supplied the dialog fields. Each run also logs an `info` line per inherited dialog:
+Why this matters in practice: **proxy components are the norm in AEMaaCS.** A site at `/apps/<site>/components/proxy/content/pageinfo` typically has no `cq:dialog` of its own — it extends a versioned base under `/apps/<site>/components/content/pageinfo/v1/pageinfo` (or, for Adobe-shipped components, something under `/libs`). And the versioned base's dialog often only declares its **additions** — e.g. `title/v1/title` adds Display and Styles tabs on top of the Properties tab inherited from `/libs/core/wcm/components/title/v3/title`. First-hit-wins resolution would silently drop the Properties tab; the merging walk emits all of them, exactly as AEM's dialog renders.
+
+The full walk is recorded in `migration-report.json` under each successful component's `supertypeChain` field (the chain continues past the nearest dialog, covering every ancestor visited; omitted for direct hits with no supertype). `contributingPaths` lists which chain entries actually supplied a dialog — more than one means the emitted schema came from a merge. Each run also logs an `info` line per inherited dialog:
 
 ```
-[info] /apps/uxp/components/proxy/content/pageinfo: dialog inherited via supertype — chain /apps/uxp/components/proxy/content/pageinfo → /apps/uxp/components/content/pageinfo/v1/pageinfo
+[info] /apps/uxp/components/proxy/content/title: dialog inherited via supertype — chain /apps/uxp/components/proxy/content/title → /apps/uxp/components/content/title/v1/title → /libs/core/wcm/components/title/v3/title (merged 2 dialogs: /apps/uxp/components/content/title/v1/title + /libs/core/wcm/components/title/v3/title)
 ```
 
-Important: **the registry key remains the original proxy path's resource type**, not the supertype's. Authored content has `sling:resourceType: uxp/components/proxy/content/pageinfo`, so that's what the registry needs as a lookup key. Two proxy components sharing one supertype produce two distinct Sanity types with identical field sets — they render identically in the Studio but each has its own `_type` so ingestion stays unambiguous.
+Important: **the registry key remains the original proxy path's resource type**, not the supertype's. Authored content has `sling:resourceType: uxp/components/proxy/content/pageinfo`, so that's what the registry needs as a lookup key. Two proxy components sharing one supertype produce two distinct Sanity types with identical field sets — they render identically in the Studio but each has its own `_type` so ingestion stays unambiguous. The dialog snapshot saved under `output/cache/aem/apps/...` holds the **merged** dialog.
 
 You can verify a single component's dialog resolution before kicking off a full schema run with `scripts/aem-probe.ts`:
 
 ```bash
 cd tenants/<your-tenant>
 pnpm exec tsx ../../scripts/aem-probe.ts /apps/<site>/components/proxy/foo
-# → Prints the supertype chain + the dialog's top-level form fields.
+# → Prints the supertype chain, which chain entries supplied a dialog
+#   ("merged dialogs from: …"), and the merged dialog's top-level form fields.
 ```
 
 The probe uses the same `resolveDialogViaSuperType` helper from `aem-to-sanity-core` that the migrator does, so the probe's output is exactly what the schema run will see.

@@ -45,6 +45,7 @@ import {
   fetchInfinityJson,
   logStartupBanner,
   resolveConfig,
+  memoizeFetcher,
   resolveDialogViaSuperType,
   type DialogNode,
 } from "aem-to-sanity-core";
@@ -197,15 +198,18 @@ async function probeDialogWithChain(
   );
 
   // Adapter from the probe's transport (raw fetchInfinityJson) to the
-  // (path) => Promise<DialogNode> shape the resolver expects.
-  const fetcher = (jcrPath: string): Promise<DialogNode> =>
-    fetchInfinityJson({ config, logger }, jcrPath) as Promise<DialogNode>;
+  // (path) => Promise<DialogNode> shape the resolver expects. Memoized so
+  // the chain walk doesn't re-fetch shared ancestors.
+  const fetcher = memoizeFetcher(
+    (jcrPath: string): Promise<DialogNode> =>
+      fetchInfinityJson({ config, logger }, jcrPath) as Promise<DialogNode>,
+  );
 
   try {
-    const { dialog, resolvedPath, chain } = await resolveDialogViaSuperType(
-      componentPath,
-      fetcher,
-    );
+    const { dialog, resolvedPath, chain, contributingPaths, warnings } =
+      await resolveDialogViaSuperType(componentPath, fetcher, {
+        onWarning: (message) => console.error(`  ⚠ ${message}`),
+      });
     const elapsedMs = Date.now() - opts.start;
     const serialized = JSON.stringify(dialog, null, 2);
     console.error(`✓ Dialog resolved in ${elapsedMs}ms — ${formatBytes(serialized.length)}`);
@@ -216,12 +220,20 @@ async function probeDialogWithChain(
         `  (this is how AEM's runtime resolves dialogs — the schema migrator does the same.)`,
       );
     }
+    if (contributingPaths.length > 1) {
+      console.error(`  merged dialogs from: ${contributingPaths.join(" + ")}`);
+    }
+    if (warnings.length > 0) {
+      console.error(`  warnings:          ${warnings.length} (walk degraded — see above)`);
+    }
     summarizeDialog(dialog as Record<string, unknown>);
     if (opts.save) {
       const outFile = resolveSavePath(`${resolvedPath}/_cq_dialog`, opts.saveTarget);
       mkdirSync(dirname(outFile), { recursive: true });
       writeFileSync(outFile, serialized + "\n", "utf8");
-      console.error(`  saved →            ${outFile}`);
+      const mergedNote =
+        contributingPaths.length > 1 ? " (merged dialog)" : "";
+      console.error(`  saved →            ${outFile}${mergedNote}`);
     }
   } catch (err) {
     const elapsedMs = Date.now() - opts.start;

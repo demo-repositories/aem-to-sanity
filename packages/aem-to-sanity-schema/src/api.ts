@@ -456,11 +456,12 @@ async function processOne(
 
   let dialog: DialogNode;
   let schemaTitle: string | undefined;
-  // Populated when the dialog came from a `sling:resourceSuperType` ancestor
-  // rather than the component's own `cq:dialog`. Reported so operators can
-  // see inheritance in the schema report (and so audit reasons like "field
-  // came from supertype X" remain inspectable later).
+  // Populated when the dialog involved a `sling:resourceSuperType` ancestor
+  // rather than only the component's own `cq:dialog`. Reported so operators
+  // can see inheritance in the schema report (and so audit reasons like
+  // "field came from supertype X" remain inspectable later).
   let supertypeChain: string[] | undefined;
+  let contributingPaths: string[] | undefined;
   try {
     const componentNode = await fetcher(componentPath);
     const rawTitle = componentNode["jcr:title"];
@@ -468,20 +469,38 @@ async function processOne(
       schemaTitle = rawTitle.trim();
     }
     const embeddedDialog = embeddedCqDialog(componentNode);
-    if (embeddedDialog) {
+    const superType = componentNode["sling:resourceSuperType"];
+    if (embeddedDialog && typeof superType !== "string") {
+      // Complete dialog, nothing to inherit — zero extra fetches.
       dialog = embeddedDialog;
     } else {
-      // Try direct, then walk `sling:resourceSuperType` across /apps + /libs.
-      // Mirrors AEM's runtime dialog-resolution so proxy components
-      // (`/apps/<site>/components/foo` extending Adobe Core or a versioned
-      // base) migrate without operators having to flatten the inheritance
-      // by hand.
-      const resolution = await resolveDialogViaSuperType(componentPath, fetcher);
+      // Walk the full `sling:resourceSuperType` chain across /apps + /libs
+      // and merge every dialog found (Sling Resource Merger semantics).
+      // Mirrors AEM's runtime dialog-resolution through /mnt/override, so
+      // proxy components (`/apps/<site>/components/foo` extending Adobe Core
+      // or a versioned base) migrate with their inherited tabs intact —
+      // including when the component has its own dialog that only declares
+      // additions on top of an ancestor's.
+      const resolution = await resolveDialogViaSuperType(componentPath, fetcher, {
+        seed: embeddedDialog
+          ? {
+              dialog: embeddedDialog,
+              superType: typeof superType === "string" ? superType : null,
+            }
+          : undefined,
+        onWarning: (message) =>
+          deps.logger?.warn(`${componentPath}: ${message}`),
+      });
       dialog = resolution.dialog;
       if (resolution.chain.length > 1) {
         supertypeChain = resolution.chain;
+        contributingPaths = resolution.contributingPaths;
+        const mergedNote =
+          resolution.contributingPaths.length > 1
+            ? ` (merged ${resolution.contributingPaths.length} dialogs: ${resolution.contributingPaths.join(" + ")})`
+            : "";
         deps.logger?.info(
-          `${componentPath}: dialog inherited via supertype — chain ${resolution.chain.join(" → ")}`,
+          `${componentPath}: dialog inherited via supertype — chain ${resolution.chain.join(" → ")}${mergedNote}`,
         );
       }
     }
@@ -717,6 +736,7 @@ async function processOne(
     unmapped: mapped.unmapped,
     renamed: mapped.renamed,
     supertypeChain,
+    contributingPaths,
   });
   return { authFailure: false, success: true };
 }

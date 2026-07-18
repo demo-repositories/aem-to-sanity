@@ -36,19 +36,25 @@ const SAMPLE_DIALOG: DialogNode = {
 };
 
 describe("resolveDialogViaSuperType", () => {
-  it("returns directly when the component owns a cq:dialog", async () => {
+  it("returns directly when the component owns a cq:dialog and has no supertype", async () => {
     const fetcher = buildFetcher({
       "/apps/site/components/promo/_cq_dialog": SAMPLE_DIALOG,
+      // The walk always checks for a supertype now (dialogs merge along the
+      // chain), so the component node itself is read once.
+      "/apps/site/components/promo": { "jcr:title": "Promo" },
     });
     const out = await resolveDialogViaSuperType(
       "/apps/site/components/promo",
       fetcher,
     );
+    // Single-source chain → identity merge, same reference.
     expect(out.dialog).toBe(SAMPLE_DIALOG);
     expect(out.resolvedPath).toBe("/apps/site/components/promo");
     expect(out.chain).toEqual(["/apps/site/components/promo"]);
-    // No supertype lookup needed → only one call.
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(out.contributingPaths).toEqual(["/apps/site/components/promo"]);
+    expect(out.warnings).toEqual([]);
+    // Dialog + supertype lookup → two calls.
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("follows sling:resourceSuperType via /apps when component is dialogless", async () => {
@@ -206,5 +212,239 @@ describe("resolveDialogViaSuperType", () => {
     await expect(
       resolveDialogViaSuperType("/apps/site/components/x", fetcher),
     ).rejects.toThrow(/Authentication failed/);
+  });
+
+  // ── Sling Resource Merger semantics along the chain ────────────────────
+
+  it("merges dialogs along the whole chain (t-mobile title regression)", async () => {
+    // Mirrors the real uxp title component: proxy (no dialog) → uxp v1
+    // (Display/Styles tabs, tabStyle carries sling:orderBefore) → /libs core
+    // v3 (Properties tab that first-hit-wins resolution used to drop).
+    const v1Dialog: DialogNode = {
+      "jcr:title": "Title",
+      content: {
+        items: {
+          tabs: {
+            items: {
+              display: { "jcr:title": "Display", items: {} },
+              tabStyle: {
+                "jcr:title": "Styles",
+                "sling:orderBefore": "cq:include",
+                items: {},
+              },
+              "cq:include": { path: "/mnt/overlay/..." },
+            },
+          },
+        },
+      },
+    };
+    const coreDialog: DialogNode = {
+      "jcr:title": "Title",
+      helpPath: "core-help",
+      content: {
+        items: {
+          tabs: {
+            items: {
+              properties: {
+                "jcr:title": "Properties",
+                items: { title: { name: "./jcr:title" } },
+              },
+              styletab: { "jcr:title": "Styles (core)" },
+            },
+          },
+        },
+      },
+    };
+    const fetcher = buildFetcher({
+      "/apps/uxp/components/proxy/content/title/_cq_dialog": undefined,
+      "/apps/uxp/components/proxy/content/title": {
+        "sling:resourceSuperType": "uxp/components/content/title/v1/title",
+      },
+      "/apps/uxp/components/content/title/v1/title": {
+        "sling:resourceSuperType": "core/wcm/components/title/v3/title",
+      },
+      "/apps/uxp/components/content/title/v1/title/_cq_dialog": v1Dialog,
+      "/apps/core/wcm/components/title/v3/title": undefined,
+      "/libs/core/wcm/components/title/v3/title": {
+        "sling:resourceType": "cq:Component",
+      },
+      "/libs/core/wcm/components/title/v3/title/_cq_dialog": coreDialog,
+    });
+    const out = await resolveDialogViaSuperType(
+      "/apps/uxp/components/proxy/content/title",
+      fetcher,
+    );
+
+    expect(out.resolvedPath).toBe("/apps/uxp/components/content/title/v1/title");
+    expect(out.chain).toEqual([
+      "/apps/uxp/components/proxy/content/title",
+      "/apps/uxp/components/content/title/v1/title",
+      "/libs/core/wcm/components/title/v3/title",
+    ]);
+    expect(out.contributingPaths).toEqual([
+      "/apps/uxp/components/content/title/v1/title",
+      "/libs/core/wcm/components/title/v3/title",
+    ]);
+    expect(out.warnings).toEqual([]);
+
+    const merged = out.dialog as Record<string, any>;
+    // Inherited-first tab order, child-only tabs appended, orderBefore
+    // honored (tabStyle already precedes cq:include here — asserting the
+    // exact order pins the whole contract).
+    expect(Object.keys(merged.content.items.tabs.items)).toEqual([
+      "properties",
+      "styletab",
+      "display",
+      "tabStyle",
+      "cq:include",
+    ]);
+    // The ancestor-only Properties tab (the original bug) survives intact.
+    expect(merged.content.items.tabs.items.properties.items.title.name).toBe(
+      "./jcr:title",
+    );
+    // Base-only root property inherited.
+    expect(merged.helpPath).toBe("core-help");
+    // Merge-control bookkeeping never reaches the mapper.
+    expect(
+      merged.content.items.tabs.items.tabStyle["sling:orderBefore"],
+    ).toBeUndefined();
+  });
+
+  it("merges same-named tabs recursively — child wins, base-only fields survive", async () => {
+    const fetcher = buildFetcher({
+      "/apps/site/components/hero/_cq_dialog": {
+        content: {
+          items: {
+            tabA: { "jcr:title": "Child A", items: { childField: { name: "./c" } } },
+          },
+        },
+      },
+      "/apps/site/components/hero": {
+        "sling:resourceSuperType": "site/components/base/hero",
+      },
+      "/apps/site/components/base/hero": { "sling:resourceType": "cq:Component" },
+      "/apps/site/components/base/hero/_cq_dialog": {
+        content: {
+          items: {
+            tabA: { "jcr:title": "Base A", items: { baseField: { name: "./b" } } },
+          },
+        },
+      },
+    });
+    const out = await resolveDialogViaSuperType("/apps/site/components/hero", fetcher);
+    const tabA = (out.dialog as Record<string, any>).content.items.tabA;
+    expect(tabA["jcr:title"]).toBe("Child A");
+    expect(Object.keys(tabA.items)).toEqual(["baseField", "childField"]);
+  });
+
+  it("degrades with a warning when a supertype is unresolvable after a dialog was found", async () => {
+    const onWarning = vi.fn();
+    const fetcher = buildFetcher({
+      "/apps/site/components/promo/_cq_dialog": SAMPLE_DIALOG,
+      "/apps/site/components/promo": {
+        "sling:resourceSuperType": "does/not/exist",
+      },
+      "/apps/does/not/exist": undefined,
+      "/libs/does/not/exist": undefined,
+    });
+    const out = await resolveDialogViaSuperType(
+      "/apps/site/components/promo",
+      fetcher,
+      { onWarning },
+    );
+    expect(out.dialog).toBe(SAMPLE_DIALOG);
+    expect(out.warnings).toHaveLength(1);
+    expect(out.warnings[0]).toMatch(/couldn't resolve it under \/apps\/ or \/libs\//);
+    expect(onWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it("degrades with a warning on a cycle after a dialog was found", async () => {
+    const fetcher = buildFetcher({
+      "/apps/a/_cq_dialog": undefined,
+      "/apps/a": { "sling:resourceSuperType": "b" },
+      "/apps/b/_cq_dialog": SAMPLE_DIALOG,
+      "/apps/b": { "sling:resourceSuperType": "a" },
+    });
+    const out = await resolveDialogViaSuperType("/apps/a", fetcher);
+    expect(out.dialog).toBe(SAMPLE_DIALOG);
+    expect(out.warnings[0]).toMatch(/Cycle in sling:resourceSuperType chain/);
+  });
+
+  it("degrades with a warning when the hop budget runs out after a dialog was found", async () => {
+    const table: Record<string, DialogNode | undefined> = {
+      "/apps/c0/_cq_dialog": SAMPLE_DIALOG,
+    };
+    for (let i = 0; i < 15; i++) {
+      if (i > 0) table[`/apps/c${i}/_cq_dialog`] = undefined;
+      table[`/apps/c${i}`] = { "sling:resourceSuperType": `c${i + 1}` };
+    }
+    const fetcher = buildFetcher(table);
+    const out = await resolveDialogViaSuperType("/apps/c0", fetcher, {
+      maxHops: 3,
+    });
+    expect(out.dialog).toBe(SAMPLE_DIALOG);
+    expect(out.warnings[0]).toMatch(/Aborting after 3 supertype hops/);
+  });
+
+  it("degrades with a warning on an auth error deeper in the chain", async () => {
+    // Contrast with the propagation test above: here the 401 arrives AFTER
+    // a dialog was already collected, so the walk keeps what it has.
+    const fetcher = vi.fn(async (jcrPath: string): Promise<DialogNode> => {
+      if (jcrPath === "/apps/site/components/promo/_cq_dialog") {
+        return SAMPLE_DIALOG;
+      }
+      throw new AemFetchError("auth", `Authentication failed (401) for ${jcrPath}`, {
+        status: 401,
+      });
+    });
+    const out = await resolveDialogViaSuperType(
+      "/apps/site/components/promo",
+      fetcher,
+    );
+    expect(out.dialog).toBe(SAMPLE_DIALOG);
+    expect(out.warnings[0]).toMatch(/Authentication failed/);
+  });
+
+  it("seeds the walk with an embedded leaf dialog without re-fetching it", async () => {
+    const leafDialog: DialogNode = {
+      content: { items: { childTab: { "jcr:title": "Child" } } },
+    };
+    const baseDialog: DialogNode = {
+      content: { items: { baseTab: { "jcr:title": "Base" } } },
+    };
+    const fetcher = buildFetcher({
+      "/apps/site/components/base/x": { "sling:resourceType": "cq:Component" },
+      "/apps/site/components/base/x/_cq_dialog": baseDialog,
+    });
+    const out = await resolveDialogViaSuperType(
+      "/apps/site/components/x",
+      fetcher,
+      { seed: { dialog: leafDialog, superType: "site/components/base/x" } },
+    );
+    // Neither the leaf's _cq_dialog nor the leaf component node is fetched.
+    const fetchedPaths = fetcher.mock.calls.map((c) => c[0]);
+    expect(fetchedPaths).not.toContain("/apps/site/components/x/_cq_dialog");
+    expect(fetchedPaths).not.toContain("/apps/site/components/x");
+    expect(out.contributingPaths).toEqual([
+      "/apps/site/components/x",
+      "/apps/site/components/base/x",
+    ]);
+    expect(out.resolvedPath).toBe("/apps/site/components/x");
+    expect(
+      Object.keys((out.dialog as Record<string, any>).content.items),
+    ).toEqual(["baseTab", "childTab"]);
+  });
+
+  it("seed with superType: null resolves immediately with the leaf dialog alone", async () => {
+    const leafDialog: DialogNode = { "jcr:title": "Standalone" };
+    const fetcher = buildFetcher({});
+    const out = await resolveDialogViaSuperType(
+      "/apps/site/components/solo",
+      fetcher,
+      { seed: { dialog: leafDialog, superType: null } },
+    );
+    expect(out.dialog).toBe(leafDialog);
+    expect(out.chain).toEqual(["/apps/site/components/solo"]);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

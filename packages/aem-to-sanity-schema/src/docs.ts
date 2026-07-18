@@ -25,22 +25,32 @@ ${rows}
 - **Missing \`name\`** → field is skipped and recorded.
 - **Hidden field** → skipped (not emitted, not a failure).
 
-## Dialog inheritance via \`sling:resourceSuperType\`
+## Dialog inheritance via \`sling:resourceSuperType\` (Sling Resource Merger)
 
-\`migrate:schema\` resolves each component's dialog the same way AEM does at request time — by walking the \`sling:resourceSuperType\` chain when the component itself has no \`cq:dialog\`. This makes proxy components (the AEMaaCS norm where \`/apps/<site>/components/proxy/foo\` extends \`<site>/components/foo/v1/foo\` or a \`/libs\` ancestor) migrate without operators having to hand-flatten the inheritance.
+\`migrate:schema\` resolves each component's dialog the same way AEM does at request time through \`/mnt/override\`: it walks the **entire** \`sling:resourceSuperType\` chain, collects every \`cq:dialog\` found along it, and **merges** them with Sling Resource Merger semantics — the more-derived dialog overlaying its ancestors'. A component whose own dialog only declares its additions (e.g. a \`title\` that adds Display/Styles tabs on top of Core Components' Properties tab) migrates with the inherited tabs intact instead of silently dropping them.
 
 Resolution rules:
 
-1. Try the component's own \`cq:dialog\` (either embedded in the component node or at \`{path}/_cq_dialog.infinity.json\`).
-2. On 404, read \`sling:resourceSuperType\` off the component. Absent → record a \`failure\` for the component (genuinely dialogless).
+1. At every hop, try the component's \`cq:dialog\` (embedded in the component node or at \`{path}/_cq_dialog.infinity.json\`). A hit is collected; a 404 just means "no dialog at this level".
+2. Read \`sling:resourceSuperType\` off the component. Absent → chain ends: merge what was collected, or record a \`failure\` when nothing was (genuinely dialogless component).
 3. Resolve the supertype:
    - **Absolute** (\`/apps/...\`, \`/libs/...\`) — used as-is.
    - **Relative** (\`<namespace>/components/...\`) — AEM's lookup order is \`/apps/<rt>\` first, then \`/libs/<rt>\`.
-4. Recurse with the resolved path. Cycle guard + 10-hop cap prevent runaway walks.
+4. Recurse with the resolved path. Cycle guard + 10-hop cap prevent runaway walks. A failure **after** the first dialog was found (broken ancestor, cycle, hop cap) degrades gracefully: the walk stops with a logged warning and merges what it has — a broken ancestor costs the inherited fields, not the component.
 
-The resolved chain is recorded on each successful component's \`supertypeChain\` in \`output/cache/migration-report.json\` (omitted for direct hits). The registry key (the AEM resource type used at content-ingest time) remains the **original proxy path's resource type** — authored content with \`sling:resourceType: <proxy>\` keeps matching its emitted Sanity type even though the dialog fields came from an ancestor. Two proxies sharing one supertype produce two distinct Sanity types with identical fields.
+Merge semantics (child = more derived):
 
-A standalone probe (\`scripts/aem-probe.ts\`) uses the same resolver, useful for inspecting a single component's resolution before kicking off a full schema run.
+- Property collisions → child value wins (arrays replaced wholesale, never element-merged).
+- Same-named child nodes → merged recursively.
+- Ordering: the ancestor's declared child order first, child-only nodes appended in the child's declared order.
+- \`sling:orderBefore\` — repositions a node before the named sibling (unknown targets are ignored, as in Sling).
+- \`sling:hideProperties\` / \`sling:hideChildren\` (string or array, \`*\` wildcard) — drop inherited properties / named children.
+- \`sling:hideResource\` (truthy) — drop the inherited node entirely.
+- All \`sling:hide*\` / \`sling:orderBefore\` bookkeeping is stripped from the merged dialog, so the mapper and the saved \`output/cache/aem/apps/...\` snapshot (which now holds the **merged** dialog) never see it. Sling's \`!name\` negation entries in hide lists are not supported — they log a warning and are ignored.
+
+The full walk is recorded on each successful component's \`supertypeChain\` in \`output/cache/migration-report.json\` (the chain continues past the nearest dialog, covering every ancestor visited), and \`contributingPaths\` lists which chain entries actually supplied a dialog — more than one means the emitted schema came from a merge. The registry key (the AEM resource type used at content-ingest time) remains the **original proxy path's resource type** — authored content with \`sling:resourceType: <proxy>\` keeps matching its emitted Sanity type even though dialog fields came from ancestors. Two proxies sharing one supertype produce two distinct Sanity types with identical fields.
+
+A standalone probe (\`scripts/aem-probe.ts\`) uses the same resolver — it prints the chain and a \`merged dialogs from:\` line, useful for inspecting a single component's resolution before kicking off a full schema run.
 
 ## Composite multifields (dialog + authored JCR)
 
