@@ -287,7 +287,8 @@ function renderField(field: SanityField, indentLevel: number): string {
   // `options.aemWidget` is not a standard Sanity string option, so the
   // defineField call opts out of strict definition typing for that field.
   const defineOptions =
-    field.type === "string" && field.options?.aemWidget
+    (field.type === "string" && field.options?.aemWidget) ||
+    field.type === "note"
       ? ", { strict: false }"
       : "";
   return `${indent}defineField(${body}${defineOptions})`;
@@ -413,6 +414,19 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
       // attribute count flat regardless of how many instances were authored.
       props.type = '"array"';
       props.of = `[{ type: ${JSON.stringify(field.slotTypeName)} }]`;
+      break;
+    }
+    case "note": {
+      // Display-only authoring note (Coral `text` widget). Emitted as a
+      // read-only string whose `description` carries the message; the
+      // `aemWidget: "note"` marker lets the consuming Studio swap the whole
+      // field for a banner (see `apps/studio/components/inputs/NoteField.tsx`).
+      // Studios without the resolver show an empty read-only input with the
+      // message as its description — nothing is ever persisted either way.
+      props.type = '"string"';
+      props.readOnly = "true";
+      props.description = JSON.stringify(field.noteText);
+      props.options = `{ aemWidget: "note" }`;
       break;
     }
     case "placeholder": {

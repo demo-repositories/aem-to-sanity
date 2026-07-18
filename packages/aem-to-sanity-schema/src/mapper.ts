@@ -70,6 +70,7 @@ export type SanityField =
   | (CommonFieldProps & ContainerChildrenField)
   | (CommonFieldProps & SlotReferenceField)
   | (CommonFieldProps & SlotArrayField)
+  | (CommonFieldProps & NoteField)
   | (CommonFieldProps & PlaceholderField);
 
 export interface CommonFieldProps {
@@ -192,6 +193,17 @@ interface SlotArrayField {
   type: "slot-array";
   /** Sanity type name of the nested blocks that fill this slot. */
   slotTypeName: string;
+}
+/**
+ * Static authoring text (Coral `text` widget) — instructions or warnings AEM
+ * shows inside the dialog. Nothing is persisted in JCR (the node has no
+ * `name`), so the Studio counterpart is display-only: a read-only string
+ * field carrying the message, marked `options.aemWidget: "note"` so the
+ * consuming Studio can render it as a banner instead of an input.
+ */
+interface NoteField {
+  type: "note";
+  noteText: string;
 }
 interface PlaceholderField {
   type: "placeholder";
@@ -699,6 +711,21 @@ async function buildField(
         itemFields: await extractMultifieldItems(node, ctx),
         ...(itemTitle ? { itemTitle } : {}),
       };
+    }
+    case "note": {
+      // Coral text is display-only — no `name`, nothing persisted. A node
+      // without `text` renders nothing in AEM either; skip it as hidden.
+      const text = stringAttr(node.text);
+      if (!text) {
+        ctx.unmapped.push({
+          name: nodeKey,
+          resourceType: node["sling:resourceType"] ?? "(none)",
+          reason: "hidden",
+          detail: "coral text node without a `text` attribute",
+        });
+        return undefined;
+      }
+      return { ...common, type: "note", noteText: text };
     }
     case "tags":
       // AEM tagfield is always multiselect (no single-value mode), so we

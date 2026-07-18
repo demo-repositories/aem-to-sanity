@@ -27,6 +27,7 @@ export type SanityKind =
   | "pathfield"
   | "pathbrowser"
   | "tags"
+  | "note"
   | "include";
 
 export interface MappingEntry {
@@ -148,6 +149,11 @@ export const MAPPING: Record<string, MappingEntry> = {
   "granite/ui/components/coral/foundation/form/hidden": {
     kind: "hidden",
     description: "Hidden → skipped",
+  },
+  "granite/ui/components/coral/foundation/text": {
+    kind: "note",
+    description:
+      "Static dialog text (author instructions / warnings) → read-only Studio note banner via `options.aemWidget: \"note\"`; nothing is persisted",
   },
   "granite/ui/components/foundation/heading": {
     kind: "hidden",

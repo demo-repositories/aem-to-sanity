@@ -1,8 +1,9 @@
 import React from "react";
-import type { InputProps, StringInputProps } from "sanity";
+import type { FieldProps, InputProps, StringInputProps } from "sanity";
 import { set } from "sanity";
 import { Button, Flex } from "@sanity/ui";
 import styled from "styled-components";
+import { NoteField, isNoteField } from "./NoteField.tsx";
 
 /**
  * Toggle-button group input for string fields with an `options.list` — the
@@ -82,12 +83,22 @@ function isButtonGroupString(props: InputProps): props is StringInputProps {
 
 /**
  * `form.components` for `defineConfig` — routes fields the schema emitter
- * marked `options.aemWidget: "buttonGroup"` to the toggle-group input.
+ * marked with an `options.aemWidget` hint:
+ *
+ * - `"buttonGroup"` → toggle-button-group input (this file)
+ * - `"note"` → display-only caution banner replacing the whole field
+ *   (`NoteField.tsx`) — AEM Coral `text` authoring instructions
  */
 export const aemFormComponents = {
   input: (props: InputProps) => {
     if (isButtonGroupString(props)) {
       return <StringToggleGroupInput {...props} />;
+    }
+    return props.renderDefault(props);
+  },
+  field: (props: FieldProps) => {
+    if (isNoteField(props)) {
+      return <NoteField {...props} />;
     }
     return props.renderDefault(props);
   },
