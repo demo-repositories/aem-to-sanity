@@ -145,6 +145,76 @@ describe("mapDialog: well", () => {
     }
   });
 
+  it("finds the heading through a nested wrapper container (uxp promocard shape)", async () => {
+    // Real uxp promocard `defaultOptions` well: the heading is not a direct
+    // item — it sits inside a structural `column` container.
+    const well = {
+      "jcr:primaryType": "nt:unstructured",
+      "sling:resourceType": "granite/ui/components/coral/foundation/well",
+      items: {
+        column: {
+          "jcr:primaryType": "nt:unstructured",
+          "sling:resourceType":
+            "granite/ui/components/coral/foundation/container",
+          items: {
+            defaultHeading: {
+              "jcr:primaryType": "nt:unstructured",
+              "sling:resourceType":
+                "granite/ui/components/coral/foundation/heading",
+              level: "3",
+              text: "Default Promocard Options",
+            },
+            imageAlignment: {
+              "jcr:primaryType": "nt:unstructured",
+              name: "./imageAlignment",
+              fieldLabel: "Image alignment:",
+              "sling:resourceType":
+                "granite/ui/components/coral/foundation/form/textfield",
+            },
+          },
+        },
+      },
+    } as unknown as DialogNode;
+    const dialog = dialogWith("defaultOptions", well);
+
+    const { fields, fieldsets } = await mapDialog(dialog, noFetch);
+    assert.deepEqual(fieldsets, [
+      {
+        name: "defaultPromocardOptions",
+        title: "Default Promocard Options",
+        collapsed: false,
+        collapsible: false,
+      },
+    ]);
+    assert.deepEqual(
+      fields.map((f) => f.name),
+      ["imageAlignment"],
+    );
+    assert.equal(fields[0].fieldset, "defaultPromocardOptions");
+  });
+
+  it("does not steal the heading of a nested well", async () => {
+    const inner = overlayOptionsWell();
+    const outer = {
+      "jcr:primaryType": "nt:unstructured",
+      "sling:resourceType": "granite/ui/components/coral/foundation/well",
+      items: {
+        innerWell: inner,
+      },
+    } as unknown as DialogNode;
+    const dialog = dialogWith("outerWell", outer);
+
+    const { fields, fieldsets } = await mapDialog(dialog, noFetch);
+    // Only the inner well is titled; the outer one stays transparent.
+    assert.deepEqual(
+      fieldsets.map((f) => f.name),
+      ["overlayOptions"],
+    );
+    for (const f of fields) {
+      assert.equal(f.fieldset, "overlayOptions");
+    }
+  });
+
   it("stays transparent when the well has neither jcr:title nor a heading item", async () => {
     const node = overlayOptionsWell() as unknown as {
       items: Record<string, unknown>;

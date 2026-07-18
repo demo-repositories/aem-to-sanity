@@ -134,7 +134,7 @@ export const MAPPING: Record<string, MappingEntry> = {
   "granite/ui/components/coral/foundation/well": {
     kind: "container",
     description:
-      "Well (static grouping box) → non-collapsible fieldset titled from `jcr:title` or the well's first `heading` item; untitled wells flatten and children hoist up",
+      "Well (static grouping box) → non-collapsible fieldset titled from `jcr:title` or the first `heading` widget inside the well (wrapper containers are searched through); untitled wells flatten and children hoist up",
   },
   "granite/ui/components/coral/foundation/accordion": {
     kind: "container",
@@ -165,7 +165,7 @@ export const MAPPING: Record<string, MappingEntry> = {
   "granite/ui/components/coral/foundation/heading": {
     kind: "hidden",
     description:
-      "Coral heading → not a field itself; when it's the first item of a well, its `text` becomes the well's fieldset title",
+      "Coral heading → not a field itself; the first heading inside a well supplies the well's fieldset title via its `text`",
   },
   "aem-integration/components/dialog/space": {
     kind: "hidden",

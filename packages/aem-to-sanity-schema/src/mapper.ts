@@ -1156,23 +1156,24 @@ async function extractMultifieldItems(
 }
 
 /**
- * Title text for a well: the `text` of the first `heading` widget among the
- * well's direct items (Coral or legacy foundation heading — both carry the
- * label on `text`). Headings deeper inside nested containers don't count;
- * they belong to those containers.
+ * Title text for a well: the `text` of the first `heading` widget rendered
+ * inside it, in document order (Coral or legacy foundation heading — both
+ * carry the label on `text`). AEM dialogs routinely wrap the heading in a
+ * structural container (uxp promocard: `well > column > heading`), so the
+ * search descends through nested wrappers — but not into nested wells,
+ * whose headings belong to them.
  */
 function wellHeadingText(node: DialogNode): string | undefined {
-  const items = node["items"];
-  const scope =
-    items && typeof items === "object" && !Array.isArray(items)
-      ? (items as DialogNode)
-      : node;
-  for (const { value: child } of childNodes(scope)) {
+  for (const { value: child } of childNodes(node)) {
     const rt = child["sling:resourceType"];
     if (typeof rt === "string" && rt.endsWith("/heading")) {
       const text = stringAttr(child["text"]);
       if (text) return text;
+      continue;
     }
+    if (isWellResourceType(rt)) continue;
+    const nested = wellHeadingText(child);
+    if (nested) return nested;
   }
   return undefined;
 }
