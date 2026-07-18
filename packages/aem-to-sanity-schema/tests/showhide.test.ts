@@ -328,6 +328,71 @@ describe("emitSchemaFile: ACS show/hide", () => {
     );
   });
 
+  it("flips the comparison for a default-checked controller so unset stays visible", async () => {
+    const dialog = dialogWith({
+      inheritAlt: {
+        ...isSplitCheckbox(),
+        name: "./inheritAlt",
+        checked: "true",
+        "granite:data": {
+          "acs-cq-dialog-dropdown-checkbox-showhide-target":
+            ".inheritAlt-showhide-target",
+        },
+      },
+      whenChecked: {
+        ...textfield("whenChecked"),
+        "granite:class": "inheritAlt-showhide-target",
+        "granite:data": { "acs-checkboxshowhidetargetvalue": "true" },
+      },
+      whenUnchecked: {
+        ...textfield("whenUnchecked"),
+        "granite:class": "inheritAlt-showhide-target",
+        "granite:data": { "acs-checkboxshowhidetargetvalue": "" },
+      },
+    });
+    const { fields, groups } = await mapDialog(dialog, noFetch);
+    const src = await emitSchemaFile({
+      typeName: "testType",
+      sourcePath: "/apps/test",
+      fields,
+      groups,
+    });
+
+    // Controller defaults to checked, so an unset boolean must count as
+    // checked: shown-when-checked hides only on explicit false...
+    assert.match(src, /parent\?\.inheritAlt === false/);
+    // ...and shown-when-unchecked hides on everything except explicit false.
+    assert.match(src, /parent\?\.inheritAlt !== false/);
+  });
+
+  it("treats an EL-expression checked default as unchecked (conservative)", async () => {
+    const dialog = dialogWith({
+      decorative: {
+        ...isSplitCheckbox(),
+        name: "./decorative",
+        checked: "${not empty cqDesign.isDecorative ? cqDesign.isDecorative : false}",
+        "granite:data": {
+          "acs-cq-dialog-dropdown-checkbox-showhide-target":
+            ".decorative-showhide-target",
+        },
+      },
+      dependent: {
+        ...textfield("dependent"),
+        "granite:class": "decorative-showhide-target",
+        "granite:data": { "acs-checkboxshowhidetargetvalue": "true" },
+      },
+    });
+    const { fields, groups } = await mapDialog(dialog, noFetch);
+    const src = await emitSchemaFile({
+      typeName: "testType",
+      sourcePath: "/apps/test",
+      fields,
+      groups,
+    });
+
+    assert.match(src, /parent\?\.decorative !== true/);
+  });
+
   it("emits an includes() check only for multi-value dropdown targets", async () => {
     const dialog = dialogWith({
       cardStyle: cardStyleSelect(),

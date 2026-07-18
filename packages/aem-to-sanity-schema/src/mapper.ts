@@ -79,6 +79,8 @@ interface ShowHideControllerMeta {
   kind: "dropdown" | "checkbox";
   /** Dropdown controller's default option value (`selected` item), used as the unset-value fallback. */
   defaultValue?: string;
+  /** Checkbox controller declared default-checked (`checked` attr); absent → unchecked/unknown. */
+  defaultChecked?: boolean;
 }
 
 /**
@@ -96,6 +98,8 @@ export interface ShowHideCondition {
   controllerDefault?: string;
   /** Checkbox: true → visible when checked, false → visible when unchecked. */
   visibleWhenChecked?: boolean;
+  /** Checkbox: controller defaults to checked, so an unset boolean counts as checked. */
+  controllerDefaultChecked?: boolean;
 }
 
 const CORAL_ACCORDION_RESOURCE_TYPE =
@@ -977,6 +981,10 @@ function showHideControllerMeta(
   };
   if (controllerKind === "dropdown") {
     meta.defaultValue = selectedItemValue(node);
+  } else if (checkboxDefaultChecked(node) === true) {
+    // Only a literal checked default matters; absent or EL-expression
+    // defaults are treated as unchecked (the conservative reading).
+    meta.defaultChecked = true;
   }
   return meta;
 }
@@ -1019,6 +1027,9 @@ function resolveShowHideConditions(fields: SanityField[]): void {
             controllerField: controller.name,
             kind: "checkbox",
             visibleWhenChecked: raw.checkboxVisibleWhenChecked,
+            ...(meta.defaultChecked
+              ? { controllerDefaultChecked: true }
+              : {}),
           });
         }
       }

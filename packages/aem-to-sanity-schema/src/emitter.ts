@@ -505,8 +505,13 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
  *   document would hide fields AEM shows. Otherwise unset is hidden with
  *   or without the fallback, so it's omitted.
  *
- * Checkbox predicates compare against `true`; an unset boolean counts as
- * unchecked, matching a fresh AEM dialog.
+ * Checkbox predicates apply the same default rule: an unset boolean counts
+ * as the controller's `checked` default. Default-unchecked (the common
+ * case) compares against `true` (`x !== true` / `x === true`); a
+ * default-CHECKED controller flips the comparison to `false`
+ * (`x === false` / `x !== false`) so unset lands on the visible side —
+ * migrated documents where AEM never persisted the property show what a
+ * fresh AEM dialog shows.
  */
 function renderHiddenCallback(conditions: ShowHideCondition[]): string {
   const parts = conditions.map(renderConditionExpr);
@@ -516,6 +521,11 @@ function renderHiddenCallback(conditions: ShowHideCondition[]): string {
 function renderConditionExpr(c: ShowHideCondition): string {
   const access = `parent?.${c.controllerField}`;
   if (c.kind === "checkbox") {
+    if (c.controllerDefaultChecked) {
+      return c.visibleWhenChecked
+        ? `${access} === false`
+        : `${access} !== false`;
+    }
     return c.visibleWhenChecked ? `${access} !== true` : `${access} === true`;
   }
   const values = c.values ?? [];
