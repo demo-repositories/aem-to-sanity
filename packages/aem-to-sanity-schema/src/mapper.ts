@@ -27,16 +27,18 @@ interface MappingContext {
 }
 
 /**
- * Collapsible fieldset emitted for a Coral accordion panel. Unlike titled
- * tab containers (which become Studio groups, i.e. tabs), an accordion is a
- * collapsible section *within* its surrounding tab — Sanity's fieldset is
- * the matching primitive. `collapsed` mirrors Coral behavior: panels start
- * closed unless the panel node carries a truthy `active` attribute.
+ * Fieldset emitted for a Coral accordion panel or well. Unlike titled tab
+ * containers (which become Studio groups, i.e. tabs), both are sections
+ * *within* their surrounding tab — Sanity's fieldset is the matching
+ * primitive. Accordion panels are `collapsible`, starting closed unless the
+ * panel node carries a truthy `active` attribute; wells are static boxes,
+ * so they emit non-collapsible (`collapsed` is ignored for those).
  */
 export interface SanityFieldset {
   name: string;
   title: string;
   collapsed: boolean;
+  collapsible: boolean;
 }
 
 /**
@@ -104,6 +106,14 @@ export interface ShowHideCondition {
 
 const CORAL_ACCORDION_RESOURCE_TYPE =
   "granite/ui/components/coral/foundation/accordion";
+
+/** Matches the Coral well and its legacy non-Coral alias. */
+function isWellResourceType(resourceType: string | undefined): boolean {
+  return (
+    typeof resourceType === "string" &&
+    resourceType.endsWith("foundation/well")
+  );
+}
 
 export type SanityField =
   | (CommonFieldProps & StringField)
@@ -487,8 +497,30 @@ async function processNode(
       // Any other container resets the flag: only immediate panels count.
       accordionPanels: resourceType === CORAL_ACCORDION_RESOURCE_TYPE,
     };
-    const title = child["jcr:title"];
-    if (title && typeof title === "string") {
+    const title = stringAttr(child["jcr:title"]);
+    // A well is AEM's static grouping box — visually a bordered section
+    // within its tab, so it maps to a non-collapsible fieldset. Its title
+    // rarely lives on `jcr:title`; the usual authoring pattern puts a
+    // `heading` widget as the well's first item (e.g. "Overlay Options:").
+    // Untitled wells stay transparent and their fields hoist up as before.
+    const wellTitle = isWellResourceType(resourceType)
+      ? (title ?? wellHeadingText(child))
+      : undefined;
+    if (wellTitle) {
+      const cleanTitle = wellTitle.replace(/\s*:\s*$/, "") || wellTitle;
+      const fieldsetName = toCamelCase(cleanTitle);
+      if (fieldsetName) {
+        if (!ctx.fieldsets.find((f) => f.name === fieldsetName)) {
+          ctx.fieldsets.push({
+            name: fieldsetName,
+            title: cleanTitle,
+            collapsed: false,
+            collapsible: false,
+          });
+        }
+        childPlacement.fieldset = fieldsetName;
+      }
+    } else if (title) {
       if (placement.accordionPanels) {
         const fieldsetName = toCamelCase(title);
         if (!ctx.fieldsets.find((f) => f.name === fieldsetName)) {
@@ -496,6 +528,7 @@ async function processNode(
             name: fieldsetName,
             title,
             collapsed: !isTruthyAttr(child.active),
+            collapsible: true,
           });
         }
         childPlacement.fieldset = fieldsetName;
@@ -1120,6 +1153,28 @@ async function extractMultifieldItems(
   }
   const built = buildPlaceholder(singleKey, fieldNode, {});
   return built ? [built] : [];
+}
+
+/**
+ * Title text for a well: the `text` of the first `heading` widget among the
+ * well's direct items (Coral or legacy foundation heading — both carry the
+ * label on `text`). Headings deeper inside nested containers don't count;
+ * they belong to those containers.
+ */
+function wellHeadingText(node: DialogNode): string | undefined {
+  const items = node["items"];
+  const scope =
+    items && typeof items === "object" && !Array.isArray(items)
+      ? (items as DialogNode)
+      : node;
+  for (const { value: child } of childNodes(scope)) {
+    const rt = child["sling:resourceType"];
+    if (typeof rt === "string" && rt.endsWith("/heading")) {
+      const text = stringAttr(child["text"]);
+      if (text) return text;
+    }
+  }
+  return undefined;
 }
 
 function fieldName(node: DialogNode): string | undefined {

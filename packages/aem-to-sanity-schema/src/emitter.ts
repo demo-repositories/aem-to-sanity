@@ -14,7 +14,7 @@ export interface EmitInput {
   sourcePath: string;
   fields: SanityField[];
   groups: Array<{ name: string; title: string }>;
-  /** Collapsible sections from Coral accordion panels (see {@link SanityFieldset}). */
+  /** Sections from Coral accordion panels (collapsible) and wells (static boxes) — see {@link SanityFieldset}. */
   fieldsets?: SanityFieldset[];
   /**
    * Studio document title, usually from the AEM component node's `jcr:title`.
@@ -146,9 +146,10 @@ function stringifyFieldsets(fieldsets: SanityFieldset[]): string {
   return (
     "[" +
     fieldsets
-      .map(
-        (f) =>
-          `{ name: ${JSON.stringify(f.name)}, title: ${JSON.stringify(f.title)}, options: { collapsible: true, collapsed: ${f.collapsed} } }`,
+      .map((f) =>
+        f.collapsible
+          ? `{ name: ${JSON.stringify(f.name)}, title: ${JSON.stringify(f.title)}, options: { collapsible: true, collapsed: ${f.collapsed} } }`
+          : `{ name: ${JSON.stringify(f.name)}, title: ${JSON.stringify(f.title)} }`,
       )
       .join(", ") +
     "]"

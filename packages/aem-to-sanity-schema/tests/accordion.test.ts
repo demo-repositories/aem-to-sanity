@@ -98,7 +98,7 @@ describe("mapDialog: accordion", () => {
     // Accordion panels are collapsible sections, not tabs — no group.
     assert.deepEqual(groups, []);
     assert.deepEqual(fieldsets, [
-      { name: "height", title: "Height", collapsed: true },
+      { name: "height", title: "Height", collapsed: true, collapsible: true },
     ]);
 
     assert.deepEqual(
@@ -150,7 +150,7 @@ describe("mapDialog: accordion", () => {
     // The tab stays a group; the accordion panel does NOT become a second tab.
     assert.deepEqual(groups, [{ name: "display", title: "Display" }]);
     assert.deepEqual(fieldsets, [
-      { name: "height", title: "Height", collapsed: true },
+      { name: "height", title: "Height", collapsed: true, collapsible: true },
     ]);
     for (const f of fields) {
       assert.equal(f.group, "display");
@@ -167,7 +167,7 @@ describe("mapDialog: accordion", () => {
 
     const { fieldsets } = await mapDialog(dialog, noFetch);
     assert.deepEqual(fieldsets, [
-      { name: "height", title: "Height", collapsed: false },
+      { name: "height", title: "Height", collapsed: false, collapsible: true },
     ]);
   });
 });

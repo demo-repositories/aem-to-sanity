@@ -260,12 +260,13 @@ Predicates compare **raw values, deliberately without type coercion** — select
 
 **Content** — nothing changes at transform/import: AEM persists authored values even while their widget is hidden, and so does Sanity — the \`hidden\` callback is purely a Studio display concern.
 
-## Dialog structure: tabs vs. accordions
+## Dialog structure: tabs, accordions, wells
 
-Both Coral \`tabs\` and \`accordion\` nodes flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:
+Coral \`tabs\`, \`accordion\`, and \`well\` nodes all flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:
 
 - **Tab panels** (titled containers directly under a \`tabs\` node) become **Studio groups**: one tab per panel at the top of the object's editor.
 - **Accordion panels** (titled containers directly under an \`accordion\` node) become **collapsible fieldsets** *inside* whatever tab the accordion sits in — an accordion in AEM is a fold-out section within a tab, not a sibling tab. Fields inside the panel keep the surrounding tab's \`group\` and additionally get the panel's \`fieldset\`. The fieldset starts collapsed unless the panel node carries a truthy \`active\` attribute (Coral's expanded-by-default flag).
+- **Wells** (\`granite/ui/components/coral/foundation/well\`) become **non-collapsible fieldsets** — AEM renders a well as a static bordered box grouping related fields. The title comes from the well's \`jcr:title\` when present, otherwise from the \`text\` of the first \`heading\` widget among the well's direct items (the common authoring pattern, e.g. an "Overlay Options:" heading; a trailing colon is stripped). A well with neither stays transparent: its fields hoist up ungrouped, exactly as before. The heading widget itself persists nothing and emits no field.
 
 Example: uxp \`promocard\` nests an accordion titled "Height" inside its "Display" tab. The six height fields emit with \`group: "display"\` + \`fieldset: "height"\`, so the Studio shows them as a collapsible "Height" section on the Display tab — not as a stray top-level "Height" tab.
 
