@@ -1,5 +1,16 @@
 # aem-to-sanity-schema
 
+## 1.4.0
+
+### Minor Changes
+
+- [#34](https://github.com/demo-repositories/aem-to-sanity/pull/34) [`e6beb8a`](https://github.com/demo-repositories/aem-to-sanity/commit/e6beb8aa7d2d05e7c84c73545f15c77310dbd934) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Coral wells (`granite/ui/components/coral/foundation/well`) now emit as non-collapsible Sanity fieldsets instead of flattening invisibly. The fieldset title comes from the well's `jcr:title` when present, otherwise from the `text` of the first `heading` widget (`granite/ui/components/coral/foundation/heading`) rendered inside the well — wrapper containers between the well and the heading are searched through, matching the common AEM authoring pattern (a trailing colon is stripped, e.g. "Overlay Options:" → "Overlay Options"). Wells with neither keep the old behavior: fields hoist up ungrouped. Re-run `pnpm migrate:schema` to pick up the new grouping; persisted content is unaffected (fieldsets are a Studio display concern).
+
+### Patch Changes
+
+- Updated dependencies []:
+  - aem-to-sanity-core@1.4.0
+
 ## 1.3.0
 
 ### Minor Changes
