@@ -282,9 +282,11 @@ describe("emitSchemaFile: ACS show/hide", () => {
     });
 
     assert.match(src, /hidden: \(\{ parent \}\) =>/);
+    // The controller's default option IS the visible value, so an unset
+    // select must count as the default — the fallback is required here.
     assert.match(
       src,
-      /!\["default"\]\.includes\(String\(parent\?\.cardStyle \?\? "default"\)\)/,
+      /\(parent\?\.cardStyle \?\? "default"\) !== "default"/,
     );
   });
 
@@ -316,11 +318,38 @@ describe("emitSchemaFile: ACS show/hide", () => {
 
     assert.match(src, /parent\?\.isSplit !== true/);
     assert.match(src, /parent\?\.isSplit === true/);
-    // Both conditions on one field OR together inside one callback (hidden
-    // when either visibility requirement fails).
+    // "flood" is not the controller's default, so an unset select is hidden
+    // either way — no fallback emitted, just the minimal comparison. Both
+    // conditions on one field OR together inside one callback (hidden when
+    // either visibility requirement fails).
     assert.match(
       src,
-      /!\["flood"\]\.includes\(String\(parent\?\.cardStyle \?\? "default"\)\) \|\|\s*parent\?\.isSplit !== true/,
+      /parent\?\.cardStyle !== "flood" \|\| parent\?\.isSplit !== true/,
+    );
+  });
+
+  it("emits an includes() check only for multi-value dropdown targets", async () => {
+    const dialog = dialogWith({
+      cardStyle: cardStyleSelect(),
+      shared: {
+        ...textfield("shared"),
+        "granite:class": "cardStyle-showhide-target",
+        "granite:data": { "acs-dropdownshowhidetargetvalue": "default flood" },
+      },
+    });
+    const { fields, groups } = await mapDialog(dialog, noFetch);
+    const src = await emitSchemaFile({
+      typeName: "promoCard",
+      sourcePath: "/apps/uxp/components/proxy/content/promocard",
+      fields,
+      groups,
+    });
+
+    // Multi-value keeps includes(); the default is in the visible set, so
+    // the unset fallback stays.
+    assert.match(
+      src,
+      /!\["default", "flood"\]\.includes\(parent\?\.cardStyle \?\? "default"\)/,
     );
   });
 });

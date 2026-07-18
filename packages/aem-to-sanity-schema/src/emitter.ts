@@ -494,21 +494,38 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
  * ACS show/hide conditions → Sanity `hidden` callback. Each condition says
  * "visible when the sibling controller holds one of these values"; the
  * callback returns true (hidden) when ANY condition fails, so nested ACS
- * wrappers AND together. Dropdown controllers fall back to their AEM default
- * option when the document has no value yet — matching what an author sees
- * when they open a fresh AEM dialog. Checkbox controllers treat an unset
- * boolean as unchecked for the same reason.
+ * wrappers AND together.
+ *
+ * Dropdown predicates emit the minimal equivalent form:
+ * - `parent?.x !== "v"` for a single value — the common case.
+ * - `!["a", "b"].includes(parent?.x)` for multiple values.
+ * - The `?? "<default>"` fallback appears ONLY when the controller's AEM
+ *   default option is itself one of the visible values — that's the one
+ *   case where an unset select must count as the default, or a fresh
+ *   document would hide fields AEM shows. Otherwise unset is hidden with
+ *   or without the fallback, so it's omitted.
+ *
+ * Checkbox predicates compare against `true`; an unset boolean counts as
+ * unchecked, matching a fresh AEM dialog.
  */
 function renderHiddenCallback(conditions: ShowHideCondition[]): string {
-  const parts = conditions.map((c) => {
-    const access = `parent?.${c.controllerField}`;
-    if (c.kind === "checkbox") {
-      return c.visibleWhenChecked
-        ? `${access} !== true`
-        : `${access} === true`;
-    }
-    const fallback = JSON.stringify(c.controllerDefault ?? "");
-    return `!${JSON.stringify(c.values ?? [])}.includes(String(${access} ?? ${fallback}))`;
-  });
+  const parts = conditions.map(renderConditionExpr);
   return `({ parent }) => ${parts.join(" || ")}`;
+}
+
+function renderConditionExpr(c: ShowHideCondition): string {
+  const access = `parent?.${c.controllerField}`;
+  if (c.kind === "checkbox") {
+    return c.visibleWhenChecked ? `${access} !== true` : `${access} === true`;
+  }
+  const values = c.values ?? [];
+  const fallback = c.controllerDefault ?? "";
+  const visibleWhenUnset = values.includes(fallback);
+  const subject = visibleWhenUnset
+    ? `(${access} ?? ${JSON.stringify(fallback)})`
+    : access;
+  if (values.length === 1) {
+    return `${subject} !== ${JSON.stringify(values[0])}`;
+  }
+  return `!${JSON.stringify(values)}.includes(${subject})`;
 }
