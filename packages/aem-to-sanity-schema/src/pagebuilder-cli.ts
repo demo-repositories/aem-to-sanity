@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import { join, resolve } from "node:path";
-import { createLogger } from "aem-to-sanity-core";
+import { createLogger, resolvePageBuilderName } from "aem-to-sanity-core";
 import {
   rewriteBarrelFromDisk,
   scanSchemaTypeNames,
@@ -25,7 +25,7 @@ function parseArgs(argv: string[]): Args {
     schemasDir: process.env.SCHEMAS_OUT_DIR,
     exclude: [],
     pageTypeName: "page",
-    pageBuilderTypeName: "pageBuilder",
+    pageBuilderTypeName: resolvePageBuilderName(process.env),
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -85,7 +85,7 @@ Options:
                             or {outputDir}/schemas
   --exclude <typeName>      Exclude a type from pageBuilder.of[] (repeatable)
   --page-type <name>        Default: page
-  --pagebuilder-type <name> Default: pageBuilder
+  --pagebuilder-type <name> Default: $MIGRATION_PAGE_BUILDER_NAME or pageBuilder
 `);
 }
 

@@ -13,6 +13,7 @@ import {
   loadPageComponentConfig,
   logStartupBanner,
   resolveConfig,
+  resolvePageBuilderName,
   startTimer,
   type DialogNode,
   type SanityRuntimeSummary,
@@ -59,6 +60,16 @@ async function main(): Promise<void> {
   const schemasDir = process.env.SCHEMAS_OUT_DIR
     ? resolve(process.env.SCHEMAS_OUT_DIR)
     : undefined;
+
+  // Page-builder array type / page-doc field name. Also read by
+  // `aem-transform` so the emitted schemas and the ingested content agree —
+  // set once in the tenant .env before the first run.
+  const pageBuilderName = resolvePageBuilderName(process.env);
+  if (pageBuilderName !== "pageBuilder") {
+    logger.info(
+      `Page-builder name: ${pageBuilderName} (MIGRATION_PAGE_BUILDER_NAME)`,
+    );
+  }
 
   const componentPaths = await readComponentPaths(config.componentPathsFile);
   const exceptionsFile = resolve(
@@ -190,6 +201,7 @@ async function main(): Promise<void> {
     logger,
     docsOutputFile: "./docs/aem-to-sanity-mapping.md",
     continueOnAuth,
+    pageBuilderName,
     containers,
     discoveredSlots,
     authoringHints,

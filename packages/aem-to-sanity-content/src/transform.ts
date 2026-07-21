@@ -11,6 +11,7 @@ import {
   loadAuthoringHintConfig,
   loadContainerConfig,
   normalizeSlotBase,
+  resolvePageBuilderName,
   startTimer,
   type AuthoringHintConfig,
   type ContainerConfig,
@@ -78,7 +79,13 @@ interface PageDoc {
   _type: string;
   title: string;
   slug: { _type: "slug"; current: string };
-  pageBuilder: PageBuilderItem[];
+  /**
+   * Page-builder blocks land under the configured field name
+   * (`MIGRATION_PAGE_BUILDER_NAME`, default `pageBuilder`) — the same name
+   * `migrate:schema` used for the array type and the page-doc field, so
+   * the two stages must run with the same env value.
+   */
+  [pageBuilderField: string]: unknown;
   /**
    * AEM page-level `cq:tags` (on the `jcr:content` node) lifted into a
    * Sanity reference array. Only present when at least one tag resolved
@@ -1495,6 +1502,16 @@ function main(): void {
   );
   const authoringHints = loadAuthoringHintConfig({ file: hintsFile });
 
+  // Field name for page-builder blocks on emitted page docs. Must match the
+  // array-type / field name `migrate:schema` generated — both CLIs read the
+  // same env var, so a single tenant .env keeps them in sync.
+  const pageBuilderFieldName = resolvePageBuilderName(process.env);
+  if (pageBuilderFieldName !== "pageBuilder") {
+    console.error(
+      `[transform] page-builder field name: ${pageBuilderFieldName} (MIGRATION_PAGE_BUILDER_NAME)`,
+    );
+  }
+
   const registry = loadRegistry(registryFile);
   const contentDir = aemCacheContentRoot(outputDir);
   const cleanDir = join(outputDir, "cache", "clean");
@@ -1639,7 +1656,7 @@ function main(): void {
       _type: templateMatch ? templateMatch.sanityType : "page",
       title: derivePageTitle(tree, slug, jcrPath),
       slug: { _type: "slug", current: currentSlug },
-      pageBuilder,
+      [pageBuilderFieldName]: pageBuilder,
     };
     const pageTags = derivePageTags(tree, ctx, jcrPath);
     if (pageTags) pageDoc.tags = pageTags;
