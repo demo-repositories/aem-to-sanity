@@ -48,6 +48,9 @@ SANITY_ML_LINK_TOKEN=...                      # personal auth token for /assets/
 
 # Optional
 # AEM_MAX_RESPONSE_MB=100                     # abort any single response larger than this
+# MIGRATION_PAGE_BUILDER_NAME=pageBuilder     # field page blocks land under on emitted docs.
+                                              # Must match the value migrate:schema ran with —
+                                              # set once in the tenant .env, leave alone.
 ```
 
 ## Roots files
@@ -186,7 +189,7 @@ With `discover: true`, `migrate:schema` walks `output/cache/aem/content/` (popul
 - `pageProperties` — every authored value on `jcr:content` lifted via the same camelCase rule used for ordinary fields, then coerced against the page-shell's `cq:dialog` types (`"true"` → `true`, HTML → Portable Text, etc.). AEM bookkeeping (replication agents, versioning, ContextHub paths) is dropped via an explicit `JCR_CONTENT_BOOKKEEPING_KEYS` denylist so dialog drift surfaces but noise doesn't.
 - `featuredImage` lifted from `jcr:content/cq:featuredimage`. The DAM path is moved to `fileReferenceAemPath` so `aem-assets` rewrites it to a real Sanity asset ref the same way it does for fileupload widgets.
 - `cqTemplate` — the raw template path, retained for traceability.
-- `pageBuilder` walked from `jcr:content/root` (unchanged).
+- `pageBuilder` walked from `jcr:content/root` (unchanged; the field name follows `MIGRATION_PAGE_BUILDER_NAME` when set).
 
 Pages with a declared page-shell `sling:resourceType` but an undeclared `cq:template` fall back to the generic `_type: "page"` document and surface in the transform report under `unknownPageTemplates`. Add the missing template to `aem-page-components.json`, re-run `migrate:schema`, then re-run `transform` + `import` to upgrade them.
 

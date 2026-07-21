@@ -22,7 +22,12 @@ import {
   type SanityField,
 } from "./mapper.ts";
 import { emitSchemaFile, resolveSchemaTitle } from "./emitter.ts";
-import { resolveSanityTypeNames, toCamelCase, toTitleCase } from "./naming.ts";
+import {
+  RESERVED_SANITY_TYPE_NAMES,
+  resolveSanityTypeNames,
+  toCamelCase,
+  toTitleCase,
+} from "./naming.ts";
 import { Report } from "./report.ts";
 import { auditUnmappedTypes } from "./audit.ts";
 import {
@@ -60,6 +65,15 @@ export interface MigrateSchemasOptions {
   emitPageBuilder?: boolean;
   /** Type names to exclude from `pageBuilder.of[]` (e.g. page-level components). */
   pageBuilderExclude?: string[];
+  /**
+   * Name of the generated page-builder array type. Names the emitted
+   * `{name}.ts` file, its `defineType({ name })`, the field on the generic
+   * page + per-template documents, and the type container drop-zones
+   * reference. The content transform must emit page blocks under the same
+   * name — the CLI reads both sides from `MIGRATION_PAGE_BUILDER_NAME`.
+   * Default: `"pageBuilder"`.
+   */
+  pageBuilderName?: string;
   /**
    * Emit a `content-type-registry.json` alongside the schemas, mapping AEM
    * `sling:resourceType` → Sanity type + field names. Consumed by the content
@@ -196,6 +210,7 @@ export async function migrateSchemas(
   const continueOnAuth = opts.continueOnAuth ?? false;
   const authCircuitBreakerThreshold = opts.authCircuitBreakerThreshold ?? 5;
   const schemasDir = opts.schemasDir ?? join(outputDir, "schemas");
+  const pageBuilderName = opts.pageBuilderName ?? "pageBuilder";
   const containers = opts.containers ?? new Map();
   const effectiveJcrPrefix = opts.jcrPrefix ?? "/apps/";
   const discoveredSlots = opts.discoveredSlots ?? new Map();
@@ -211,6 +226,24 @@ export async function migrateSchemas(
   // prevents ingested data from showing up as "Untitled" with an unknown-type
   // warning because its `_type` no longer matches the live schema.
   const typeNameByPath = resolveSanityTypeNames(componentPaths);
+
+  // The page-builder name doubles as a Sanity type name and a schema file
+  // name, so it must not shadow a built-in type or a resolved component —
+  // either would silently overwrite / desync the generated artifacts.
+  if (emitPageBuilder && pageBuilderName !== "pageBuilder") {
+    if (RESERVED_SANITY_TYPE_NAMES.has(pageBuilderName)) {
+      throw new Error(
+        `pageBuilderName "${pageBuilderName}" collides with a built-in Sanity type — pick a different MIGRATION_PAGE_BUILDER_NAME.`,
+      );
+    }
+    for (const [path, name] of typeNameByPath) {
+      if (name === pageBuilderName) {
+        throw new Error(
+          `pageBuilderName "${pageBuilderName}" collides with the Sanity type generated for ${path} — pick a different MIGRATION_PAGE_BUILDER_NAME.`,
+        );
+      }
+    }
+  }
   // Reverse index: slot children reference each other by AEM `sling:resourceType`,
   // but a Sanity `defineField({ type })` needs the Sanity type name. Build this
   // once so slot emission stays O(1) per lookup.
@@ -237,6 +270,7 @@ export async function migrateSchemas(
         writeAemSnapshot,
         regenerateCommand,
         typeName: typeNameByPath.get(p)!,
+        pageBuilderName,
         containerEntry: containers.get(rt),
         slotMap: discoveredSlots.get(rt),
         hintKeys: authoringHints.get(rt),
@@ -299,6 +333,7 @@ export async function migrateSchemas(
       schemasDir,
       componentMembers: successMembers,
       exclude: effectivePageBuilderExclude,
+      pageBuilderTypeName: pageBuilderName,
       logger,
     });
     pageBuilderFile = pb.pageBuilderFile;
@@ -314,6 +349,7 @@ export async function migrateSchemas(
       manifestOutputDir: outputDir,
       pageComponentsConfig: pageComponents,
       typeNameByResourceType,
+      pageBuilderTypeName: pageBuilderName,
       logger,
     });
     pageTemplatesFile = tp.manifestFile;
@@ -337,14 +373,21 @@ export async function migrateSchemas(
         ]
       : successTypeNames;
 
-  await pruneGeneratedSchemaFiles(schemasDir, protectedTypeNames, { emitPageBuilder, logger });
+  await pruneGeneratedSchemaFiles(schemasDir, protectedTypeNames, {
+    emitPageBuilder,
+    pageBuilderName,
+    logger,
+  });
 
   if (emitPageBuilder) {
     // Prefer filenames on disk so `index.ts` never imports a missing `.ts`
     // (e.g. if a write races or a stale checkout diverges from the report).
-    await rewriteBarrelFromDisk(schemasDir);
+    await rewriteBarrelFromDisk(schemasDir, "page", pageBuilderName);
   } else {
-    await writeSchemasBarrel(schemasDir, report, { emitPageBuilder: false });
+    await writeSchemasBarrel(schemasDir, report, {
+      emitPageBuilder: false,
+      pageBuilderName,
+    });
   }
 
   if (docsOutputFile) {
@@ -398,6 +441,8 @@ interface ProcessOneDeps {
   regenerateCommand?: string;
   /** Final Sanity type name resolved by `resolveSanityTypeNames` for this path. */
   typeName: string;
+  /** Page-builder array type name container drop-zones reference. */
+  pageBuilderName: string;
   /** Container behavior opted in for this component (via `containers` config). */
   containerEntry?: { childrenField: string };
   /** Discovered named-slot keys for this resource type → set of child resource types. */
@@ -534,6 +579,7 @@ async function processOne(
         name: childrenField,
         title: "Items",
         type: "container-children",
+        pageBuilderTypeName: deps.pageBuilderName,
       };
       mapped.fields.push(container);
     }
@@ -724,7 +770,7 @@ async function processOne(
 async function pruneGeneratedSchemaFiles(
   schemasDir: string,
   componentTypeNames: string[],
-  opts: { emitPageBuilder: boolean; logger?: Logger },
+  opts: { emitPageBuilder: boolean; pageBuilderName: string; logger?: Logger },
 ): Promise<void> {
   let entries: string[];
   try {
@@ -738,7 +784,7 @@ async function pruneGeneratedSchemaFiles(
   keep.add("index");
   if (opts.emitPageBuilder) {
     keep.add("page");
-    keep.add("pageBuilder");
+    keep.add(opts.pageBuilderName);
   }
 
   for (const file of entries) {
@@ -773,7 +819,7 @@ async function pruneGeneratedSchemaFiles(
 async function writeSchemasBarrel(
   schemasDir: string,
   report: Report,
-  opts: { emitPageBuilder: boolean },
+  opts: { emitPageBuilder: boolean; pageBuilderName: string },
 ): Promise<void> {
   const successNames = report.results
     .filter((r): r is Extract<typeof r, { status: "success" }> => r.status === "success")
@@ -781,7 +827,7 @@ async function writeSchemasBarrel(
     .sort();
   if (successNames.length === 0) return;
 
-  const pageExtras = opts.emitPageBuilder ? ["pageBuilder", "page"] : [];
+  const pageExtras = opts.emitPageBuilder ? [opts.pageBuilderName, "page"] : [];
   const allNames = [...successNames, ...pageExtras];
 
   const imports = allNames

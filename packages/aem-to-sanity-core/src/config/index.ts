@@ -12,6 +12,10 @@ export type {
   AuthoringHintConfig,
   LoadAuthoringHintConfigOptions,
 } from "./authoring-hints.ts";
+export {
+  DEFAULT_PAGE_BUILDER_NAME,
+  resolvePageBuilderName,
+} from "./page-builder-name.ts";
 export { loadPageComponentConfig } from "./page-components.ts";
 export type {
   PageComponentConfig,

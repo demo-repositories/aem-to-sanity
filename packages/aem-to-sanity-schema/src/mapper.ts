@@ -227,13 +227,16 @@ interface ReferenceArrayField {
 }
 /**
  * Drop-zone array on an AEM container component (e.g. `expander`, `container`,
- * `column-layout`). Emitted as a field of type `"pageBuilder"` so the Studio
- * palette inside the container matches the top-level page builder. Populated
- * at content-transform time by walking the container's child component nodes
- * — NOT by coerceFieldTypes, which doesn't touch this type string.
+ * `column-layout`). Emitted as a field of the page-builder array type so the
+ * Studio palette inside the container matches the top-level page builder.
+ * Populated at content-transform time by walking the container's child
+ * component nodes — NOT by coerceFieldTypes, which doesn't touch this type
+ * string.
  */
 interface ContainerChildrenField {
   type: "container-children";
+  /** Page-builder array type to reference. Default: `pageBuilder`. */
+  pageBuilderTypeName?: string;
 }
 /**
  * Named-slot field: a dialog-less child component embedded under a fixed

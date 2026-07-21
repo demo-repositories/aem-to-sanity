@@ -105,7 +105,7 @@ AEM marks these with `cq:isContainer=true` in component definitions, but that fl
 }
 ```
 
-- **Schema side:** `migrate:schema` appends `defineField({ name: childrenField, title: "Items", type: "pageBuilder" })` to each listed component so the palette inside the container matches the top-level page builder. Name collisions with a dialog-declared field skip the append (dialog field wins).
+- **Schema side:** `migrate:schema` appends `defineField({ name: childrenField, title: "Items", type: "pageBuilder" })` to each listed component so the palette inside the container matches the top-level page builder. The referenced array type follows `MIGRATION_PAGE_BUILDER_NAME` (default `pageBuilder`). Name collisions with a dialog-declared field skip the append (dialog field wins).
 - **Content side:** `aem-transform` walks the container's subtree — descending through `nt:unstructured` layout-only wrappers (AEM's responsive-grid pattern: `container_64909622 → layout: ... → nested container_64909 → ...`) — and emits each resource-type-bearing descendant as a pageBuilder block (full `_type` / `_key` / coercion pipeline) under `childrenField`. Children without `sling:resourceType` stay inline on the container so multifield handling keeps working.
 
 **`flatten: true`** (optional, default `false`) tells the transform to drop the container's own wrapper block and hoist its items into the **parent's** pageBuilder array. Designed for AEM responsive-grid containers (`proxy/content/container`) and similar pure-layout components: their wrapping block carries no authored content, and deep nesting (container-in-container-in-container) trips Sanity's hard 20-level attribute-depth limit at import time. With `flatten`, every responsive-grid layer collapses and content surfaces at a manageable depth. Use the default (`false`) for containers with meaningful dialog fields you want preserved (accordions, expanders).
@@ -231,7 +231,7 @@ The page-shell `sling:resourceType` must also appear in `aem-component-paths` so
 - `pageProperties` — inline object typed against the page-shell's Sanity object, so the Studio shows the dialog fields directly on the document
 - `featuredImage` (image, lifted from `jcr:content/cq:featuredimage`)
 - `cqTemplate` (read-only / hidden string, retained for traceability)
-- `pageBuilder` (the standard page-builder array)
+- `pageBuilder` (the standard page-builder array; both the field and the array type follow `MIGRATION_PAGE_BUILDER_NAME`, default `pageBuilder` — `aem-transform` reads the same env var so the ingested content keys page blocks identically)
 
 The page-shell object itself is automatically excluded from `pageBuilder.of[]` — it belongs on `jcr:content`, not in the body, so it never appears in the "+ Add" menu.
 
