@@ -1,5 +1,20 @@
 # aem-to-sanity-content
 
+## 1.8.0
+
+### Minor Changes
+
+- [#47](https://github.com/demo-repositories/aem-to-sanity/pull/47) [`21ca802`](https://github.com/demo-repositories/aem-to-sanity/commit/21ca8024d9da8f90d4917b3749d3ca717db89b4a) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - New `MIGRATION_SLUG_STRATEGY` env var controls how each page doc's `slug.current` is derived at `aem-transform`. `segment` (default, unchanged behavior) uses the last segment of the JCR path. `path` uses the path relative to the roots-file `@base`, exactly as authored in `aem-content-roots` (e.g. `us/en/company-culture/belonging/chapters`) — for frontends that route nested pages off the full sub-path.
+
+  `aem-extract` now records that base-relative path as `relativePath` in each raw cache file (additive; old caches still load). With `MIGRATION_SLUG_STRATEGY=path`, raw files extracted before this release (and absolute roots entries outside any `@base`) fall back to the last segment with a warning — run `aem-extract --overwrite` once to capture the base-relative paths.
+
+  Pick the strategy once before the first import: switching later rewrites `slug.current` on every page (doc `_id`s are unaffected, so re-imports overwrite in place rather than orphaning), and frontend routing keyed on slugs must move in the same deploy.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - aem-to-sanity-core@1.8.0
+
 ## 1.7.0
 
 ### Patch Changes
