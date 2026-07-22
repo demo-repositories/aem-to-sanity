@@ -12,11 +12,15 @@
 #   /content/other/top       → absolute JCR path (slug = "top", the last segment)
 #
 # Relative entries may include `/` — they're joined onto `@base` verbatim. The
-# Sanity doc's `slug.current` is always the last segment of the resolved JCR
+# Sanity doc's `slug.current` defaults to the last segment of the resolved JCR
 # path, matching AEM's own page-slug semantics. So with `@base /content/uxp/us/en`,
 #   `plans/consumer/phones/experience-beyond-plan`
 # resolves to `/content/uxp/us/en/plans/consumer/phones/experience-beyond-plan`
 # with `slug: experience-beyond-plan`.
+#
+# Set MIGRATION_SLUG_STRATEGY=path (see .env.example) to instead use the
+# base-relative path exactly as authored here as the slug:
+#   `slug: plans/consumer/phones/experience-beyond-plan`.
 #
 # Multiple @base sections are allowed — each @base applies until the next one.
 #

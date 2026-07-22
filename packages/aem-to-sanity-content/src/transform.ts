@@ -60,6 +60,14 @@ interface NormalizedRegistryEntry {
 interface RawFile {
   jcrPath: string;
   slug?: string;
+  /**
+   * Path relative to the roots-file `@base`, exactly as authored in
+   * `aem-content-roots` (e.g. `us/en/company-culture/belonging`). Written by
+   * `aem-extract`; absent on caches extracted before it existed and on
+   * absolute roots entries outside any `@base`. Used as `slug.current` when
+   * `MIGRATION_SLUG_STRATEGY=path`.
+   */
+  relativePath?: string;
   fetchedAt: string;
   tree: AemNode;
 }
@@ -404,6 +412,34 @@ function getStripPrefixes(): string[] {
     .filter((s) => s.length > 0 && s.startsWith("/"))
     .sort((a, b) => b.length - a.length);
   return cachedStripPrefixes;
+}
+
+/**
+ * How each page doc's `slug.current` is derived, from
+ * `MIGRATION_SLUG_STRATEGY`:
+ *
+ *   - `segment` (default) — last segment of the JCR path (`chapters`),
+ *     matching AEM's own page-slug semantics.
+ *   - `path` — the path relative to the roots-file `@base`, exactly as
+ *     authored in `aem-content-roots` (`us/en/company-culture/belonging/
+ *     chapters`). Falls back to `segment` for raw files without a
+ *     `relativePath` (pre-capture caches, absolute entries outside any
+ *     `@base`) — re-run `aem-extract --overwrite` to capture it.
+ *
+ * Like `MIGRATION_DOC_ID_PREFIX_STRIP`, this is a set-once knob: switching
+ * strategy between runs rewrites `slug.current` on every page doc. Doc
+ * `_id`s are unaffected, so re-imports overwrite in place rather than
+ * orphaning — but any frontend routing keyed on slugs must move in the same
+ * deploy.
+ */
+type SlugStrategy = "segment" | "path";
+function resolveSlugStrategy(env: NodeJS.ProcessEnv): SlugStrategy {
+  const raw = (env.MIGRATION_SLUG_STRATEGY ?? "segment").trim();
+  if (raw === "segment" || raw === "path") return raw;
+  console.error(
+    `MIGRATION_SLUG_STRATEGY must be "segment" or "path", got ${JSON.stringify(raw)}`,
+  );
+  process.exit(2);
 }
 
 function stripPrefix(jcrPath: string, prefixes: string[]): string {
@@ -1512,6 +1548,11 @@ function main(): void {
     );
   }
 
+  const slugStrategy = resolveSlugStrategy(process.env);
+  if (slugStrategy !== "segment") {
+    console.error(`[transform] slug strategy: ${slugStrategy} (MIGRATION_SLUG_STRATEGY)`);
+  }
+
   const registry = loadRegistry(registryFile);
   const contentDir = aemCacheContentRoot(outputDir);
   const cleanDir = join(outputDir, "cache", "clean");
@@ -1586,6 +1627,7 @@ function main(): void {
   const audit = createAudit();
   let pagesWritten = 0;
   let blocksEmitted = 0;
+  let missingRelativePath = 0;
 
   for (const { absPath, relPath } of rawFiles) {
     let raw: RawFile;
@@ -1600,7 +1642,12 @@ function main(): void {
     if (jcrPath.startsWith("/content/cq:tags")) {
       continue;
     }
-    const currentSlug = slug ?? jcrPath.split("/").filter(Boolean).pop() ?? jcrPath;
+    const segmentSlug = slug ?? jcrPath.split("/").filter(Boolean).pop() ?? jcrPath;
+    let currentSlug = segmentSlug;
+    if (slugStrategy === "path") {
+      if (raw.relativePath) currentSlug = raw.relativePath;
+      else missingRelativePath++;
+    }
 
     const ctx: TransformContext = {
       visited: new WeakSet(),
@@ -1683,6 +1730,14 @@ function main(): void {
     );
     pagesWritten++;
     blocksEmitted += pageBuilder.length;
+  }
+
+  if (missingRelativePath > 0) {
+    console.error(
+      `[transform] ${missingRelativePath} page(s) had no relativePath in the raw cache — slug fell back to the last path segment. ` +
+        `Raw files predate slug-path capture or came from absolute roots entries outside any @base; ` +
+        `re-run aem-extract --overwrite to record base-relative paths.`,
+    );
   }
 
   const report = audit.report() as {
