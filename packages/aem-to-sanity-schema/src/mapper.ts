@@ -183,6 +183,15 @@ interface NumberField {
 interface BooleanField {
   type: "boolean";
   initialValue?: boolean;
+  /**
+   * Custom constant the checkbox persists when checked (its `value` attr),
+   * when it isn't the literal `"true"` — e.g. a link-target checkbox that
+   * stores `"_blank"`. Carried into the content registry so `aem-transform`
+   * can coerce the authored constant to `true`.
+   */
+  checkedValue?: string;
+  /** Custom constant persisted when unchecked (`uncheckedValue` attr, e.g. `"_self"`). */
+  uncheckedValue?: string;
 }
 interface DateField {
   type: "date" | "datetime";
@@ -313,6 +322,14 @@ export interface SchemaFieldInfo {
   name: string;
   type: string;
   itemFields?: SchemaFieldInfo[];
+  /**
+   * Boolean fields only: custom constants the AEM checkbox persists when
+   * checked / unchecked (`value` / `uncheckedValue` attrs), recorded when
+   * they aren't the `"true"` / `"false"` literals the transform coerces by
+   * default — e.g. a link-target checkbox storing `"_blank"` / `"_self"`.
+   */
+  checkedValue?: string;
+  uncheckedValue?: string;
 }
 
 export function describeSchemaFields(
@@ -322,6 +339,10 @@ export function describeSchemaFields(
     const info: SchemaFieldInfo = { name: f.name, type: f.type };
     if (f.type === "array-of-object" && f.itemFields?.length) {
       info.itemFields = describeSchemaFields(f.itemFields);
+    }
+    if (f.type === "boolean") {
+      if (f.checkedValue !== undefined) info.checkedValue = f.checkedValue;
+      if (f.uncheckedValue !== undefined) info.uncheckedValue = f.uncheckedValue;
     }
     return info;
   });
@@ -748,12 +769,16 @@ async function buildField(
       };
     case "boolean": {
       const defaultChecked = checkboxDefaultChecked(node);
+      const checkedValue = customBooleanConstant(node.value);
+      const uncheckedValue = customBooleanConstant(node.uncheckedValue);
       return {
         ...common,
         type: "boolean",
         ...(defaultChecked !== undefined
           ? { initialValue: defaultChecked }
           : {}),
+        ...(checkedValue !== undefined ? { checkedValue } : {}),
+        ...(uncheckedValue !== undefined ? { uncheckedValue } : {}),
       };
     }
     case "date":
@@ -935,6 +960,21 @@ function selectedItemValue(node: DialogNode): string | undefined {
  * config). Literal `true`/`"true"` → `true`; literal `false`/`"false"` →
  * `false`.
  */
+/**
+ * A checkbox/switch persists its `value` attribute when checked and its
+ * `uncheckedValue` when not. On most widgets those are `"true"` / absent —
+ * which `aem-transform` already coerces — but dialogs are free to pick any
+ * constant (a link-target checkbox stores `"_blank"` / `"_self"`). Return
+ * the constant only when it's a custom one worth recording in the registry:
+ * string, non-empty, not a boolean literal, not a Granite EL expression.
+ */
+function customBooleanConstant(attr: unknown): string | undefined {
+  if (typeof attr !== "string") return undefined;
+  const v = attr.trim();
+  if (v === "" || v === "true" || v === "false" || v.includes("${")) return undefined;
+  return v;
+}
+
 function checkboxDefaultChecked(node: DialogNode): boolean | undefined {
   const checked = node["checked"];
   if (typeof checked === "boolean") return checked;

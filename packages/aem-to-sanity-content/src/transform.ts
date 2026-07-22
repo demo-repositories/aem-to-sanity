@@ -30,6 +30,8 @@ interface RegistryFieldWire {
   name: string;
   type?: string;
   itemFields?: RegistryFieldWire[];
+  checkedValue?: string;
+  uncheckedValue?: string;
 }
 /**
  * Registry entry as written on disk. Supports three shapes for back-compat:
@@ -49,6 +51,14 @@ interface RegistryEntry {
 interface FieldTypeNode {
   type: string;
   itemFields?: Map<string, FieldTypeNode>;
+  /**
+   * Boolean fields only: custom constants the AEM checkbox persists when
+   * checked / unchecked (e.g. `"_blank"` / `"_self"` on a link-target
+   * checkbox with `value` / `uncheckedValue` attrs). Coerced to `true` /
+   * `false` alongside the `"true"` / `"false"` literals.
+   */
+  checkedValue?: string;
+  uncheckedValue?: string;
 }
 interface NormalizedRegistryEntry {
   resourceType: string;
@@ -321,6 +331,8 @@ function buildFieldTypeTree(
       // has nothing to fill in.
       node.itemFields = buildFieldTypeTree(f.itemFields, collectNames);
     }
+    if (f.checkedValue !== undefined) node.checkedValue = f.checkedValue;
+    if (f.uncheckedValue !== undefined) node.uncheckedValue = f.uncheckedValue;
     out.set(f.name, node);
   }
   return out;
@@ -795,7 +807,13 @@ function coerceFieldTypes(
     }
     if (node.type === "boolean") {
       if (typeof v !== "string") continue;
-      if (v === "true") inline[name] = true;
+      // Custom checkbox constants first (registry `checkedValue` /
+      // `uncheckedValue`, e.g. a link-target checkbox persisting
+      // `"_blank"` / `"_self"`), then the standard literals. Anything else
+      // keeps the original value per the keep-original contract.
+      if (node.checkedValue !== undefined && v === node.checkedValue) inline[name] = true;
+      else if (node.uncheckedValue !== undefined && v === node.uncheckedValue) inline[name] = false;
+      else if (v === "true") inline[name] = true;
       else if (v === "false") inline[name] = false;
       continue;
     }
