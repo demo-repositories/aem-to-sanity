@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mapDialog } from "../src/mapper.ts";
+import { describeSchemaFields, mapDialog } from "../src/mapper.ts";
 import type { DialogNode } from "aem-to-sanity-core";
 
 const noFetch = async () => {
@@ -34,7 +34,11 @@ function checkbox(
 async function mapOne(node: Record<string, unknown>) {
   const { fields } = await mapDialog(dialogWith({ field: node }), noFetch);
   assert.equal(fields.length, 1);
-  return fields[0]! as { initialValue?: boolean };
+  return fields[0]! as {
+    initialValue?: boolean;
+    checkedValue?: string;
+    uncheckedValue?: string;
+  };
 }
 
 describe("mapDialog: boolean default from `checked`", () => {
@@ -82,5 +86,41 @@ describe("mapDialog: boolean default from `checked`", () => {
         "granite/ui/components/coral/foundation/form/switch",
     });
     assert.equal(f.initialValue, undefined);
+  });
+});
+
+describe("mapDialog: custom checkbox constants (value / uncheckedValue)", () => {
+  it("omits checkedValue/uncheckedValue for the standard 'true'/'false' pair", async () => {
+    const f = await mapOne(checkbox("isSplit"));
+    assert.equal(f.checkedValue, undefined);
+    assert.equal(f.uncheckedValue, undefined);
+  });
+
+  it("records custom constants like a link-target checkbox's '_blank'/'_self'", async () => {
+    const f = await mapOne(
+      checkbox("linkTarget", { value: "_blank", uncheckedValue: "_self" }),
+    );
+    assert.equal(f.checkedValue, "_blank");
+    assert.equal(f.uncheckedValue, "_self");
+  });
+
+  it("ignores Granite EL expressions and empty strings", async () => {
+    const f = await mapOne(
+      checkbox("x", { value: "${cqDesign.target}", uncheckedValue: "" }),
+    );
+    assert.equal(f.checkedValue, undefined);
+    assert.equal(f.uncheckedValue, undefined);
+  });
+
+  it("carries the constants into describeSchemaFields (registry shape)", async () => {
+    const { fields } = await mapDialog(
+      dialogWith({
+        field: checkbox("linkTarget", { value: "_blank", uncheckedValue: "_self" }),
+      }),
+      noFetch,
+    );
+    const [info] = describeSchemaFields(fields);
+    assert.equal(info!.checkedValue, "_blank");
+    assert.equal(info!.uncheckedValue, "_self");
   });
 });

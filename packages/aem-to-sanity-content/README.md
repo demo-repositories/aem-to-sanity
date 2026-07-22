@@ -110,7 +110,7 @@ AEM's JCR is schemaless on dialog inputs — every authored value arrives in `.i
 
 - **`array-of-blocks`** (richtext) — converted to Portable Text via `@portabletext/block-tools` (parsed through `jsdom`). Decorators (`strong`, `em`, `underline`, `strike-through`, `code`), styles (`normal`, `h1`–`h4`, `blockquote`), lists (`bullet`, `number`), and `link` annotations are preserved. Keys are derived from a SHA1 of `{jcrPath}::{field}:{counter}` so re-runs produce byte-identical clean docs.
 - **`number`** — `Number(v)`; kept as-is on `NaN`.
-- **`boolean`** — `"true"` / `"false"` literal strings only; kept as-is otherwise so unrecognized values surface in Studio validation rather than being silently remapped.
+- **`boolean`** — `"true"` / `"false"` literal strings, plus custom checkbox constants recorded in the registry (`checkedValue` / `uncheckedValue` — e.g. a link-target checkbox persisting `"_blank"` / `"_self"`); kept as-is otherwise so unrecognized values surface in Studio validation rather than being silently remapped.
 - **`array-of-string`** — multi-select buttongroup values. A bare string (JCR's serialization when exactly one value is picked on a multi-value property) is wrapped into a one-item array; other shapes are kept as-is.
 - **`array-of-reference`** (AEM tagfield) — string array of tag ids (`promotion:payout/recurring-device-credits`) becomes `[{_type:"reference", _key:..., _ref:"category-..."}]` by lookup in `output/cache/categories/manifest.json` (produced by `aem-tags`). Follows `cq:movedTo` aliases. Page-level `cq:tags` on `jcr:content` are lifted onto the page doc's `tags` field via the same resolver. Tag ids not in the manifest get dropped and surfaced in `transform-report.json → unresolvedTagRefs`.
 

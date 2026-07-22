@@ -59,7 +59,7 @@ export const MAPPING: Record<string, MappingEntry> = {
   "granite/ui/components/coral/foundation/form/checkbox": {
     kind: "boolean",
     description:
-      "Checkbox → Sanity boolean. `initialValue` from the `checked` attribute (the default state), not `value` (the constant persisted when checked); omitted when `checked` is absent or a Granite EL expression (`${...}`, unresolvable offline).",
+      "Checkbox → Sanity boolean. `initialValue` from the `checked` attribute (the default state), not `value` (the constant persisted when checked); omitted when `checked` is absent or a Granite EL expression (`${...}`, unresolvable offline). Custom persisted constants (`value` / `uncheckedValue` other than `\"true\"` / `\"false\"`, e.g. a link-target checkbox storing `_blank` / `_self`) are recorded in the content registry so `aem-transform` coerces them to `true` / `false`.",
   },
   "granite/ui/components/coral/foundation/form/switch": {
     kind: "boolean",

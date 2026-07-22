@@ -9,6 +9,14 @@ export interface RegistryField {
   type: string;
   /** Nested item fields when `type === "array-of-object"`. */
   itemFields?: RegistryField[];
+  /**
+   * Boolean fields only: custom constants the AEM checkbox persists when
+   * checked / unchecked (e.g. `"_blank"` / `"_self"` on a link-target
+   * checkbox). `aem-transform` coerces these to `true` / `false`; absent on
+   * the common `"true"`-persisting checkbox.
+   */
+  checkedValue?: string;
+  uncheckedValue?: string;
 }
 
 export interface RegistryEntry {
@@ -104,18 +112,24 @@ export async function writeContentRegistry(
  * alphabetically so re-runs produce byte-identical registries — the
  * deterministic-diff invariant the rest of the pipeline relies on.
  */
-function normalizeFieldTree(
-  fields: readonly { name: string; type: string; itemFields?: readonly { name: string; type: string; itemFields?: unknown }[] }[],
-): RegistryField[] {
+interface FieldTreeInput {
+  name: string;
+  type: string;
+  itemFields?: readonly FieldTreeInput[];
+  checkedValue?: string;
+  uncheckedValue?: string;
+}
+
+function normalizeFieldTree(fields: readonly FieldTreeInput[]): RegistryField[] {
   const seen = new Map<string, RegistryField>();
   for (const f of fields) {
     if (seen.has(f.name)) continue;
     const entry: RegistryField = { name: f.name, type: f.type };
     if (f.itemFields?.length) {
-      entry.itemFields = normalizeFieldTree(
-        f.itemFields as readonly { name: string; type: string }[],
-      );
+      entry.itemFields = normalizeFieldTree(f.itemFields);
     }
+    if (f.checkedValue !== undefined) entry.checkedValue = f.checkedValue;
+    if (f.uncheckedValue !== undefined) entry.uncheckedValue = f.uncheckedValue;
     seen.set(f.name, entry);
   }
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
