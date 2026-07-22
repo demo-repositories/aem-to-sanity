@@ -1,6 +1,6 @@
 {
   "name": "aem-to-sanity-core",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Shared primitives for AEM → Sanity migration tooling: AEM fetcher, config, logger.",
   "license": "MIT",
   "type": "module",

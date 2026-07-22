@@ -1,5 +1,24 @@
 # aem-to-sanity-schema
 
+## 1.8.1
+
+### Patch Changes
+
+- [#50](https://github.com/demo-repositories/aem-to-sanity/pull/50) [`7d7b81b`](https://github.com/demo-repositories/aem-to-sanity/commit/7d7b81bf31791e4e87120d49bcc3a41c02dc1db2) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Boolean fields backed by AEM checkboxes with custom persisted constants no longer land as strings. AEM checkboxes persist their `value` attribute when checked and `uncheckedValue` when not — usually `"true"` / `"false"`, but dialogs are free to pick any constant (a link-target checkbox stores `"_blank"` / `"_self"`), which the Studio then rejected with `Expected type "Boolean", got "String"`.
+
+  `migrate:schema` now records such constants in `content-type-registry.json` as `checkedValue` / `uncheckedValue` on the field (additive; old registries still load), and `aem-transform` coerces exact matches to `true` / `false` alongside the standard `"true"` / `"false"` literals. Works at any nesting depth, including multifield items.
+
+  To pick up the fix on an existing migration: re-run `migrate:schema` (regenerates the registry with the constants), then `transform` + `import`.
+
+- [#53](https://github.com/demo-repositories/aem-to-sanity/pull/53) [`e649102`](https://github.com/demo-repositories/aem-to-sanity/commit/e6491022e6535978aecb618947c9da683cbb0fb2) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Date and datetime fields no longer fail Studio validation with `Invalid date. Must be on the format "YYYY-MM-DD"`. AEM datepickers persist whatever their `valueFormat` dialog attribute says — the standard ISO-8601-with-offset JCR date when unset, but a display-style string when set (`valueFormat="MMM DD, yyyy"` persists `"May 23, 2024"`), which Sanity's strict `date` / `datetime` types rejected.
+
+  `migrate:schema` now records the datepicker's `valueFormat` in `content-type-registry.json` (additive; old registries still load), and `aem-transform` parses authored values with it, re-emitting `YYYY-MM-DD` for `date` fields and UTC ISO for `datetime`. ISO inputs coerce even without a recorded format, and a `MMM DD, YYYY` month-name fallback covers the most common display format on registries that predate the capture. Dates parsed from ISO-with-time inputs keep the literal date part (no timezone conversion), and unparseable values keep the original so they surface in Studio validation instead of being silently remapped.
+
+  To pick up the fix on an existing migration: re-run `migrate:schema`, then `transform` + `import`.
+
+- Updated dependencies []:
+  - aem-to-sanity-core@1.8.1
+
 ## 1.8.0
 
 ### Patch Changes
