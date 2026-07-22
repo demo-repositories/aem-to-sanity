@@ -61,6 +61,25 @@ async function main(): Promise<void> {
     ? resolve(process.env.SCHEMAS_OUT_DIR)
     : undefined;
 
+  // Type-name derivation strategy. `path` (default) names types from the
+  // JCR path; `title` names them from each component's `jcr:title` (extra
+  // fetch pass, collisions get a path-derived suffix). Renaming types after
+  // content has been imported orphans the old `_type` values — pick once
+  // before the first import.
+  const typeNamingRaw = process.env.MIGRATION_TYPE_NAMING?.trim();
+  if (typeNamingRaw && typeNamingRaw !== "path" && typeNamingRaw !== "title") {
+    logger.error(
+      `MIGRATION_TYPE_NAMING="${typeNamingRaw}" is invalid — use "path" (default) or "title".`,
+    );
+    process.exit(1);
+  }
+  const typeNaming = (typeNamingRaw as "path" | "title" | undefined) ?? "path";
+  if (typeNaming === "title") {
+    logger.info(
+      `Type naming: title (MIGRATION_TYPE_NAMING) — component jcr:titles name the Sanity types; collisions fall back to path-derived suffixes.`,
+    );
+  }
+
   // Page-builder array type / page-doc field name. Also read by
   // `aem-transform` so the emitted schemas and the ingested content agree —
   // set once in the tenant .env before the first run.
@@ -202,6 +221,7 @@ async function main(): Promise<void> {
     docsOutputFile: "./docs/aem-to-sanity-mapping.md",
     continueOnAuth,
     pageBuilderName,
+    typeNaming,
     containers,
     discoveredSlots,
     authoringHints,
