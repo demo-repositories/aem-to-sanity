@@ -82,7 +82,8 @@ export const MAPPING: Record<string, MappingEntry> = {
   },
   "granite/ui/components/coral/foundation/form/datepicker": {
     kind: "date",
-    description: "Date picker → Sanity date or datetime based on `type`",
+    description:
+      "Date picker → Sanity date or datetime based on `type`. The dialog's `valueFormat` (the pattern of the string AEM persists, e.g. `MMM DD, yyyy` → `\"May 23, 2024\"`) is recorded in the content registry so `aem-transform` can parse authored values back into Sanity's `YYYY-MM-DD` / UTC-ISO shapes.",
   },
   "granite/ui/components/coral/foundation/form/pathfield": {
     kind: "pathfield",

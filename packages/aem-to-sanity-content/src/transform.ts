@@ -32,6 +32,7 @@ interface RegistryFieldWire {
   itemFields?: RegistryFieldWire[];
   checkedValue?: string;
   uncheckedValue?: string;
+  valueFormat?: string;
 }
 /**
  * Registry entry as written on disk. Supports three shapes for back-compat:
@@ -59,6 +60,14 @@ interface FieldTypeNode {
    */
   checkedValue?: string;
   uncheckedValue?: string;
+  /**
+   * Date / datetime fields only: the AEM datepicker's `valueFormat` — the
+   * moment-style pattern of the string persisted to JCR (e.g. `"MMM DD,
+   * yyyy"` → `"May 23, 2024"`). Used to parse authored values back into
+   * Sanity's `YYYY-MM-DD` / UTC-ISO shapes; absent when the dialog stores
+   * the standard ISO-8601 JCR date.
+   */
+  valueFormat?: string;
 }
 interface NormalizedRegistryEntry {
   resourceType: string;
@@ -333,6 +342,7 @@ function buildFieldTypeTree(
     }
     if (f.checkedValue !== undefined) node.checkedValue = f.checkedValue;
     if (f.uncheckedValue !== undefined) node.uncheckedValue = f.uncheckedValue;
+    if (f.valueFormat !== undefined) node.valueFormat = f.valueFormat;
     out.set(f.name, node);
   }
   return out;
@@ -766,6 +776,139 @@ function htmlStringToPortableText(
   }
 }
 
+const MONTH_INDEX: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+interface DateParts {
+  y: number;
+  mo: number;
+  d: number;
+  h: number;
+  mi: number;
+  s: number;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Parse an authored JCR date string against the datepicker's moment-style
+ * `valueFormat` pattern (recorded in the registry by `migrate:schema`).
+ * Supports the token vocabulary AEM dialogs actually use — year (`YYYY` /
+ * `yyyy`), month (`MMMM` / `MMM` names, `MM` / `M` digits), day (`DD` /
+ * `dd` / `D`), time (`HH`, `mm`, `ss`) — everything else in the pattern is
+ * matched literally. Returns `null` on any mismatch so the caller keeps the
+ * original value. Month names resolve via English abbreviations (JCR
+ * persists whatever locale the author instance ran; non-English values
+ * fall through to keep-original and surface in Studio validation).
+ */
+function parseWithValueFormat(value: string, fmt: string): DateParts | null {
+  const TOKENS = /YYYY|yyyy|MMMM|MMM|MM|DD|dd|HH|mm|ss|M|D/g;
+  let pattern = "^";
+  const keys: string[] = [];
+  let last = 0;
+  for (const m of fmt.matchAll(TOKENS)) {
+    pattern += escapeRegExp(fmt.slice(last, m.index));
+    const t = m[0];
+    if (t === "YYYY" || t === "yyyy") {
+      pattern += "(\\d{4})";
+      keys.push("y");
+    } else if (t === "MMMM" || t === "MMM") {
+      pattern += "([A-Za-z.]+)";
+      keys.push("monthName");
+    } else if (t === "MM" || t === "M") {
+      pattern += "(\\d{1,2})";
+      keys.push("mo");
+    } else if (t === "DD" || t === "dd" || t === "D") {
+      pattern += "(\\d{1,2})";
+      keys.push("d");
+    } else if (t === "HH") {
+      pattern += "(\\d{1,2})";
+      keys.push("h");
+    } else if (t === "mm") {
+      pattern += "(\\d{2})";
+      keys.push("mi");
+    } else {
+      pattern += "(\\d{2})";
+      keys.push("s");
+    }
+    last = m.index + t.length;
+  }
+  pattern += escapeRegExp(fmt.slice(last)) + "$";
+  const match = value.trim().match(new RegExp(pattern));
+  if (!match) return null;
+  const parts: DateParts = { y: NaN, mo: NaN, d: NaN, h: 0, mi: 0, s: 0 };
+  keys.forEach((k, i) => {
+    const raw = match[i + 1]!;
+    if (k === "monthName") {
+      parts.mo = MONTH_INDEX[raw.toLowerCase().replace(/\./g, "").slice(0, 3)] ?? NaN;
+      return;
+    }
+    const n = Number(raw);
+    if (k === "y") parts.y = n;
+    else if (k === "mo") parts.mo = n;
+    else if (k === "d") parts.d = n;
+    else if (k === "h") parts.h = n;
+    else if (k === "mi") parts.mi = n;
+    else parts.s = n;
+  });
+  if (
+    !Number.isFinite(parts.y) ||
+    !(parts.mo >= 1 && parts.mo <= 12) ||
+    !(parts.d >= 1 && parts.d <= 31)
+  ) {
+    return null;
+  }
+  return parts;
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/**
+ * Coerce an authored JCR date string into the shape Sanity's `date` /
+ * `datetime` types validate:
+ *
+ *   - `date` → `YYYY-MM-DD`. For ISO-with-time inputs the **literal** date
+ *     part is kept (no timezone conversion — the authored calendar date is
+ *     the intent, and shifting it across the UTC boundary would move e.g.
+ *     a midnight-EST date to the previous day).
+ *   - `datetime` → UTC ISO via `Date.toISOString()` for fully-ISO inputs;
+ *     format-parsed values are assembled as UTC (JCR strings persisted via
+ *     a custom `valueFormat` carry no offset to convert from).
+ *
+ * Resolution order: ISO / ISO-prefixed (the JCR standard when no
+ * `valueFormat` is set — also covers legacy registries), then the field's
+ * recorded `valueFormat`, then a `MMM DD, YYYY` month-name fallback for
+ * old registries that predate `valueFormat` capture. Returns `null` when
+ * nothing matches so the caller keeps the original value per the
+ * keep-original-on-failure contract.
+ */
+function coerceDateString(
+  value: string,
+  target: "date" | "datetime",
+  valueFormat: string | undefined,
+): string | null {
+  const v = value.trim();
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})(T\S+)?$/);
+  if (iso) {
+    if (target === "date") return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    if (iso[4]) {
+      const parsed = new Date(v);
+      return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+    }
+    return `${iso[1]}-${iso[2]}-${iso[3]}T00:00:00.000Z`;
+  }
+  let parts = valueFormat ? parseWithValueFormat(v, valueFormat) : null;
+  if (!parts) parts = parseWithValueFormat(v, "MMM DD, YYYY");
+  if (!parts) return null;
+  const date = `${String(parts.y).padStart(4, "0")}-${pad2(parts.mo)}-${pad2(parts.d)}`;
+  if (target === "date") return date;
+  return `${date}T${pad2(parts.h)}:${pad2(parts.mi)}:${pad2(parts.s)}.000Z`;
+}
+
 /**
  * In-place coercion: for every field the registry declares a type on,
  * coerce the ingested AEM value to match that type. Walks nested
@@ -815,6 +958,17 @@ function coerceFieldTypes(
       else if (node.uncheckedValue !== undefined && v === node.uncheckedValue) inline[name] = false;
       else if (v === "true") inline[name] = true;
       else if (v === "false") inline[name] = false;
+      continue;
+    }
+    if (node.type === "date" || node.type === "datetime") {
+      // AEM datepickers persist whatever their `valueFormat` says — the
+      // standard ISO-8601-with-offset JCR date when unset, a display-style
+      // string like "May 23, 2024" when set. Sanity's date/datetime types
+      // validate strict shapes, so parse and re-emit; unparseable values
+      // keep the original per the keep-original contract.
+      if (typeof v !== "string") continue;
+      const coerced = coerceDateString(v, node.type, node.valueFormat);
+      if (coerced !== null) inline[name] = coerced;
       continue;
     }
     if (node.type === "array-of-string") {

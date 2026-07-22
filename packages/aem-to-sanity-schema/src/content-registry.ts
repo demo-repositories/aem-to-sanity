@@ -17,6 +17,13 @@ export interface RegistryField {
    */
   checkedValue?: string;
   uncheckedValue?: string;
+  /**
+   * Date / datetime fields only: the AEM datepicker's `valueFormat` — the
+   * moment-style pattern of the string persisted to JCR (e.g. `"MMM DD,
+   * yyyy"` → `"May 23, 2024"`). `aem-transform` parses authored values with
+   * it; absent when the dialog stores the standard ISO-8601 JCR date.
+   */
+  valueFormat?: string;
 }
 
 export interface RegistryEntry {
@@ -118,6 +125,7 @@ interface FieldTreeInput {
   itemFields?: readonly FieldTreeInput[];
   checkedValue?: string;
   uncheckedValue?: string;
+  valueFormat?: string;
 }
 
 function normalizeFieldTree(fields: readonly FieldTreeInput[]): RegistryField[] {
@@ -130,6 +138,7 @@ function normalizeFieldTree(fields: readonly FieldTreeInput[]): RegistryField[] 
     }
     if (f.checkedValue !== undefined) entry.checkedValue = f.checkedValue;
     if (f.uncheckedValue !== undefined) entry.uncheckedValue = f.uncheckedValue;
+    if (f.valueFormat !== undefined) entry.valueFormat = f.valueFormat;
     seen.set(f.name, entry);
   }
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
