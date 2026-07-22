@@ -195,6 +195,15 @@ interface BooleanField {
 }
 interface DateField {
   type: "date" | "datetime";
+  /**
+   * The datepicker's `valueFormat` attr — the moment-style pattern of the
+   * string AEM persists to JCR (e.g. `"MMM DD, yyyy"` stores `"May 23,
+   * 2024"`). Absent when the dialog doesn't set one, in which case JCR
+   * stores the standard ISO-8601-with-offset date. Carried into the content
+   * registry so `aem-transform` can parse authored values back into
+   * Sanity's `YYYY-MM-DD` / UTC-ISO shapes deterministically.
+   */
+  valueFormat?: string;
 }
 interface ImageField {
   type: "image";
@@ -330,6 +339,13 @@ export interface SchemaFieldInfo {
    */
   checkedValue?: string;
   uncheckedValue?: string;
+  /**
+   * Date / datetime fields only: the AEM datepicker's `valueFormat` — the
+   * moment-style pattern of the string persisted to JCR (e.g. `"MMM DD,
+   * yyyy"` → `"May 23, 2024"`). Absent when the dialog stores the standard
+   * ISO-8601 JCR date.
+   */
+  valueFormat?: string;
 }
 
 export function describeSchemaFields(
@@ -343,6 +359,9 @@ export function describeSchemaFields(
     if (f.type === "boolean") {
       if (f.checkedValue !== undefined) info.checkedValue = f.checkedValue;
       if (f.uncheckedValue !== undefined) info.uncheckedValue = f.uncheckedValue;
+    }
+    if ((f.type === "date" || f.type === "datetime") && f.valueFormat !== undefined) {
+      info.valueFormat = f.valueFormat;
     }
     return info;
   });
@@ -781,13 +800,22 @@ async function buildField(
         ...(uncheckedValue !== undefined ? { uncheckedValue } : {}),
       };
     }
-    case "date":
+    case "date": {
+      const valueFormat = datepickerValueFormat(node);
       return {
         ...common,
         type: stringAttr(node.type) === "datetime" ? "datetime" : "date",
+        ...(valueFormat !== undefined ? { valueFormat } : {}),
       };
-    case "datetime":
-      return { ...common, type: "datetime" };
+    }
+    case "datetime": {
+      const valueFormat = datepickerValueFormat(node);
+      return {
+        ...common,
+        type: "datetime",
+        ...(valueFormat !== undefined ? { valueFormat } : {}),
+      };
+    }
     case "richtext":
       return { ...common, type: "array-of-blocks" };
     case "select":
@@ -973,6 +1001,19 @@ function customBooleanConstant(attr: unknown): string | undefined {
   const v = attr.trim();
   if (v === "" || v === "true" || v === "false" || v.includes("${")) return undefined;
   return v;
+}
+
+/**
+ * A datepicker's `valueFormat` controls the string persisted to JCR. When
+ * unset, AEM stores the standard ISO-8601-with-offset JCR date — but dialogs
+ * frequently set a display-style pattern, which AEM then persists verbatim
+ * (`valueFormat="MMM DD, yyyy"` stores `"May 23, 2024"`). Skip Granite EL
+ * expressions (unresolvable offline) and empty strings.
+ */
+function datepickerValueFormat(node: DialogNode): string | undefined {
+  const v = stringAttr(node.valueFormat);
+  if (!v || !v.trim() || v.includes("${")) return undefined;
+  return v.trim();
 }
 
 function checkboxDefaultChecked(node: DialogNode): boolean | undefined {
