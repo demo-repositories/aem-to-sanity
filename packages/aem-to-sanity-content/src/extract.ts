@@ -27,10 +27,18 @@ import {
 // onto `@base /content/uxp/us/en` yields jcrPath
 // `/content/uxp/us/en/plans/consumer/phones/experience-beyond-plan` with
 // slug `experience-beyond-plan` — matching AEM's own page-slug semantics.
+//
+// Each entry also records `relativePath` — the path relative to its `@base`,
+// exactly as authored in the roots file (`plans/consumer/phones/...`).
+// Absolute entries get one too when they sit under the active `@base`.
+// `aem-transform` uses it as `slug.current` when
+// `MIGRATION_SLUG_STRATEGY=path`, so nested pages keep their full sub-path
+// in the slug instead of collapsing to the last segment.
 
 interface RootEntry {
   jcrPath: string;
   slug?: string;
+  relativePath?: string;
 }
 
 function parseRoots(raw: string): RootEntry[] {
@@ -49,7 +57,9 @@ function parseRoots(raw: string): RootEntry[] {
     }
     if (line.startsWith("/")) {
       const jcrPath = line.replace(/\/+$/, "");
-      out.push({ jcrPath, slug: lastSegment(jcrPath) });
+      const relativePath =
+        base && jcrPath.startsWith(`${base}/`) ? jcrPath.slice(base.length + 1) : undefined;
+      out.push({ jcrPath, slug: lastSegment(jcrPath), relativePath });
       continue;
     }
     if (!base) {
@@ -67,7 +77,7 @@ function parseRoots(raw: string): RootEntry[] {
       throw new Error(`Empty relative entry under @base ${JSON.stringify(base)}.`);
     }
     const jcrPath = `${base}/${cleaned}`;
-    out.push({ jcrPath, slug: lastSegment(jcrPath) });
+    out.push({ jcrPath, slug: lastSegment(jcrPath), relativePath: cleaned });
   }
   return out;
 }
@@ -173,6 +183,7 @@ async function main(): Promise<void> {
           {
             jcrPath: entry.jcrPath,
             slug: entry.slug,
+            relativePath: entry.relativePath,
             fetchedAt: new Date().toISOString(),
             tree,
           },

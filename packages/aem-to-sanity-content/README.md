@@ -51,6 +51,9 @@ SANITY_ML_LINK_TOKEN=...                      # personal auth token for /assets/
 # MIGRATION_PAGE_BUILDER_NAME=pageBuilder     # field page blocks land under on emitted docs.
                                               # Must match the value migrate:schema ran with —
                                               # set once in the tenant .env, leave alone.
+# MIGRATION_SLUG_STRATEGY=path                # slug.current per page doc: "segment" (default)
+                                              # = last JCR path segment; "path" = base-relative
+                                              # path as authored in aem-content-roots. Pick once.
 ```
 
 ## Roots files
@@ -61,8 +64,11 @@ SANITY_ML_LINK_TOKEN=...                      # personal auth token for /assets/
 @base /content/site/us/en
 home
 about-us
+plans/consumer/phones/foo         # nested relatives share the @base
 /content/other-site/top           # absolute path also fine
 ```
+
+Each page doc's `slug.current` is the last segment of the resolved JCR path (`foo`), matching AEM's page-slug semantics. With `MIGRATION_SLUG_STRATEGY=path` it's the base-relative path exactly as authored above (`plans/consumer/phones/foo`) — for frontends that route nested pages off the full sub-path.
 
 `aem-tag-roots` — AEM tag namespaces to migrate, one per line. Same format. Only namespaces (or subtrees) listed here are walked — there's no canonical "always skip" set in AEM, so sample-content namespaces like `wknd` are simply absent from this file.
 
