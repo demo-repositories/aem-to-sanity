@@ -86,6 +86,45 @@ export function displayTitleFromAemComponentJcrTitle(raw: string): string {
 }
 
 /**
+ * How `resolveSanityTypeNames` derives each component's base name.
+ *
+ * - `"path"` (default): from the JCR path segments after `components/`
+ *   (`proxy/content/cardcontainer` → `proxyContentCardcontainer`). Paths are
+ *   unique by construction, so names are maximally stable.
+ * - `"title"`: from the component's `jcr:title` (`"Card Container"` →
+ *   `cardContainer`), falling back to the path-derived name when the title
+ *   is missing/empty. Titles are NOT unique — collisions keep the
+ *   first-in-file-order winner clean and suffix later ones with their
+ *   path-derived name. Titles are also mutable in AEM: renaming a
+ *   component after content has been imported renames its Sanity type and
+ *   orphans the previously ingested `_type` values. Opt-in via
+ *   `MIGRATION_TYPE_NAMING=title`; set before the first import and treat a
+ *   later change like a full re-migration.
+ */
+export type TypeNamingStrategy = "path" | "title";
+
+export interface ResolveSanityTypeNamesOptions {
+  strategy?: TypeNamingStrategy;
+  /**
+   * `componentPath → jcr:title`, required for the `"title"` strategy (the
+   * caller pre-fetches component nodes to know titles). Paths absent from
+   * the map fall back to path-derived names.
+   */
+  titleByPath?: ReadonlyMap<string, string>;
+  /**
+   * Called once per path whose final name deviated from the strategy's
+   * clean derivation (missing title, title collision, reserved name).
+   * Lets the CLI surface every fallback so operators aren't surprised by
+   * the emitted names.
+   */
+  onFallback?: (path: string, reason: string, finalName: string) => void;
+}
+
+function aemPrefix(name: string): string {
+  return "aem" + name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
  * Resolve every AEM component path to a final, collision-free Sanity type
  * name. Returns a `Map<path, typeName>` preserving the input paths verbatim
  * as keys.
@@ -98,26 +137,70 @@ export function displayTitleFromAemComponentJcrTitle(raw: string): string {
  * those artifacts in lockstep — otherwise a later rename leaves ingested
  * data orphaned as "unknown type" in the Studio.
  *
- * Resolution rules:
+ * Resolution rules (`"path"` strategy, the default):
  *   1. Base name: `componentPathToTypeName(path)`.
  *   2. If the base collides with a Sanity built-in (`RESERVED_SANITY_TYPE_NAMES`)
  *      or with a name already assigned to another path, prefix with `aem`.
  *   3. If that's still taken, append a numeric suffix (`aemImage2`, etc.).
+ *
+ * Resolution rules (`"title"` strategy):
+ *   1. Base name: `toCamelCase` of the component's `jcr:title` (with the
+ *      redundant trailing " component" stripped, same as Studio labels);
+ *      missing/empty title falls back to the path-derived base.
+ *   2. Reserved built-in → `aem` prefix (same rule as paths).
+ *   3. Name already assigned to another path → append the PascalCased
+ *      path-derived name (`image` + `ProxyContentImage` →
+ *      `imageProxyContentImage`), so the suffix itself is meaningful and
+ *      deterministic. When the base already IS the path-derived name (title
+ *      was missing), the `aem` prefix applies instead — no doubled segments.
+ *   4. Still taken (identical title AND identical path tail) → numeric
+ *      suffix, as a last resort.
  *
  * Iteration order is the input order — earlier paths win ties, which gives
  * deterministic output for a given `aem-component-paths` list.
  */
 export function resolveSanityTypeNames(
   componentPaths: readonly string[],
+  opts: ResolveSanityTypeNamesOptions = {},
 ): Map<string, string> {
+  const { strategy = "path", titleByPath, onFallback } = opts;
   const assigned = new Map<string, string>();
   const taken = new Set<string>();
 
   for (const path of componentPaths) {
-    const base = componentPathToTypeName(path);
+    const pathBase = componentPathToTypeName(path);
+    let base = pathBase;
+    let fallbackReason: string | undefined;
+
+    if (strategy === "title") {
+      const rawTitle = titleByPath?.get(path)?.trim();
+      const titleBase = rawTitle
+        ? toCamelCase(displayTitleFromAemComponentJcrTitle(rawTitle))
+        : "";
+      if (titleBase) {
+        base = titleBase;
+      } else {
+        fallbackReason = "no usable jcr:title — using the path-derived name";
+      }
+    }
+
     let name = base;
-    if (RESERVED_SANITY_TYPE_NAMES.has(name) || taken.has(name)) {
-      name = "aem" + base.charAt(0).toUpperCase() + base.slice(1);
+    if (strategy === "path") {
+      if (RESERVED_SANITY_TYPE_NAMES.has(name) || taken.has(name)) {
+        name = aemPrefix(base);
+      }
+    } else {
+      if (RESERVED_SANITY_TYPE_NAMES.has(name)) {
+        name = aemPrefix(base);
+        fallbackReason ??= `"${base}" is a built-in Sanity type — prefixed with "aem"`;
+      }
+      if (taken.has(name)) {
+        name =
+          base !== pathBase
+            ? base + pathBase.charAt(0).toUpperCase() + pathBase.slice(1)
+            : aemPrefix(base);
+        fallbackReason = `title-derived name already taken by an earlier component — disambiguated with the path-derived suffix`;
+      }
     }
     if (taken.has(name)) {
       const root = name;
@@ -125,9 +208,12 @@ export function resolveSanityTypeNames(
       do {
         name = `${root}${suffix++}`;
       } while (taken.has(name));
+      fallbackReason ??= "name collision — numeric suffix appended";
     }
+
     assigned.set(path, name);
     taken.add(name);
+    if (fallbackReason) onFallback?.(path, fallbackReason, name);
   }
 
   return assigned;

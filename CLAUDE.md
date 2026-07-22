@@ -72,6 +72,8 @@ Long paths (>80 chars after sanitization) fall back to `{first-60-chars}-{sha1-1
 
 `/apps/.../image` would collide with Sanity's built-in `image` type. `resolveSanityTypeNames` (in `packages/aem-to-sanity-schema/src/naming.ts`) applies an `aem` prefix at emission time so the on-disk schema, the content registry, `pageBuilder.of[]`, and ingested document `_type` values all agree — no Studio-side rename, no orphaned content. Don't reintroduce per-import renames in `sanitize.ts`; it's a defense-in-depth pass for hand-authored schemas only.
 
+Type names derive from the JCR path by default; `MIGRATION_TYPE_NAMING=title` switches to camelCased `jcr:title` (path fallback on missing titles, path-derived suffix on title collisions — `migrate:schema` pre-fetches component nodes to know titles before names resolve). Strategy is a set-once-before-first-import knob: switching it (or renaming a `jcr:title` in AEM) renames emitted types and orphans ingested `_type` values.
+
 ## Dialog resolution via `sling:resourceSuperType`
 
 `migrate:schema` walks the `sling:resourceSuperType` chain when a listed component has no `cq:dialog` of its own — same lookup AEM runs at request time. Logic lives in `packages/aem-to-sanity-core/src/aem/dialog-resolution.ts` (`resolveDialogViaSuperType`); the schema migrator (`api.ts:processOne`) and the audit step (`audit.ts`) both call it, and so does the standalone `scripts/aem-probe.ts` so what the probe shows is exactly what the migrator will see.

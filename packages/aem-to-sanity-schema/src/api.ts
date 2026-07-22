@@ -27,6 +27,7 @@ import {
   resolveSanityTypeNames,
   toCamelCase,
   toTitleCase,
+  type TypeNamingStrategy,
 } from "./naming.ts";
 import { Report } from "./report.ts";
 import { auditUnmappedTypes } from "./audit.ts";
@@ -74,6 +75,19 @@ export interface MigrateSchemasOptions {
    * Default: `"pageBuilder"`.
    */
   pageBuilderName?: string;
+  /**
+   * How component type names (and therefore schema file names, registry
+   * `sanityType`s, and ingested `_type`s) are derived. `"path"` (default)
+   * uses the JCR path segments after `components/`; `"title"` uses the
+   * component's `jcr:title` camelCased (`"Card Container"` →
+   * `cardContainer`), falling back to the path-derived name when the title
+   * is missing and disambiguating title collisions with a path-derived
+   * suffix. `"title"` requires an extra fetch pass to read titles before
+   * names are resolved. See {@link TypeNamingStrategy} for the stability
+   * caveats — changing this (or a component's title in AEM) after content
+   * has been imported orphans previously ingested `_type` values.
+   */
+  typeNaming?: TypeNamingStrategy;
   /**
    * Emit a `content-type-registry.json` alongside the schemas, mapping AEM
    * `sling:resourceType` → Sanity type + field names. Consumed by the content
@@ -211,12 +225,57 @@ export async function migrateSchemas(
   const authCircuitBreakerThreshold = opts.authCircuitBreakerThreshold ?? 5;
   const schemasDir = opts.schemasDir ?? join(outputDir, "schemas");
   const pageBuilderName = opts.pageBuilderName ?? "pageBuilder";
+  const typeNaming = opts.typeNaming ?? "path";
   const containers = opts.containers ?? new Map();
   const effectiveJcrPrefix = opts.jcrPrefix ?? "/apps/";
   const discoveredSlots = opts.discoveredSlots ?? new Map();
   const authoringHints = opts.authoringHints ?? new Map();
 
   const report = new Report();
+
+  // Title-based naming needs each component's `jcr:title` BEFORE names can
+  // be resolved, and names must be resolved before any schema is emitted.
+  // Pre-fetch the component nodes concurrently and hand them to processOne
+  // so the main pass doesn't fetch the same node twice. Pre-pass failures
+  // are non-fatal here: the affected path just falls back to path-derived
+  // naming, and the main pass re-fetches and reports the failure through
+  // the normal per-component error handling. A circuit breaker stops the
+  // pre-pass when nothing succeeds so wrong credentials don't hammer AEM
+  // with a doomed second round of requests.
+  const prefetchedNodes = new Map<string, DialogNode>();
+  if (typeNaming === "title") {
+    let preAuthFailures = 0;
+    let preSuccesses = 0;
+    await runWithConcurrency(
+      componentPaths,
+      async (p) => {
+        try {
+          prefetchedNodes.set(p, await fetcher(p));
+          return { ok: true, auth: false };
+        } catch (err) {
+          return {
+            ok: false,
+            auth: err instanceof AemFetchError && err.kind === "auth",
+          };
+        }
+      },
+      concurrency,
+      (r) => {
+        if (r.ok) preSuccesses++;
+        else if (r.auth) preAuthFailures++;
+        return {
+          shouldAbort:
+            preSuccesses === 0 &&
+            preAuthFailures >= (opts.authCircuitBreakerThreshold ?? 5),
+        };
+      },
+    );
+  }
+  const titleByPath = new Map<string, string>();
+  for (const [p, node] of prefetchedNodes) {
+    const t = node["jcr:title"];
+    if (typeof t === "string" && t.trim()) titleByPath.set(p, t.trim());
+  }
 
   // Resolve every component path to its final Sanity type name up front. This
   // is the single source of truth for naming across every downstream artifact
@@ -225,7 +284,12 @@ export async function migrateSchemas(
   // `sanitizeSchemaTypes` to rename reserved names at import time — is what
   // prevents ingested data from showing up as "Untitled" with an unknown-type
   // warning because its `_type` no longer matches the live schema.
-  const typeNameByPath = resolveSanityTypeNames(componentPaths);
+  const typeNameByPath = resolveSanityTypeNames(componentPaths, {
+    strategy: typeNaming,
+    titleByPath,
+    onFallback: (path, reason, finalName) =>
+      logger?.info(`type-naming: ${path} → "${finalName}" (${reason})`),
+  });
 
   // The page-builder name doubles as a Sanity type name and a schema file
   // name, so it must not shadow a built-in type or a resolved component —
@@ -271,6 +335,7 @@ export async function migrateSchemas(
         regenerateCommand,
         typeName: typeNameByPath.get(p)!,
         pageBuilderName,
+        prefetchedComponentNode: prefetchedNodes.get(p),
         containerEntry: containers.get(rt),
         slotMap: discoveredSlots.get(rt),
         hintKeys: authoringHints.get(rt),
@@ -443,6 +508,11 @@ interface ProcessOneDeps {
   typeName: string;
   /** Page-builder array type name container drop-zones reference. */
   pageBuilderName: string;
+  /**
+   * Component node already fetched by the title-naming pre-pass. When set,
+   * processOne reuses it instead of re-fetching `componentPath`.
+   */
+  prefetchedComponentNode?: DialogNode;
   /** Container behavior opted in for this component (via `containers` config). */
   containerEntry?: { childrenField: string };
   /** Discovered named-slot keys for this resource type → set of child resource types. */
@@ -507,7 +577,8 @@ async function processOne(
   // came from supertype X" remain inspectable later).
   let supertypeChain: string[] | undefined;
   try {
-    const componentNode = await fetcher(componentPath);
+    const componentNode =
+      deps.prefetchedComponentNode ?? (await fetcher(componentPath));
     const rawTitle = componentNode["jcr:title"];
     if (typeof rawTitle === "string" && rawTitle.trim()) {
       schemaTitle = rawTitle.trim();
