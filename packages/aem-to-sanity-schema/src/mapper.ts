@@ -873,6 +873,21 @@ async function buildField(
       return { ...common, type: "string" };
     }
     case "multifield": {
+      const itemFields = await extractMultifieldItems(node, ctx);
+      if (itemFields.length === 0) {
+        // Multifield whose inner field(s) resolve to nothing authorable.
+        // AEM core components use this as dialog bookkeeping — e.g. the
+        // list editor's `./pages` multifield wraps a single `form/hidden`
+        // input mirroring the real `./static` composite. An array of a
+        // zero-field object is invalid in Sanity; skip the field.
+        ctx.unmapped.push({
+          name: nodeKey,
+          resourceType: node["sling:resourceType"] ?? "(none)",
+          reason: "hidden",
+          detail: "multifield with no mappable inner fields",
+        });
+        return undefined;
+      }
       const itemTitle =
         stringAttr(node.fieldLabel) ??
         multifieldInnerFieldJcrTitle(node) ??
@@ -880,7 +895,7 @@ async function buildField(
       return {
         ...common,
         type: "array-of-object",
-        itemFields: await extractMultifieldItems(node, ctx),
+        itemFields,
         ...(itemTitle ? { itemTitle } : {}),
       };
     }
