@@ -113,11 +113,20 @@ export interface ResolveSanityTypeNamesOptions {
   titleByPath?: ReadonlyMap<string, string>;
   /**
    * Called once per path whose final name deviated from the strategy's
-   * clean derivation (missing title, title collision, reserved name).
-   * Lets the CLI surface every fallback so operators aren't surprised by
-   * the emitted names.
+   * clean derivation (missing title, title collision, reserved name,
+   * explicit override). Lets the CLI surface every deviation so operators
+   * aren't surprised by the emitted names.
    */
   onFallback?: (path: string, reason: string, finalName: string) => void;
+  /**
+   * Explicit `componentPath → typeName` assignments (from
+   * `aem-component-names.json`). Overrides win over the strategy: their
+   * names are claimed before any strategy-derived name resolves, so a
+   * colliding derived name takes the usual collision fallback instead.
+   * Throws on reserved built-ins or duplicate override names — an explicit
+   * choice that can't be honored must fail loudly, not silently rename.
+   */
+  overrides?: ReadonlyMap<string, string>;
 }
 
 function aemPrefix(name: string): string {
@@ -163,11 +172,36 @@ export function resolveSanityTypeNames(
   componentPaths: readonly string[],
   opts: ResolveSanityTypeNamesOptions = {},
 ): Map<string, string> {
-  const { strategy = "path", titleByPath, onFallback } = opts;
+  const { strategy = "path", titleByPath, onFallback, overrides } = opts;
   const assigned = new Map<string, string>();
   const taken = new Set<string>();
 
+  if (overrides) {
+    const owners = new Map<string, string>();
+    for (const [path, name] of overrides) {
+      if (RESERVED_SANITY_TYPE_NAMES.has(name)) {
+        throw new Error(
+          `component-name override "${name}" (for ${path}) collides with a built-in Sanity type — pick a different name in aem-component-names.json.`,
+        );
+      }
+      const owner = owners.get(name);
+      if (owner) {
+        throw new Error(
+          `component-name override "${name}" is assigned to both ${owner} and ${path} — type names must be unique.`,
+        );
+      }
+      owners.set(name, path);
+      taken.add(name);
+    }
+  }
+
   for (const path of componentPaths) {
+    const explicit = overrides?.get(path);
+    if (explicit) {
+      assigned.set(path, explicit);
+      onFallback?.(path, "explicit name from aem-component-names.json", explicit);
+      continue;
+    }
     const pathBase = componentPathToTypeName(path);
     let base = pathBase;
     let fallbackReason: string | undefined;

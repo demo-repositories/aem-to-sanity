@@ -12,6 +12,12 @@ export type {
   AuthoringHintConfig,
   LoadAuthoringHintConfigOptions,
 } from "./authoring-hints.ts";
+export { loadComponentNameConfig } from "./component-names.ts";
+export type {
+  ComponentNameConfig,
+  ComponentNameOverride,
+  LoadComponentNameConfigOptions,
+} from "./component-names.ts";
 export {
   DEFAULT_PAGE_BUILDER_NAME,
   resolvePageBuilderName,
