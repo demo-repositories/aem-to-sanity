@@ -9,6 +9,7 @@ import {
   writeJson,
   writeTextFile,
   type AuthoringHintConfig,
+  type ComponentNameConfig,
   type ContainerConfig,
   type DialogNode,
   type Logger,
@@ -165,6 +166,13 @@ export interface MigrateSchemasOptions {
    */
   authoringHints?: AuthoringHintConfig;
   /**
+   * Explicit type-name / Studio-title overrides keyed by
+   * `sling:resourceType` (from `aem-component-names.json`). Names win over
+   * the `typeNaming` strategy; titles replace the component's `jcr:title`.
+   * Entries matching no listed component path are logged and ignored.
+   */
+  componentNames?: ComponentNameConfig;
+  /**
    * Per-tenant declaration of "page-shell" components — AEM components used as
    * the `sling:resourceType` of `jcr:content` rather than as page-body
    * blocks — paired with the `cq:template` paths each one is authored under.
@@ -277,6 +285,32 @@ export async function migrateSchemas(
     if (typeof t === "string" && t.trim()) titleByPath.set(p, t.trim());
   }
 
+  // Explicit name / title overrides from `aem-component-names.json`. Names
+  // are re-keyed from resource type to component path for the resolver;
+  // titles are consumed per-component in processOne. Config entries that
+  // match no listed path are logged and dropped (operator typo, or a
+  // component removed from `aem-component-paths`).
+  const componentNames = opts.componentNames ?? new Map();
+  const nameOverrideByPath = new Map<string, string>();
+  const titleOverrideByPath = new Map<string, string>();
+  if (componentNames.size > 0) {
+    const pathByResourceType = new Map<string, string>();
+    for (const p of componentPaths) {
+      pathByResourceType.set(resourceTypeFromPath(p, effectiveJcrPrefix), p);
+    }
+    for (const [rt, override] of componentNames) {
+      const p = pathByResourceType.get(rt);
+      if (!p) {
+        logger?.warn(
+          `component-names: "${rt}" matches no listed component path — entry ignored. Add /apps/${rt} to aem-component-paths or remove the entry.`,
+        );
+        continue;
+      }
+      if (override.name) nameOverrideByPath.set(p, override.name);
+      if (override.title) titleOverrideByPath.set(p, override.title);
+    }
+  }
+
   // Resolve every component path to its final Sanity type name up front. This
   // is the single source of truth for naming across every downstream artifact
   // (emitted schema file, pageBuilder.of[], content registry, ingested
@@ -287,6 +321,7 @@ export async function migrateSchemas(
   const typeNameByPath = resolveSanityTypeNames(componentPaths, {
     strategy: typeNaming,
     titleByPath,
+    overrides: nameOverrideByPath,
     onFallback: (path, reason, finalName) =>
       logger?.info(`type-naming: ${path} → "${finalName}" (${reason})`),
   });
@@ -334,6 +369,7 @@ export async function migrateSchemas(
         writeAemSnapshot,
         regenerateCommand,
         typeName: typeNameByPath.get(p)!,
+        titleOverride: titleOverrideByPath.get(p),
         pageBuilderName,
         prefetchedComponentNode: prefetchedNodes.get(p),
         containerEntry: containers.get(rt),
@@ -506,6 +542,8 @@ interface ProcessOneDeps {
   regenerateCommand?: string;
   /** Final Sanity type name resolved by `resolveSanityTypeNames` for this path. */
   typeName: string;
+  /** Studio title override from `aem-component-names.json`; wins over `jcr:title`. */
+  titleOverride?: string;
   /** Page-builder array type name container drop-zones reference. */
   pageBuilderName: string;
   /**
@@ -570,7 +608,7 @@ async function processOne(
   } = deps;
 
   let dialog: DialogNode;
-  let schemaTitle: string | undefined;
+  let schemaTitle: string | undefined = deps.titleOverride;
   // Populated when the dialog came from a `sling:resourceSuperType` ancestor
   // rather than the component's own `cq:dialog`. Reported so operators can
   // see inheritance in the schema report (and so audit reasons like "field
@@ -580,7 +618,7 @@ async function processOne(
     const componentNode =
       deps.prefetchedComponentNode ?? (await fetcher(componentPath));
     const rawTitle = componentNode["jcr:title"];
-    if (typeof rawTitle === "string" && rawTitle.trim()) {
+    if (!schemaTitle && typeof rawTitle === "string" && rawTitle.trim()) {
       schemaTitle = rawTitle.trim();
     }
     const embeddedDialog = embeddedCqDialog(componentNode);

@@ -9,6 +9,7 @@ import {
   createLogger,
   fetchInfinityJson,
   loadAuthoringHintConfig,
+  loadComponentNameConfig,
   loadContainerConfig,
   loadPageComponentConfig,
   logStartupBanner,
@@ -124,6 +125,19 @@ async function main(): Promise<void> {
     );
   }
 
+  // Explicit type-name / Studio-title overrides. Optional file; missing
+  // file → strategy naming only. Set-once-before-first-import: changing an
+  // override later renames the emitted type and orphans ingested `_type`s.
+  const componentNamesFile = resolve(
+    process.env.AEM_COMPONENT_NAMES_FILE ?? "./aem-component-names.json",
+  );
+  const componentNames = loadComponentNameConfig({ file: componentNamesFile });
+  if (componentNames.size > 0) {
+    logger.info(
+      `Applied name/title override(s) for ${componentNames.size} component(s) from ${componentNamesFile}`,
+    );
+  }
+
   // AEM page-shell components (the components used as `sling:resourceType`
   // on `jcr:content`) paired with the `cq:template` paths each is authored
   // under. For every (resourceType, template) pair the schema emitter
@@ -225,6 +239,7 @@ async function main(): Promise<void> {
     containers,
     discoveredSlots,
     authoringHints,
+    componentNames,
     pageComponents,
   });
 
