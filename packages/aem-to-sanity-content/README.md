@@ -200,6 +200,8 @@ With `discover: true`, `migrate:schema` walks `output/cache/aem/content/` (popul
 
 Pages with a declared page-shell `sling:resourceType` but an undeclared `cq:template` fall back to the generic `_type: "page"` document and surface in the transform report under `unknownPageTemplates`. Add the missing template to `aem-page-components.json`, re-run `migrate:schema`, then re-run `transform` + `import` to upgrade them.
 
+**Child pages are never inlined.** A roots entry migrates only that page's own body. When the fetched tree contains nested `cq:Page` children (the entry points at a section root rather than a leaf), each child page's subtree is skipped and its path recorded in `transform-report.json → skippedChildPages` (full list, not example-capped); the run summary echoes the first few. Add each child page as its own `aem-content-roots` line and re-run `extract` → `transform` → `import` to migrate it as its own doc.
+
 Missing / empty file → every page uses the generic `page` doc (today's behavior). Fully backwards compatible — existing tenants need no changes.
 
 ## Named-slot components (auto-detected)
@@ -225,7 +227,7 @@ Phases 0, 1, 2, 3 run with a work-stealing pool sized by `ASSET_CONCURRENCY` (de
 
 - `output/cache/extract-report.json` — per-root outcome; HTTP 300/404/auth/too-large failures grouped by category.
 - `output/cache/extract-404.log` — one `<jcrPath>\t<fullUrl>` per 404 (only written when 404s occur).
-- `output/cache/transform-report.json` — unknown `sling:resourceType`s (with hit counts and example paths), unknown properties per mapped component, transform bails (max-depth or cycle). `aem-transform` also echoes unmapped types to the console at the end of the run as a paste-ready `/apps/...` list (the page root and `responsivegrid` wrapper are hidden — they're always passthroughs, never missing schemas). Add the listed paths to `aem-component-paths`, then re-run `migrate:schema` → `transform` → `import` so the new component's content stops being dropped.
+- `output/cache/transform-report.json` — unknown `sling:resourceType`s (with hit counts and example paths), unknown properties per mapped component, transform bails (max-depth or cycle), and `skippedChildPages` (nested child pages excluded from non-leaf roots — list them in `aem-content-roots` to migrate them). `aem-transform` also echoes unmapped types to the console at the end of the run as a paste-ready `/apps/...` list (the page root and `responsivegrid` wrapper are hidden — they're always passthroughs, never missing schemas). Add the listed paths to `aem-component-paths`, then re-run `migrate:schema` → `transform` → `import` so the new component's content stops being dropped.
 - `output/cache/assets-report.json` — asset download/upload/link counts, failures.
 - `output/cache/assets-failures.log` — one `<damPath>\t<status>\t<error>` per DAM path that failed download (e.g. `HTTP 404 Not Found`), upload, or link, plus paths left unresolved as raw `/content/dam/*` strings. Asset analog of `extract-404.log`; only written when something failed.
 - `output/cache/assets/manifest.json` — per-asset state (damPath → cachedFile → mediaLibraryAssetId → linkedAssetInstanceId → linkedRef + sanityRef). Drives resumability for all four phases: download, upload to Media Library, GDR link to dataset, doc rewrite.

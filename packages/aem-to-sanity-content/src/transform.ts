@@ -1208,6 +1208,16 @@ function collectPageBuilder(
     if (seen.has(frame.jcrPath)) continue;
     seen.add(frame.jcrPath);
 
+    if (frame.jcrPath !== rootPath && asString(frame.node["jcr:primaryType"]) === "cq:Page") {
+      // Nested child page. A roots-file entry migrates only that page's own
+      // body — a child page's content belongs to its own Sanity document, so
+      // inlining it here would duplicate (or worse, orphan) it. Skip the
+      // whole subtree and surface the path in the report so the operator can
+      // list the page in `aem-content-roots` if they want it migrated.
+      ctx.audit.childPageSkipped(frame.jcrPath);
+      continue;
+    }
+
     const resourceType = asString(frame.node["sling:resourceType"]);
     if (resourceType && exceptions.has(resourceType)) {
       // Explicitly ignored resource type: skip this node and its subtree.
@@ -1402,6 +1412,14 @@ interface Audit {
     cqTemplate: string | undefined,
     path: string,
   ): void;
+  /**
+   * A `cq:Page` node was found nested inside a page tree being transformed
+   * (the roots-file entry points at a non-leaf page). The child page's
+   * subtree is skipped — its content belongs to its own Sanity document.
+   * All skipped paths are kept (not capped at `maxExamples`) so the
+   * operator can paste them into `aem-content-roots`.
+   */
+  childPageSkipped(path: string): void;
   report(): unknown;
 }
 
@@ -1416,6 +1434,7 @@ function createAudit(maxExamples = 3): Audit {
     string,
     { resourceType: string | undefined; cqTemplate: string | undefined; hits: number; examples: string[] }
   >();
+  const skippedChildPages: string[] = [];
 
   function bump<T>(list: T[], item: T): void {
     if (list.length < maxExamples) list.push(item);
@@ -1473,6 +1492,9 @@ function createAudit(maxExamples = 3): Audit {
       entry.hits++;
       bump(entry.examples, path);
     },
+    childPageSkipped(path) {
+      skippedChildPages.push(path);
+    },
     report() {
       return {
         summary: {
@@ -1483,6 +1505,7 @@ function createAudit(maxExamples = 3): Audit {
           transformBails: bails.length,
           unresolvedTagRefs: unresolvedTags.size,
           unknownPageTemplates: unknownPageTemplates.size,
+          skippedChildPages: skippedChildPages.length,
         },
         unknownResourceTypes: [...unknownTypes.entries()].map(([resourceType, { hits, examples }]) => ({
           resourceType,
@@ -1505,6 +1528,7 @@ function createAudit(maxExamples = 3): Audit {
           hits: e.hits,
           examples: e.examples,
         })),
+        skippedChildPages: [...skippedChildPages].sort(),
         transformBails: bails,
       };
     },
@@ -1921,6 +1945,7 @@ function main(): void {
       hits: number;
       examples: string[];
     }>;
+    skippedChildPages: string[];
   };
   const reportFile = join(outputDir, "cache", "transform-report.json");
   writeFileSync(reportFile, JSON.stringify(report, null, 2) + "\n", "utf8");
@@ -1975,6 +2000,22 @@ function main(): void {
         const firstExample = u.examples[0];
         if (firstExample) console.error(`      ${c.dim(`e.g. ${firstExample}`)}`);
       });
+  }
+
+  if (report.skippedChildPages.length > 0) {
+    console.error("");
+    console.error(
+      c.yellow(
+        `${report.skippedChildPages.length} nested child page(s) skipped — a roots entry migrates only that page's own body. List each child page in aem-content-roots to migrate it as its own doc:`,
+      ),
+    );
+    const shown = report.skippedChildPages.slice(0, 5);
+    for (const p of shown) console.error(`     ${c.dim(p)}`);
+    if (report.skippedChildPages.length > shown.length) {
+      console.error(
+        `     ${c.dim(`… +${report.skippedChildPages.length - shown.length} more — full list in transform-report.json → skippedChildPages`)}`,
+      );
+    }
   }
 }
 
