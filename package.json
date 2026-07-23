@@ -16,6 +16,7 @@
     "migrate:schema": "turbo run migrate:schema",
     "migrate:content": "turbo run migrate:content",
     "migrate:init": "tsx scripts/migrate-init.ts",
+    "studio:init": "tsx scripts/studio-init.ts",
     "migrate:doctor": "tsx scripts/migrate-doctor.ts",
     "build:demo-fixtures": "tsx scripts/build-demo-fixtures.ts",
     "typegen": "turbo run typegen",
