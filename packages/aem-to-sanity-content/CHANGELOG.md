@@ -1,5 +1,16 @@
 # aem-to-sanity-content
 
+## 1.9.0
+
+### Patch Changes
+
+- [#54](https://github.com/demo-repositories/aem-to-sanity/pull/54) [`7dee8fb`](https://github.com/demo-repositories/aem-to-sanity/commit/7dee8fb47d9be08cdabf855edc16b63e31ce675b) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - `aem-transform` no longer inlines nested child pages' content into the parent page's pageBuilder. A roots entry migrates only that page's own body: when a roots-file entry points at a section root (non-leaf page), each nested `cq:Page` subtree is now skipped instead of being flattened into the parent doc. Skipped pages are counted in the run summary and listed in full under `transform-report.json → skippedChildPages` — add each one as its own line in `aem-content-roots`, then re-run `extract` → `transform` → `import` to migrate it as its own document.
+
+  Operators who previously ran a non-leaf roots entry should re-run `transform` + `import` after upgrading: the parent doc sheds the duplicated child content, and the child pages import as separate docs once listed in the roots file.
+
+- Updated dependencies [[`8217136`](https://github.com/demo-repositories/aem-to-sanity/commit/8217136172272ae21d37d453329084bf126add69)]:
+  - aem-to-sanity-core@1.9.0
+
 ## 1.8.1
 
 ### Patch Changes

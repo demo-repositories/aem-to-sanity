@@ -1,5 +1,18 @@
 # aem-to-sanity-schema
 
+## 1.9.0
+
+### Minor Changes
+
+- [#54](https://github.com/demo-repositories/aem-to-sanity/pull/54) [`8217136`](https://github.com/demo-repositories/aem-to-sanity/commit/8217136172272ae21d37d453329084bf126add69) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - New optional tenant config `aem-component-names.json` (path override: `AEM_COMPONENT_NAMES_FILE`): pin the emitted Sanity type name and/or Studio title per component, keyed by `sling:resourceType`. Value is the type name as a string, or `{ "name", "title" }`. Explicit names win over the `MIGRATION_TYPE_NAMING` strategy and are claimed first — another component whose derived name collides takes the usual collision fallback. Reserved built-in names and duplicate override names are hard errors; entries matching no listed component path are logged and ignored. Same set-once-before-first-import hazard as the naming strategy: changing an override after content is ingested renames the type and orphans existing `_type` values.
+
+### Patch Changes
+
+- [#54](https://github.com/demo-repositories/aem-to-sanity/pull/54) [`fe48e06`](https://github.com/demo-repositories/aem-to-sanity/commit/fe48e06624f6d7cd633e11c31680ece6254cd14a) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Multifields whose inner field(s) map to nothing authorable (e.g. AEM core components' hidden bookkeeping multifield — the list editor's `./pages` wrapping a single `form/hidden` input) no longer emit an array of a zero-field object, which Sanity's schema validation rejects (`Object should have at least one field`). The field is skipped and surfaced in `migration-report.json → results[].unmapped` with reason `hidden`. Re-run `migrate:schema` if a previously generated schema fails `sanity schema validate` with that error.
+
+- Updated dependencies [[`8217136`](https://github.com/demo-repositories/aem-to-sanity/commit/8217136172272ae21d37d453329084bf126add69)]:
+  - aem-to-sanity-core@1.9.0
+
 ## 1.8.1
 
 ### Patch Changes
