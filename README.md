@@ -143,6 +143,7 @@ aem-to-sanity/
 │   ├── aem-to-sanity-standalone.html  📊 Slide deck — pipeline / assets / commands / architecture
 │   ├── overview.md                    Architecture + repo layout (single page)
 │   ├── running-the-migration.md       Canonical operator's runbook
+│   ├── updating.md                    Pull a newer toolkit into a scaffolded project (toolkit:update walkthrough)
 │   ├── aem-to-sanity-mapping.md       (auto-generated) AEM ↔ Sanity field-level mapping
 │   └── …                              (refactor plans, mapping reviews — historical context)
 │

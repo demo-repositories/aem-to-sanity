@@ -34,4 +34,5 @@ updating the toolkit updates it, nothing to copy. For the copied file shell
 (this README, `sanity.config.ts`, the aspect re-export, scripts), run
 `pnpm -w studio:sync <your-tenant>` after a toolkit update: it copies files
 the template gained, adds missing dependencies with `--fix`, and reports —
-but never overwrites — files you've customized.
+but never overwrites — files you've customized. The full update sequence is
+in `docs/updating.md` at the repo root.
