@@ -127,7 +127,10 @@ function scaffoldThin(dest: string, install: boolean): void {
   // .env — a credentials leak the moment the operator fills it in and commits.
   const gitignore = join(dest, ".gitignore");
   if (!existsSync(gitignore)) {
-    writeFileSync(gitignore, "node_modules/\ndist/\noutput/\n.env\n.turbo/\n.DS_Store\n");
+    writeFileSync(
+      gitignore,
+      "node_modules/\ndist/\noutput/\n.env\n.turbo/\n.DS_Store\nservice-credentials*.json\n*-service-credentials.json\n",
+    );
   }
 
   if (commandExists("git")) {

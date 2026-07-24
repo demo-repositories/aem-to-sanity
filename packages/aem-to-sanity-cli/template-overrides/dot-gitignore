@@ -4,3 +4,5 @@ output/
 .env
 .turbo/
 .DS_Store
+service-credentials*.json
+*-service-credentials.json
