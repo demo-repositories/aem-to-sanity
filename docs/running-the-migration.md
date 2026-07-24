@@ -24,6 +24,8 @@ pnpm install
 pnpm build   # builds all three packages into packages/*/dist
 ```
 
+> **Shortcut for fresh projects:** `npm create @shehjad/aem-to-sanity <dir> -- --tenant <slug>` clones this repo (detached from its git history), runs install + build, and scaffolds the first tenant — steps 0 and 1-pre in one command. See [`packages/create-aem-to-sanity`](../packages/create-aem-to-sanity/README.md).
+
 ---
 
 ## 1. Configure environment variables

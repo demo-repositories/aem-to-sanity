@@ -58,6 +58,14 @@ For the full operator's runbook (every env var, every flag, troubleshooting), se
 
 ## Quickstart
 
+Starting a fresh project? The scaffolder does steps 0–1 for you — clones this repo (detached from its history), installs, builds, and sets up your first tenant:
+
+```bash
+npm create @shehjad/aem-to-sanity my-migration -- --tenant acme
+```
+
+See [`packages/create-aem-to-sanity`](packages/create-aem-to-sanity/README.md) for flags (`--ref` to pin a release tag, `--repo` for forks). Working from a clone of this repo instead:
+
 ```bash
 # 0. Install + build (pnpm ≥ 9, Node ≥ 22.12)
 pnpm install
@@ -105,7 +113,8 @@ aem-to-sanity/
 ├── packages/                          npm-publishable runtime packages
 │   ├── aem-to-sanity-core/            Shared AEM fetcher, auth, config, logger, depth-handling
 │   ├── aem-to-sanity-schema/          Dialog → Sanity object types + TypeGen + pageBuilder synthesizer
-│   └── aem-to-sanity-content/         extract → tags → transform → assets → import CLIs
+│   ├── aem-to-sanity-content/         extract → tags → transform → assets → import CLIs
+│   └── create-aem-to-sanity/          `npm create` scaffolder — clones this repo + inits the first tenant
 │
 ├── apps/                              Local apps consuming the pipeline output
 │   └── studio/                        Sanity Studio — loads emitted schemas; visual verification
@@ -160,7 +169,7 @@ Every migration runs from `tenants/<your-tenant>/`. Only `tenants/template/` (th
 
 ## Packages
 
-Three packages designed so external teams can consume only what they need.
+Three runtime packages designed so external teams can consume only what they need, plus the npm-published project scaffolder.
 
 ### `aem-to-sanity-core`
 Shared primitives — AEM client (basic auth / bearer / Service Credentials via Adobe IMS), config loader, logger, depth-truncation handler. No business logic. → [README](packages/aem-to-sanity-core/README.md)
@@ -170,6 +179,9 @@ Dialog walker → mapper → emitter → registry → pageBuilder synthesizer �
 
 ### `aem-to-sanity-content`
 Five CLIs (`aem-extract`, `aem-tags`, `aem-transform`, `aem-assets`, `aem-import`) chained through on-disk artifacts. Type-aware coercion via the registry. Resumable per-stage. → [README](packages/aem-to-sanity-content/README.md)
+
+### `@shehjad/create-aem-to-sanity`
+The `npm create` scaffolder — the only package published to npm. Clones this repo at a pinned ref, detaches the git history, installs + builds, and optionally scaffolds the first tenant via `migrate:init`. → [README](packages/create-aem-to-sanity/README.md)
 
 ---
 
