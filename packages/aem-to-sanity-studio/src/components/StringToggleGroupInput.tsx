@@ -3,7 +3,7 @@ import type { FieldProps, InputProps, StringInputProps } from "sanity";
 import { set } from "sanity";
 import { Button, Flex } from "@sanity/ui";
 import styled from "styled-components";
-import { NoteField, isNoteField } from "./NoteField.tsx";
+import { NoteField, isNoteField } from "./NoteField.js";
 
 /**
  * Toggle-button group input for string fields with an `options.list` — the

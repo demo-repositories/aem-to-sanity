@@ -24,7 +24,7 @@ pnpm install
 pnpm build   # builds all three packages into packages/*/dist
 ```
 
-> **Shortcut for fresh projects:** `npm create @shehjad/aem-to-sanity <dir> -- --tenant <slug>` clones this repo (detached from its git history), runs install + build, and scaffolds the first tenant — steps 0 and 1-pre in one command. See [`packages/create-aem-to-sanity`](../packages/create-aem-to-sanity/README.md).
+> **Shortcut for fresh projects:** `npm create @shehjad/aem-to-sanity <dir> -- --tenant <slug>` clones this repo, runs install + build, and scaffolds the first tenant — steps 0 and 1-pre in one command. The toolkit history is kept under an `upstream` remote, so later `pnpm -w toolkit:update [ref]` merges a newer toolkit release into your scaffold (then reinstalls, rebuilds, and you re-run `pnpm -w migrate:doctor --all --fix`). See [`packages/create-aem-to-sanity`](../packages/create-aem-to-sanity/README.md).
 
 ---
 
@@ -810,7 +810,17 @@ pnpm -F tenant-<your-tenant>-studio dev
 # Opens http://localhost:3333 with every emitted schema loaded.
 ```
 
-Because the tenant folder is gitignored by this repo, the studio + tenant config can be source-controlled together in the client's own repository (`git init` inside `tenants/<your-tenant>/`) — commit the generated schemas there; with one Studio per tenant the cross-tenant merge-conflict concern doesn't apply. The only monorepo tie is the `aem-to-sanity-schema: workspace:*` devDependency (see `studio/README.md`).
+Because the tenant folder is gitignored by this repo, the studio + tenant config can be source-controlled together in the client's own repository (`git init` inside `tenants/<your-tenant>/`) — commit the generated schemas there; with one Studio per tenant the cross-tenant merge-conflict concern doesn't apply. The monorepo ties are the `aem-to-sanity-schema` and `aem-to-sanity-studio` `workspace:*` dependencies (see `studio/README.md`).
+
+**How Studio updates reach an existing tenant.** Migration-critical Studio surface — the `category` taxonomy type, the `aemSource` Media Library aspect, the AEM widget input components — ships in the **`aem-to-sanity-studio` package**, which tenant studios import rather than copy. Updating the toolkit (`pnpm -w toolkit:update`, or bumping a pinned release) delivers new/changed types and aspects automatically. For the thin file shell that *is* copied (config, aspect re-export, scripts), run:
+
+```bash
+pnpm -w studio:sync <your-tenant>          # report missing files/deps + drift vs the template
+pnpm -w studio:sync <your-tenant> --fix    # copy missing files, add missing deps (never overwrites)
+pnpm -w studio:sync --all                  # scan every tenant
+```
+
+Files that differ from the template are reported as drift but kept — operator customizations always win.
 
 The shared example Studio still works as before:
 

@@ -58,7 +58,7 @@ For the full operator's runbook (every env var, every flag, troubleshooting), se
 
 ## Quickstart
 
-Starting a fresh project? The scaffolder does steps 0–1 for you — clones this repo (detached from its history), installs, builds, and sets up your first tenant:
+Starting a fresh project? The scaffolder does steps 0–1 for you — clones this repo (toolkit history kept under an `upstream` remote so `pnpm -w toolkit:update` can pull future releases), installs, builds, and sets up your first tenant:
 
 ```bash
 npm create @shehjad/aem-to-sanity my-migration -- --tenant acme
@@ -114,6 +114,7 @@ aem-to-sanity/
 │   ├── aem-to-sanity-core/            Shared AEM fetcher, auth, config, logger, depth-handling
 │   ├── aem-to-sanity-schema/          Dialog → Sanity object types + TypeGen + pageBuilder synthesizer
 │   ├── aem-to-sanity-content/         extract → tags → transform → assets → import CLIs
+│   ├── aem-to-sanity-studio/          Studio primitives: category type, AEM widget inputs, ML aspect
 │   └── create-aem-to-sanity/          `npm create` scaffolder — clones this repo + inits the first tenant
 │
 ├── apps/                              Local apps consuming the pipeline output
@@ -132,6 +133,8 @@ aem-to-sanity/
 ├── scripts/                           Repo-wide tooling
 │   ├── migrate-init.ts                Scaffold a new tenant from tenants/template/
 │   ├── migrate-doctor.ts              Detect tenant drift + auto-repair package.json scripts
+│   ├── toolkit-update.ts              Pull toolkit updates into a scaffolded clone (merge upstream ref)
+│   ├── studio-sync.ts                 Sync a tenant Studio's file shell with the template (copy-new, keep-yours)
 │   ├── aem-probe.ts                   Resolve a single AEM dialog (supertype chain) without running the full migrator
 │   ├── wipe-media-library.ts          Delete every Sanity ML asset (test environments only)
 │   └── ensure-studio-stub.ts          Writes a minimal schemas/generated stub so Studio boots on bare clone
@@ -169,7 +172,7 @@ Every migration runs from `tenants/<your-tenant>/`. Only `tenants/template/` (th
 
 ## Packages
 
-Three runtime packages designed so external teams can consume only what they need, plus the npm-published project scaffolder.
+Four runtime packages designed so external teams can consume only what they need, plus the npm-published project scaffolder.
 
 ### `aem-to-sanity-core`
 Shared primitives — AEM client (basic auth / bearer / Service Credentials via Adobe IMS), config loader, logger, depth-truncation handler. No business logic. → [README](packages/aem-to-sanity-core/README.md)
@@ -180,8 +183,11 @@ Dialog walker → mapper → emitter → registry → pageBuilder synthesizer �
 ### `aem-to-sanity-content`
 Five CLIs (`aem-extract`, `aem-tags`, `aem-transform`, `aem-assets`, `aem-import`) chained through on-disk artifacts. Type-aware coercion via the registry. Resumable per-stage. → [README](packages/aem-to-sanity-content/README.md)
 
+### `aem-to-sanity-studio`
+Studio-side primitives tenant studios import instead of copying: the `category` taxonomy type (populated by `aem-tags`), `aemFormComponents` input routing for migrated AEM widgets, and the `aemSource` Media Library aspect (`aem-assets` dedup). Because they're imported, toolkit updates deliver Studio changes without touching operator studios. → [README](packages/aem-to-sanity-studio/README.md)
+
 ### `@shehjad/create-aem-to-sanity`
-The `npm create` scaffolder — the only package published to npm. Clones this repo at a pinned ref, detaches the git history, installs + builds, and optionally scaffolds the first tenant via `migrate:init`. → [README](packages/create-aem-to-sanity/README.md)
+The `npm create` scaffolder — the only package published to npm. Clones this repo at a pinned ref (history kept under an `upstream` remote for later `pnpm -w toolkit:update`; `--detach` for a clean slate), stamps provenance into the scaffold's package.json, installs + builds, and optionally scaffolds the first tenant via `migrate:init`. → [README](packages/create-aem-to-sanity/README.md)
 
 ---
 
