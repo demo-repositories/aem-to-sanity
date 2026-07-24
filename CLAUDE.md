@@ -152,7 +152,7 @@ pnpm -r test
 
 ## Versioning & releases
 
-The five toolkit packages (core, schema, content, studio, cli) are versioned in lockstep with Changesets (a `fixed` group in `.changeset/config.json`); merging the auto-opened "chore: version packages" PR publishes every package to npm and cuts git tags + GitHub Releases (`.github/workflows/release.yml`, needs the `NPM_TOKEN` secret). The scaffolder `@shehjad/create-aem-to-sanity` versions independently. Full flow in `docs/releasing.md`.
+The five toolkit packages (core, schema, content, studio, cli) are versioned in lockstep with Changesets (a `fixed` group in `.changeset/config.json`); merging the auto-opened "chore: version packages" PR publishes every package to npm and cuts git tags + GitHub Releases (`.github/workflows/release.yml`, authenticates via npm trusted publishing / OIDC — no token secret). The scaffolder `@shehjad/create-aem-to-sanity` versions independently. Full flow in `docs/releasing.md`.
 
 - **Every user-facing change needs a changeset in the same PR** — run `pnpm changeset`, pick the bump (major = breaking CLI/env/artifact/schema shape, minor = new capability, patch = fix), and write the summary as operator-facing release notes: what changed, what they must do. Internal-only changes (refactors, CI, docs-only) skip it.
 - Don't hand-edit `packages/*/CHANGELOG.md` or bump versions in `package.json` — `changeset version` owns both.

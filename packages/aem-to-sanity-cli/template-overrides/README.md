@@ -38,7 +38,7 @@ Full runbook, every env var and flag: [running-the-migration.md](https://github.
 | `aem-content-roots` | Content paths to walk during extract, with `@base` sections |
 | `aem-tag-roots` | AEM tag namespaces to migrate (optional) |
 | `aem-component-*.json` | Container/hints/name-override configs (see runbook § 1c) |
-| `studio/` | Your Sanity Studio — `migrate:schema` emits generated schemas into `studio/schemas/generated/` (set `SCHEMAS_OUT_DIR=./studio/schemas/generated` in `.env`) |
+| `studio/` | Your Sanity Studio — `migrate:schema` emits generated schemas into `studio/schemas/generated/` (`SCHEMAS_OUT_DIR` is pre-set in the seeded `.env`) |
 | `output/` | Per-stage caches and reports — regenerable, gitignored |
 
 ## Updating the toolkit

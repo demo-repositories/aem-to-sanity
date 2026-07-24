@@ -71,7 +71,7 @@ function templateDir(): string {
   return dir;
 }
 
-const COPY_SKIP = new Set(["node_modules", "output", ".turbo", ".DS_Store", ".env"]);
+const COPY_SKIP = new Set(["node_modules", "output", ".turbo", ".DS_Store", ".env", "dist", ".sanity"]);
 
 function copyTemplate(src: string, dest: string): void {
   mkdirSync(dest, { recursive: true });

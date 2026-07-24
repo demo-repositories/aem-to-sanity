@@ -13,8 +13,10 @@ name: Release
 #    notes from the CHANGELOG entries.
 #
 # Consumers install from npm (`npm create @shehjad/aem-to-sanity`, or the
-# aem-to-sanity-* packages directly). Publishing needs an `NPM_TOKEN` repo
-# secret — an npm automation token with publish access to the packages.
+# aem-to-sanity-* packages directly). Publishing authenticates via npm
+# **trusted publishing** (OIDC) — no NPM_TOKEN secret. Each published package
+# must list this repo + `release.yml` as a Trusted Publisher on npmjs.com
+# (package page → Settings → Trusted Publisher); see docs/releasing.md.
 
 on:
   push:
@@ -26,6 +28,7 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
+  id-token: write # npm trusted publishing (OIDC)
 
 jobs:
   release:
@@ -45,6 +48,11 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # Trusted publishing needs npm ≥ 11.5.1; Node 22 bundles npm 10.x.
+      # `changeset publish` shells out to `npm publish`, which picks this up.
+      - name: Update npm for trusted publishing
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -58,4 +66,3 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
