@@ -2,7 +2,7 @@
   "name": "aem-to-sanity-monorepo",
   "version": "0.0.0",
   "private": true,
-  "description": "Monorepo for AEM → Sanity migration tooling (schema generator + content migrator).",
+  "description": "Monorepo for AEM \u2192 Sanity migration tooling (schema generator + content migrator).",
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",
   "engines": {
@@ -17,19 +17,20 @@
     "migrate:content": "turbo run migrate:content",
     "migrate:init": "tsx scripts/migrate-init.ts",
     "studio:init": "tsx scripts/studio-init.ts",
-    "studio:sync": "tsx scripts/studio-sync.ts",
+    "studio:sync": "aem-to-sanity studio-sync",
     "toolkit:update": "tsx scripts/toolkit-update.ts",
-    "migrate:doctor": "tsx scripts/migrate-doctor.ts",
+    "migrate:doctor": "aem-to-sanity doctor",
     "build:demo-fixtures": "tsx scripts/build-demo-fixtures.ts",
     "typegen": "turbo run typegen",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "changeset tag"
+    "release": "pnpm -r build && changeset publish"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.1",
     "@types/node": "^25.6.0",
+    "aem-to-sanity-cli": "workspace:*",
     "gifenc": "^1.0.3",
     "tsx": "^4.23.1",
     "turbo": "^2.10.6",

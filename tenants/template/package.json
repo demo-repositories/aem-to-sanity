@@ -2,8 +2,11 @@
   "name": "tenant-template",
   "version": "0.0.0",
   "private": true,
-  "description": "Migration template. Copy this folder to tenants/<your-tenant>/ and rename the workspace before use.",
+  "description": "Migration template. Scaffolded standalone by `npm create @shehjad/aem-to-sanity`, or copied to tenants/<your-tenant>/ inside the toolkit monorepo.",
   "type": "module",
+  "workspaces": [
+    "studio"
+  ],
   "scripts": {
     "migrate:schema": "aem-to-sanity-schema",
     "typegen": "aem-to-sanity-typegen",
@@ -13,12 +16,15 @@
     "transform": "aem-transform --registry ./output/cache/content-type-registry.json",
     "assets": "aem-assets",
     "import": "aem-import",
-    "migrate:content": "tsx ../../scripts/run-with-log.ts \"pnpm run extract && pnpm run tags && pnpm run transform && pnpm run assets && pnpm run import\"",
-    "migrate:all": "pnpm run migrate:schema && pnpm run typegen",
-    "migrate": "tsx ../../scripts/run-with-log.ts \"pnpm run extract && pnpm run tags && pnpm run migrate:schema && pnpm run transform && pnpm run assets && pnpm run import -- --discard-drafts\"",
-    "wipe:media-library": "tsx ../../scripts/wipe-media-library.ts"
+    "doctor": "aem-to-sanity doctor",
+    "studio-sync": "aem-to-sanity studio-sync",
+    "migrate:content": "aem-to-sanity run \"npm run extract && npm run tags && npm run transform && npm run assets && npm run import\"",
+    "migrate:all": "npm run migrate:schema && npm run typegen",
+    "migrate": "aem-to-sanity run \"npm run extract && npm run tags && npm run migrate:schema && npm run transform && npm run assets && npm run import -- --discard-drafts\"",
+    "wipe:media-library": "aem-to-sanity wipe-media-library"
   },
   "devDependencies": {
+    "aem-to-sanity-cli": "workspace:*",
     "aem-to-sanity-content": "workspace:*",
     "aem-to-sanity-schema": "workspace:*",
     "sanity": "^6.6.0",

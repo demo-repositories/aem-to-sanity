@@ -68,3 +68,7 @@ yarn-error.log*
 *.code-workspace
 
 tenants/demo/.env
+
+# Build artifact: the project template embedded into aem-to-sanity-cli by its
+# build step (scripts/embed-template.ts) — regenerated from tenants/template/.
+packages/aem-to-sanity-cli/template/

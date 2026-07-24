@@ -1,0 +1,47 @@
+{
+  "name": "aem-to-sanity-cli",
+  "version": "1.10.1",
+  "description": "Operator CLI for AEM → Sanity migration projects: doctor (config/env drift checks), studio-sync (template file sync), run (logged pipeline runs), wipe-media-library. Ships the project template used by create-aem-to-sanity.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "aem-to-sanity": "dist/index.js"
+  },
+  "main": "./dist/lib.js",
+  "types": "./dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js",
+      "default": "./dist/lib.js"
+    }
+  },
+  "files": [
+    "dist",
+    "template",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup && tsx scripts/embed-template.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist template .turbo"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/demo-repositories/aem-to-sanity.git",
+    "directory": "packages/aem-to-sanity-cli"
+  }
+}

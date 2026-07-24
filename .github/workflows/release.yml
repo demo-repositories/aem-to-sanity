@@ -7,11 +7,14 @@ name: Release
 #    fixed version line across all publishable packages and rolls the
 #    changeset summaries into each package's CHANGELOG.md.
 # 2. Merging the Version Packages PR triggers this workflow again; with no
-#    pending changesets left it runs `pnpm release` (`changeset tag`), pushes
-#    the new `<pkg>@<version>` tags, and publishes GitHub Releases whose notes
-#    come from the CHANGELOG entries.
+#    pending changesets left it runs `pnpm release` (build + `changeset
+#    publish`): every public package is published to npm, the
+#    `<pkg>@<version>` tags are pushed, and GitHub Releases are created with
+#    notes from the CHANGELOG entries.
 #
-# Consumers pin to a release by checking out a tag; nothing is published to npm.
+# Consumers install from npm (`npm create @shehjad/aem-to-sanity`, or the
+# aem-to-sanity-* packages directly). Publishing needs an `NPM_TOKEN` repo
+# secret — an npm automation token with publish access to the packages.
 
 on:
   push:
@@ -55,3 +58,4 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
