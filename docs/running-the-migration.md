@@ -24,6 +24,8 @@ pnpm install
 pnpm build   # builds all three packages into packages/*/dist
 ```
 
+> **Shortcut for fresh projects:** `npm create @shehjad/aem-to-sanity <dir> -- --tenant <slug>` clones this repo (detached from its git history), runs install + build, and scaffolds the first tenant — steps 0 and 1-pre in one command. See [`packages/create-aem-to-sanity`](../packages/create-aem-to-sanity/README.md).
+
 ---
 
 ## 1. Configure environment variables
@@ -800,6 +802,17 @@ Turbo respects the ordering declared in `turbo.json`: schema → typegen → con
 ---
 
 ## 6. Studio (visual verification)
+
+Each tenant gets its **own Studio** under `tenants/<your-tenant>/studio/` — `migrate:init` scaffolds it along with the tenant, and `pnpm -w studio:init <your-tenant>` backfills one into a tenant created before the studio template existed. Fill `studio/.env` (`SANITY_STUDIO_PROJECT_ID`, `SANITY_STUDIO_DATASET`), set `SCHEMAS_OUT_DIR=./studio/schemas/generated` in the tenant `.env`, re-run `migrate:schema`, then:
+
+```bash
+pnpm -F tenant-<your-tenant>-studio dev
+# Opens http://localhost:3333 with every emitted schema loaded.
+```
+
+Because the tenant folder is gitignored by this repo, the studio + tenant config can be source-controlled together in the client's own repository (`git init` inside `tenants/<your-tenant>/`) — commit the generated schemas there; with one Studio per tenant the cross-tenant merge-conflict concern doesn't apply. The only monorepo tie is the `aem-to-sanity-schema: workspace:*` devDependency (see `studio/README.md`).
+
+The shared example Studio still works as before:
 
 ```bash
 pnpm --filter studio dev

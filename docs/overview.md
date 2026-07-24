@@ -89,7 +89,8 @@ aem-migration/
 ├── packages/
 │   ├── aem-to-sanity-core/       shared fetcher, auth, config, logger, depth-handling
 │   ├── aem-to-sanity-schema/     dialog → Sanity object types + TypeGen + pageBuilder
-│   └── aem-to-sanity-content/    extract / transform / assets / import CLIs
+│   ├── aem-to-sanity-content/    extract / transform / assets / import CLIs
+│   └── create-aem-to-sanity/     `npm create` scaffolder (published as @shehjad/create-aem-to-sanity)
 ├── apps/
 │   └── studio/                   example Sanity Studio consuming emitted schemas
 │                                 (Frontend apps moved to aem-to-sanity-demo-web — separate repo)

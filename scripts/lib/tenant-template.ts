@@ -5,7 +5,15 @@
  * safe to refresh) vs operator-owned (do not touch, never compare) vs
  * ignored (caches, node_modules, output).
  */
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +21,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(here, "..", "..");
 export const TENANTS_DIR = join(REPO_ROOT, "tenants");
 export const TEMPLATE_DIR = join(TENANTS_DIR, "template");
+/** Per-tenant Studio template, scaffolded by studio:init / migrate:init. */
+export const STUDIO_TEMPLATE_DIR = join(TEMPLATE_DIR, "studio");
 
 /** Committed tenants that are not created via migrate:init. */
 export const COMMITTED_TENANTS = new Set(["demo"]);
@@ -120,6 +130,31 @@ export function parseEnvExample(content: string): EnvLine[] {
 
 export function readFileIfExists(path: string): string | null {
   return existsSync(path) ? readFileSync(path, "utf8") : null;
+}
+
+/** Recursive template copy, skipping {@link IGNORED_NAMES}. */
+export function copyTree(src: string, dest: string): void {
+  mkdirSync(dest, { recursive: true });
+  for (const name of readdirSync(src)) {
+    if (IGNORED_NAMES.has(name)) continue;
+    const srcPath = join(src, name);
+    const destPath = join(dest, name);
+    if (statSync(srcPath).isDirectory()) {
+      copyTree(srcPath, destPath);
+    } else {
+      copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+/** Rewrite a scaffolded package.json's workspace name. */
+export function renameWorkspace(packageJsonPath: string, name: string): void {
+  const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+    name: string;
+    [k: string]: unknown;
+  };
+  pkg.name = name;
+  writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 }
 
 export function tenantDir(slug: string): string {

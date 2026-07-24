@@ -1,0 +1,26 @@
+{
+  "name": "tenant-template-studio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Per-tenant Sanity Studio template. Scaffolded into tenants/<your-tenant>/studio/ by `pnpm -w studio:init <slug>` (or copied along by `pnpm -w migrate:init`).",
+  "type": "module",
+  "scripts": {
+    "dev": "sanity dev",
+    "build": "sanity build",
+    "deploy": "sanity deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sanity/ui": "^3.3.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "sanity": "^6.5.0",
+    "styled-components": "^6.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "aem-to-sanity-schema": "workspace:*",
+    "typescript": "^5.9.3"
+  }
+}

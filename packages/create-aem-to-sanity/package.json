@@ -1,0 +1,38 @@
+{
+  "name": "@shehjad/create-aem-to-sanity",
+  "version": "0.1.0",
+  "description": "Scaffold a new AEM → Sanity migration project: clones the aem-to-sanity toolkit and optionally sets up your first tenant.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-aem-to-sanity": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist .turbo"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3",
+    "vitest": "^2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/demo-repositories/aem-to-sanity.git",
+    "directory": "packages/create-aem-to-sanity"
+  }
+}
