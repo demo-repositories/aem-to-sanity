@@ -2,6 +2,11 @@
   "name": "aem-to-sanity-content",
   "version": "1.11.0",
   "description": "Three flat scripts to migrate AEM content (.infinity.json) into Sanity: extract → transform → import.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/demo-repositories/aem-to-sanity.git",
+    "directory": "packages/aem-to-sanity-content"
+  },
   "license": "MIT",
   "type": "module",
   "files": [
