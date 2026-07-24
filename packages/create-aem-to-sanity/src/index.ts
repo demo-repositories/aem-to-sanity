@@ -78,7 +78,9 @@ function copyTemplate(src: string, dest: string): void {
   for (const entry of readdirSync(src, { withFileTypes: true })) {
     if (COPY_SKIP.has(entry.name)) continue;
     const s = join(src, entry.name);
-    const d = join(dest, entry.name);
+    // `dot-*` files ship under that name because npm pack strips `.gitignore`
+    // (and similar dotfiles) from published tarballs; restore the real name here.
+    const d = join(dest, entry.name.replace(/^dot-/, "."));
     if (entry.isDirectory()) {
       copyTemplate(s, d);
     } else {
@@ -118,6 +120,17 @@ function scaffoldThin(dest: string, install: boolean): void {
     const example = join(dir, ".env.example");
     const env = join(dir, ".env");
     if (existsSync(example) && !existsSync(env)) copyFileSync(example, env);
+  }
+
+  // Never git-init without an ignore file: the initial commit lands after
+  // `install`, and without one it would capture node_modules and the seeded
+  // .env — a credentials leak the moment the operator fills it in and commits.
+  const gitignore = join(dest, ".gitignore");
+  if (!existsSync(gitignore)) {
+    writeFileSync(
+      gitignore,
+      "node_modules/\ndist/\noutput/\n.env\n.turbo/\n.DS_Store\nservice-credentials*.json\n*-service-credentials.json\n",
+    );
   }
 
   if (commandExists("git")) {

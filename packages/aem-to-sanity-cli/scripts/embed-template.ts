@@ -63,9 +63,11 @@ function main(): void {
   rewriteWorkspaceSpecs(join(OUT, "package.json"), version);
   rewriteWorkspaceSpecs(join(OUT, "studio", "package.json"), version);
 
-  // Standalone-only files.
+  // Standalone-only files. `dot-*` names are kept verbatim — npm pack strips
+  // `.gitignore` (and friends) from tarballs, so the rename to `.*` happens in
+  // create-aem-to-sanity's copyTemplate at scaffold time, not here.
   for (const name of readdirSync(OVERRIDES)) {
-    cpSync(join(OVERRIDES, name), join(OUT, name.replace(/^dot-/, ".")));
+    cpSync(join(OVERRIDES, name), join(OUT, name));
   }
   writeFileSync(join(OUT, "pnpm-workspace.yaml"), 'packages:\n  - "studio"\n');
 
