@@ -24,7 +24,7 @@ const REPO_TEMPLATE = resolve(PKG_ROOT, "..", "..", "tenants", "template");
 const OUT = join(PKG_ROOT, "template");
 const OVERRIDES = join(PKG_ROOT, "template-overrides");
 
-const SKIP = new Set(["node_modules", "output", ".turbo", ".DS_Store", ".env"]);
+const SKIP = new Set(["node_modules", "output", ".turbo", ".DS_Store", ".env", "dist", ".sanity"]);
 
 function copyTree(src: string, dest: string): void {
   mkdirSync(dest, { recursive: true });
@@ -68,6 +68,18 @@ function main(): void {
     cpSync(join(OVERRIDES, name), join(OUT, name.replace(/^dot-/, ".")));
   }
   writeFileSync(join(OUT, "pnpm-workspace.yaml"), 'packages:\n  - "studio"\n');
+
+  // Standalone scaffolds always carry their Studio at ./studio — activate the
+  // schema out-dir so migrate:schema feeds it instead of {OUTPUT_DIR}/schemas
+  // (which the Studio never loads).
+  const envExample = join(OUT, ".env.example");
+  writeFileSync(
+    envExample,
+    readFileSync(envExample, "utf8").replace(
+      "# SCHEMAS_OUT_DIR=./studio/schemas/generated",
+      "SCHEMAS_OUT_DIR=./studio/schemas/generated",
+    ),
+  );
 
   console.log(`[embed-template] ${REPO_TEMPLATE} → ${OUT} (workspace:* → ^${version})`);
 }

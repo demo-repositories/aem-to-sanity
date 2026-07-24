@@ -32,6 +32,8 @@ npx aem-to-sanity doctor     # verify wiring
 npm run migrate              # dry-run the full pipeline
 ```
 
+**Try it without AEM (offline fixtures).** The toolkit repo ships a committed demo tenant ([`tenants/demo/`](https://github.com/demo-repositories/aem-to-sanity/tree/main/tenants/demo)) with scrubbed AEM REST fixtures. Copy its `fixtures/` directory and `aem-*` config files into your scaffold, point `.env` at them (`AEM_FIXTURES_DIR=./fixtures/aem`, `AEM_AUTHOR_URL=http://demo.local`, `AEM_TOKEN=offline-fixtures`, dummy `SANITY_*` values, `MIGRATION_DRY_RUN=true`), and `npm run migrate` replays the full pipeline — extract through dry-run import — with no AEM instance and no Sanity writes. This is also the release smoke test; the maintainer checklist lives in [`docs/releasing.md`](https://github.com/demo-repositories/aem-to-sanity/blob/main/docs/releasing.md).
+
 **Updating the toolkit** is a normal dependency update — no git merges:
 
 ```bash
