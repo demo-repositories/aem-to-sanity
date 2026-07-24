@@ -1,6 +1,6 @@
 {
   "name": "aem-to-sanity-studio",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Studio-side primitives for AEM → Sanity migrations: the category taxonomy type, AEM widget input components, and the Media Library aemSource aspect.",
   "license": "MIT",
   "type": "module",
