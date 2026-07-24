@@ -35,11 +35,11 @@
     "styled-components": "^6"
   },
   "devDependencies": {
-    "@sanity/ui": "^3.3.5",
+    "@sanity/ui": "^3.4.3",
     "@types/react": "^19.2.17",
-    "react": "^19.2.7",
-    "sanity": "^6.5.0",
-    "styled-components": "^6.4.3",
+    "react": "^19.2.8",
+    "sanity": "^6.6.0",
+    "styled-components": "^6.4.4",
     "tsup": "^8.3.5",
     "typescript": "^5.9.3"
   },

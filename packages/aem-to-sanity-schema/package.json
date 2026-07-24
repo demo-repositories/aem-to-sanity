@@ -40,13 +40,13 @@
   "dependencies": {
     "aem-to-sanity-core": "workspace:*",
     "dotenv": "^16.4.5",
-    "prettier": "^3.3.3"
+    "prettier": "^3.9.6"
   },
   "devDependencies": {
-    "@sanity/schema": "^6.5.0",
-    "sanity": "^6.5.0",
+    "@sanity/schema": "^6.6.0",
+    "sanity": "^6.6.0",
     "tsup": "^8.3.5",
-    "tsx": "^4.19.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
