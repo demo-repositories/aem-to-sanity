@@ -21,7 +21,17 @@ this folder — with one Studio per tenant there's no cross-tenant conflict.
 
 The tenant folder (including this Studio) is gitignored by the parent repo,
 so you can `git init` inside `tenants/<your-tenant>/` and own it in your own
-repository. The only monorepo tie is the `"aem-to-sanity-schema":
-"workspace:*"` devDependency (used for `sanitizeSchemaTypes` at Studio load);
-when extracting the folder standalone, replace it with a pinned checkout of
-the matching release tag.
+repository. The monorepo ties are the `"aem-to-sanity-schema": "workspace:*"`
+devDependency (used for `sanitizeSchemaTypes` at Studio load) and the
+`"aem-to-sanity-studio": "workspace:*"` dependency (category taxonomy type,
+AEM widget inputs, the `aemSource` ML aspect); when extracting the folder
+standalone, replace both with pinned checkouts of the matching release tag.
+
+## Staying current with the template
+
+Migration-critical Studio code lives in the `aem-to-sanity-studio` package —
+updating the toolkit updates it, nothing to copy. For the copied file shell
+(this README, `sanity.config.ts`, the aspect re-export, scripts), run
+`pnpm -w studio:sync <your-tenant>` after a toolkit update: it copies files
+the template gained, adds missing dependencies with `--fix`, and reports —
+but never overwrites — files you've customized.

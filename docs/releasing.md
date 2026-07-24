@@ -1,6 +1,6 @@
 # Versioning & releases
 
-The toolkit is versioned with [Changesets](https://github.com/changesets/changesets). The three publishable packages — `aem-to-sanity-core`, `aem-to-sanity-schema`, `aem-to-sanity-content` — move in **lockstep** (a `fixed` group in `.changeset/config.json`), so there is a single toolkit version. The current version is whatever `packages/*/package.json` says; releases are cut as git tags plus GitHub Releases with notes. The runtime packages are not published to npm — consumers pin git tags.
+The toolkit is versioned with [Changesets](https://github.com/changesets/changesets). The four publishable packages — `aem-to-sanity-core`, `aem-to-sanity-schema`, `aem-to-sanity-content`, `aem-to-sanity-studio` — move in **lockstep** (a `fixed` group in `.changeset/config.json`), so there is a single toolkit version. The current version is whatever `packages/*/package.json` says; releases are cut as git tags plus GitHub Releases with notes. The runtime packages are not published to npm — consumers pin git tags.
 
 The one exception is the scaffolder, `@shehjad/create-aem-to-sanity` (`packages/create-aem-to-sanity/`). It versions independently through Changesets (not part of the fixed group) and **is** published to npm — manually, since the release workflow only cuts tags:
 

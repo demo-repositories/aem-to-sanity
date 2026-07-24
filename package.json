@@ -17,6 +17,7 @@
     "migrate:content": "turbo run migrate:content",
     "migrate:init": "tsx scripts/migrate-init.ts",
     "studio:init": "tsx scripts/studio-init.ts",
+    "studio:sync": "tsx scripts/studio-sync.ts",
     "toolkit:update": "tsx scripts/toolkit-update.ts",
     "migrate:doctor": "tsx scripts/migrate-doctor.ts",
     "build:demo-fixtures": "tsx scripts/build-demo-fixtures.ts",

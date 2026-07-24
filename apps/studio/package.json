@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@sanity/ui": "^3.3.5",
+    "aem-to-sanity-studio": "workspace:*",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "sanity": "^6.5.0",

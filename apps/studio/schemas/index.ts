@@ -4,7 +4,8 @@
  * the example package sets `SCHEMAS_OUT_DIR` to
  * `../../apps/studio/schemas/generated`.
  *
- * `category` is hand-authored — it implements Sanity's parent-child taxonomy
+ * `category` ships with the toolkit (`aem-to-sanity-studio`) — it implements
+ * Sanity's parent-child taxonomy
  * pattern and is populated by `aem-tags` from `/content/cq:tags`. Tagfield
  * widgets on AEM dialogs emit `array of reference-to-category` fields that
  * resolve to these docs.
@@ -14,7 +15,7 @@
  * `defineConfig({ schema: { types } })`).
  */
 import { allSchemaTypes as generatedSchemaTypes } from "./generated/index.ts";
-import { category } from "./category.ts";
+import { category } from "aem-to-sanity-studio";
 
 export const allSchemaTypes = [...generatedSchemaTypes, category];
 export { category };

@@ -2,7 +2,7 @@ import { defineConfig } from "sanity";
 import { structureTool } from "sanity/structure";
 import { sanitizeSchemaTypes } from "aem-to-sanity-schema/sanitize";
 import { allSchemaTypes } from "./schemas/index.ts";
-import { aemFormComponents } from "./components/inputs/StringToggleGroupInput.tsx";
+import { aemFormComponents } from "aem-to-sanity-studio";
 
 /**
  * Example Studio that consumes the schemas emitted by `aem-to-sanity-schema`.
