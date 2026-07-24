@@ -11,7 +11,9 @@ describe("parseCliArgs", () => {
       repo: DEFAULT_REPO,
       ref: DEFAULT_REF,
       install: true,
+      detach: false,
       help: false,
+      version: false,
     });
   });
 
@@ -34,6 +36,12 @@ describe("parseCliArgs", () => {
     expect(config.repo).toBe("https://example.com/fork.git");
 
     expect(parseCliArgs(["dir", "--no-install"]).install).toBe(false);
+    expect(parseCliArgs(["dir", "--detach"]).detach).toBe(true);
+  });
+
+  it("parses --version / -v without a target dir", () => {
+    expect(parseCliArgs(["--version"]).version).toBe(true);
+    expect(parseCliArgs(["-v"]).version).toBe(true);
   });
 
   it("supports short flags", () => {

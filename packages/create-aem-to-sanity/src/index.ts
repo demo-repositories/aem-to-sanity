@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
+import { name as PKG_NAME, version as PKG_VERSION } from "../package.json";
 import { CliError, USAGE, parseCliArgs, validateSlug } from "./args.ts";
 
 function fail(msg: string): never {
@@ -27,12 +28,40 @@ function run(cmd: string, args: string[], cwd: string, optional = false): boolea
   return true;
 }
 
+function capture(cmd: string, args: string[], cwd: string): string | undefined {
+  const result = spawnSync(cmd, args, {
+    cwd,
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  });
+  if (result.error || result.status !== 0) return undefined;
+  return result.stdout.trim();
+}
+
 function commandExists(cmd: string): boolean {
   const probe = spawnSync(cmd, ["--version"], {
     stdio: "ignore",
     shell: process.platform === "win32",
   });
   return !probe.error && probe.status === 0;
+}
+
+/**
+ * Record how this scaffold was produced in the clone's root package.json.
+ * `pnpm -w toolkit:update` reads it back to know which repo to fetch from,
+ * and operators can always answer "which scaffolder / toolkit ref made this?".
+ */
+function stampScaffold(dest: string, repo: string, ref: string): void {
+  const pkgPath = join(dest, "package.json");
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  pkg.aemToSanity = {
+    scaffolder: `${PKG_NAME}@${PKG_VERSION}`,
+    repo,
+    ref,
+    commit: capture("git", ["rev-parse", "HEAD"], dest) ?? "unknown",
+    createdAt: new Date().toISOString(),
+  };
+  writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
 async function promptMissing(targetDir: string | undefined, tenant: string | undefined) {
@@ -72,10 +101,16 @@ async function main(): Promise<void> {
     throw err;
   }
 
+  if (config.version) {
+    console.log(PKG_VERSION);
+    return;
+  }
   if (config.help) {
     console.log(USAGE);
     return;
   }
+
+  console.log(`[create-aem-to-sanity] v${PKG_VERSION}`);
 
   let targetDir: string;
   let tenant: string | undefined;
@@ -100,9 +135,21 @@ async function main(): Promise<void> {
   console.log(`[create-aem-to-sanity] cloning ${config.repo} (${config.ref}) → ${targetDir}`);
   run("git", ["clone", "--depth", "1", "--branch", config.ref, config.repo, dest], process.cwd());
 
-  // Detach from the toolkit's history: the scaffold is the operator's repo now.
-  rmSync(join(dest, ".git"), { recursive: true, force: true });
-  run("git", ["init", "-q", "-b", "main"], dest, true);
+  if (config.detach) {
+    // Clean slate: the scaffold carries no toolkit history and can't merge
+    // upstream updates later — re-scaffolding is the only upgrade path.
+    rmSync(join(dest, ".git"), { recursive: true, force: true });
+    run("git", ["init", "-q", "-b", "main"], dest, true);
+  } else {
+    // Keep the toolkit history under an `upstream` remote so the scaffold can
+    // pull future toolkit releases via `pnpm -w toolkit:update`. `origin`
+    // stays free for the operator's own repository.
+    run("git", ["remote", "rename", "origin", "upstream"], dest, true);
+    // Cloning a tag leaves HEAD detached — pin a local main branch either way.
+    run("git", ["checkout", "-q", "-B", "main"], dest, true);
+  }
+
+  stampScaffold(dest, config.repo, config.ref);
 
   const haspnpm = commandExists("pnpm");
   if (config.install && haspnpm) {
@@ -122,6 +169,14 @@ async function main(): Promise<void> {
     );
   }
 
+  // Commit the scaffold state (stamp + any install-time lockfile pruning —
+  // the upstream lockfile carries importers for gitignored tenant folders
+  // that don't exist in a fresh clone). A clean tree is what lets
+  // `pnpm -w toolkit:update` run later without a manual commit first.
+  // Tenant folders are gitignored, so credentials never enter history.
+  run("git", ["add", "-A"], dest, true) &&
+    run("git", ["commit", "-q", "-m", "chore: aem-to-sanity scaffold"], dest, true);
+
   const rel = relative(process.cwd(), dest) || ".";
   const name = basename(dest);
   console.log("");
@@ -140,6 +195,10 @@ async function main(): Promise<void> {
     console.log(`  ${step++}. pnpm -F tenant-${tenant} migrate        # dry-run the pipeline`);
   } else {
     console.log(`  ${step++}. pnpm migrate:init <slug>          # scaffold your first tenant`);
+  }
+  if (!config.detach) {
+    console.log("");
+    console.log("Later, pull toolkit updates with: pnpm -w toolkit:update [ref]");
   }
   console.log("");
   console.log("Full runbook: docs/running-the-migration.md");

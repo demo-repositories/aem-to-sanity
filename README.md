@@ -58,7 +58,7 @@ For the full operator's runbook (every env var, every flag, troubleshooting), se
 
 ## Quickstart
 
-Starting a fresh project? The scaffolder does steps 0–1 for you — clones this repo (detached from its history), installs, builds, and sets up your first tenant:
+Starting a fresh project? The scaffolder does steps 0–1 for you — clones this repo (toolkit history kept under an `upstream` remote so `pnpm -w toolkit:update` can pull future releases), installs, builds, and sets up your first tenant:
 
 ```bash
 npm create @shehjad/aem-to-sanity my-migration -- --tenant acme
@@ -132,6 +132,7 @@ aem-to-sanity/
 ├── scripts/                           Repo-wide tooling
 │   ├── migrate-init.ts                Scaffold a new tenant from tenants/template/
 │   ├── migrate-doctor.ts              Detect tenant drift + auto-repair package.json scripts
+│   ├── toolkit-update.ts              Pull toolkit updates into a scaffolded clone (merge upstream ref)
 │   ├── aem-probe.ts                   Resolve a single AEM dialog (supertype chain) without running the full migrator
 │   ├── wipe-media-library.ts          Delete every Sanity ML asset (test environments only)
 │   └── ensure-studio-stub.ts          Writes a minimal schemas/generated stub so Studio boots on bare clone
@@ -181,7 +182,7 @@ Dialog walker → mapper → emitter → registry → pageBuilder synthesizer �
 Five CLIs (`aem-extract`, `aem-tags`, `aem-transform`, `aem-assets`, `aem-import`) chained through on-disk artifacts. Type-aware coercion via the registry. Resumable per-stage. → [README](packages/aem-to-sanity-content/README.md)
 
 ### `@shehjad/create-aem-to-sanity`
-The `npm create` scaffolder — the only package published to npm. Clones this repo at a pinned ref, detaches the git history, installs + builds, and optionally scaffolds the first tenant via `migrate:init`. → [README](packages/create-aem-to-sanity/README.md)
+The `npm create` scaffolder — the only package published to npm. Clones this repo at a pinned ref (history kept under an `upstream` remote for later `pnpm -w toolkit:update`; `--detach` for a clean slate), stamps provenance into the scaffold's package.json, installs + builds, and optionally scaffolds the first tenant via `migrate:init`. → [README](packages/create-aem-to-sanity/README.md)
 
 ---
 

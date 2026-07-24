@@ -12,7 +12,9 @@ export interface CliConfig {
   repo: string;
   ref: string;
   install: boolean;
+  detach: boolean;
   help: boolean;
+  version: boolean;
 }
 
 export class CliError extends Error {}
@@ -37,7 +39,9 @@ export function parseCliArgs(argv: string[]): CliConfig {
       repo: { type: "string" },
       ref: { type: "string", short: "r" },
       "no-install": { type: "boolean" },
+      detach: { type: "boolean" },
       help: { type: "boolean", short: "h" },
+      version: { type: "boolean", short: "v" },
     },
   });
 
@@ -51,7 +55,9 @@ export function parseCliArgs(argv: string[]): CliConfig {
     repo: values.repo ?? DEFAULT_REPO,
     ref: values.ref ?? DEFAULT_REF,
     install: !values["no-install"],
+    detach: values.detach ?? false,
     help: values.help ?? false,
+    version: values.version ?? false,
   };
 
   if (config.tenant !== undefined) validateSlug(config.tenant);
@@ -72,7 +78,9 @@ Options:
   -r, --ref <git-ref>   branch or tag of the toolkit to clone (default: ${DEFAULT_REF})
       --repo <url>      source repository (default: ${DEFAULT_REPO})
       --no-install      skip pnpm install (incompatible with --tenant)
+      --detach          drop the toolkit git history (disables \`pnpm -w toolkit:update\` later)
   -h, --help            show this message
+  -v, --version         print the scaffolder version
 
 Examples:
   npm create @shehjad/aem-to-sanity my-migration
