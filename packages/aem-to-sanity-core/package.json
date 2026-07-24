@@ -2,6 +2,11 @@
   "name": "aem-to-sanity-core",
   "version": "1.11.0",
   "description": "Shared primitives for AEM → Sanity migration tooling: AEM fetcher, config, logger.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/demo-repositories/aem-to-sanity.git",
+    "directory": "packages/aem-to-sanity-core"
+  },
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

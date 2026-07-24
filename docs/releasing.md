@@ -54,6 +54,8 @@ A package must already exist on npm before a trusted publisher can be attached �
 
 **Workflow side** (already wired in `release.yml`): `permissions: id-token: write`, plus an `npm install -g npm@latest` step — trusted publishing needs npm CLI ≥ 11.5.1 and Node 22 bundles npm 10.x. `changeset publish` shells out to `npm publish`, which detects the OIDC environment automatically and also generates provenance attestations. Don't hardcode `publishConfig.provenance: true` in package.jsons — provenance generation only works in CI, and it would break the local-publish fallback below. The trusted-publisher config must keep matching the workflow filename: renaming `release.yml` means updating all six packages on npmjs.com.
 
+**Every published package.json needs a `repository` field** matching this repo (`"url": "git+https://github.com/demo-repositories/aem-to-sanity.git"`, plus `"directory": "packages/<name>"`). Provenance verification cross-checks it against the repository the workflow actually ran from and **rejects the publish with E422** if it's missing or different — local token publishes never checked this, so a package that published fine by hand can fail its first CI publish. When adding a new package, copy the `repository` block from an existing one.
+
 Anything not covered by trusted publishing (yanking a version, changing package access) is done locally with your 2FA, not from CI.
 
 ## Verifying a release end-to-end (client smoke test)
