@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "dotenv/config";
+import "./load-env.ts";
 import { join, resolve } from "node:path";
 import { createLogger, resolvePageBuilderName } from "aem-to-sanity-core";
 import {

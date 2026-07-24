@@ -18,7 +18,7 @@
  *
  * Dry-run by default. Set `MIGRATION_DRY_RUN=false` to upload + link + rewrite.
  */
-import "dotenv/config";
+import "./load-env.ts";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
