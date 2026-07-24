@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "dotenv/config";
+import "./load-env.ts";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import {

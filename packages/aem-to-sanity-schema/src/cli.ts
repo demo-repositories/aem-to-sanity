@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "dotenv/config";
+import "./load-env.ts";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {

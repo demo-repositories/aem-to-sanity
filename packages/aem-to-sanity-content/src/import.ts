@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "dotenv/config";
+import "./load-env.ts";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createColors, listCleanFiles, startTimer } from "aem-to-sanity-core";

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "dotenv/config";
+import "./load-env.ts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

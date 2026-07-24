@@ -3,11 +3,11 @@ import { z } from "zod";
 export const EnvSchema = z.object({
   AEM_ENV: z.enum(["author", "publish"]).default("author"),
 
-  AEM_AUTHOR_URL: z.string().url().optional(),
+  AEM_AUTHOR_URL: z.url().optional(),
   AEM_AUTHOR_USERNAME: z.string().optional(),
   AEM_AUTHOR_PASSWORD: z.string().optional(),
 
-  AEM_PUBLISH_URL: z.string().url().optional(),
+  AEM_PUBLISH_URL: z.url().optional(),
   AEM_PUBLISH_USERNAME: z.string().optional(),
   AEM_PUBLISH_PASSWORD: z.string().optional(),
 
