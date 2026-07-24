@@ -1,5 +1,18 @@
 # @shehjad/create-aem-to-sanity
 
+## 0.3.0
+
+### Minor Changes
+
+- [#67](https://github.com/demo-repositories/aem-to-sanity/pull/67) [`e559707`](https://github.com/demo-repositories/aem-to-sanity/commit/e559707d2e60d4c39e436525c14113dfc0037847) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Thin standalone scaffolds by default. `npm create @shehjad/aem-to-sanity <dir>` now emits a small single-tenant project — your config, content lists, and Studio at the root — with the toolkit installed from npm (`aem-to-sanity-core/schema/content/studio/cli` as regular dependencies). Updating the toolkit becomes `npm install <pkg>@latest`; no git merges. The previous monorepo-clone behavior is available behind `--clone` (with `--tenant`, `--ref`, `--repo`, `--detach` now clone-mode-only flags).
+
+### Patch Changes
+
+- [#69](https://github.com/demo-repositories/aem-to-sanity/pull/69) [`e9f078f`](https://github.com/demo-repositories/aem-to-sanity/commit/e9f078f183c8b1f76e8e34c7226b559b7a42e51e) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Standalone-scaffold fixes found by the post-release client smoke test. The embedded project template no longer ships Studio build output (`studio/dist/`, `studio/.sanity/` are skipped at embed and scaffold-copy time). The seeded `.env` now has `SCHEMAS_OUT_DIR=./studio/schemas/generated` active, so `migrate:schema` feeds the scaffold's own Studio out of the box instead of emitting to `output/schemas/` that the Studio never loads. The template Studio declares `@types/node`, so `tsc --noEmit` passes in a standalone scaffold (it previously resolved only via monorepo hoisting).
+
+- Updated dependencies [[`e559707`](https://github.com/demo-repositories/aem-to-sanity/commit/e559707d2e60d4c39e436525c14113dfc0037847), [`e9f078f`](https://github.com/demo-repositories/aem-to-sanity/commit/e9f078f183c8b1f76e8e34c7226b559b7a42e51e)]:
+  - aem-to-sanity-cli@1.11.0
+
 ## 0.2.0
 
 ### Minor Changes
