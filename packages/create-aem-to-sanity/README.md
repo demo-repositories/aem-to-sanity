@@ -1,82 +1,63 @@
 # @shehjad/create-aem-to-sanity
 
-Scaffolds a new [AEM → Sanity migration](https://github.com/demo-repositories/aem-to-sanity) project. One command gets you the full toolkit — schema migrator, content pipeline, per-tenant Studio template — plus (optionally) your first tenant folder, ready for credentials.
+Scaffolds a new [AEM → Sanity migration](https://github.com/demo-repositories/aem-to-sanity) project.
 
 ```bash
 npm create @shehjad/aem-to-sanity my-migration
-# or scaffold the first tenant in the same run:
-npm create @shehjad/aem-to-sanity my-migration -- --tenant acme
 ```
 
 Equivalent with pnpm: `pnpm create @shehjad/aem-to-sanity my-migration`.
 
-## What it does
+## What you get (standalone mode, the default)
 
-1. Shallow-clones the [`aem-to-sanity`](https://github.com/demo-repositories/aem-to-sanity) toolkit into the target directory (default ref: `main`; pin a release tag with `--ref`).
-2. Keeps the toolkit's git history under an **`upstream`** remote (so `origin` stays free for your own repository) and pins a local `main` branch — this is what makes `pnpm -w toolkit:update` work later. Pass `--detach` to drop the history instead (clean slate, but no update path).
-3. Stamps provenance into the scaffold's root `package.json` under an `aemToSanity` key — scaffolder version, source repo, ref, resolved commit, timestamp.
-4. Runs `pnpm install` + `pnpm build` so the workspace CLI bins are runnable out of the box (skip both with `--no-install`).
-5. With `--tenant <slug>`: runs `pnpm migrate:init <slug>` to scaffold `tenants/<slug>/` (env files, content-roots lists, per-tenant Studio) from the committed template, then re-installs to link the new workspaces.
-6. Commits the result (`chore: aem-to-sanity scaffold`) so the tree is clean and `toolkit:update` can run later without ceremony. Tenant folders are gitignored — credentials never enter history.
-7. Prints the next steps: fill in `.env` credentials, `pnpm -w migrate:doctor <slug>`, `pnpm -F tenant-<slug> migrate`.
+A small project that is *yours* — config, content lists, and a Sanity Studio — with the migration toolkit installed from npm as regular dependencies:
+
+```
+my-migration/
+├── package.json          aem-to-sanity-{core,schema,content,studio,cli} from npm
+├── .env                  AEM + Sanity credentials (seeded from .env.example, gitignored)
+├── aem-content-roots     pages to migrate
+├── aem-component-paths   components to map
+├── aem-component-*.json  container / hints / name-override configs
+├── studio/               your Sanity Studio (schemas generated into studio/schemas/generated)
+└── output/               pipeline caches + reports (gitignored)
+```
+
+The scaffolder copies the template (shipped inside [`aem-to-sanity-cli`](https://www.npmjs.com/package/aem-to-sanity-cli), versioned with the toolkit), seeds `.env` files, initializes git with an initial commit, and installs dependencies (pnpm if available, npm otherwise — both work).
+
+```bash
+cd my-migration
+$EDITOR .env studio/.env aem-content-roots aem-component-paths
+npx aem-to-sanity doctor     # verify wiring
+npm run migrate              # dry-run the full pipeline
+```
+
+**Updating the toolkit** is a normal dependency update — no git merges:
+
+```bash
+npm install aem-to-sanity-core@latest aem-to-sanity-schema@latest \
+  aem-to-sanity-content@latest aem-to-sanity-studio@latest aem-to-sanity-cli@latest
+npx aem-to-sanity doctor --fix        # sync scripts/env surface with the new template
+npx aem-to-sanity studio-sync --fix   # pick up new Studio template files (never overwrites yours)
+npm run migrate:schema                # re-emit schemas with the new toolkit
+```
 
 ## Flags
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `[target-dir]` | prompted | Directory to create (must be empty or absent) |
-| `-t, --tenant <slug>` | prompted (blank = skip) | First tenant to scaffold via `migrate:init` |
-| `-r, --ref <git-ref>` | `main` | Branch or tag of the toolkit to clone (e.g. `aem-to-sanity-core@1.9.0`) |
-| `--repo <url>` | the upstream GitHub URL | Clone from a fork or local checkout instead |
-| `--no-install` | install | Skip `pnpm install` + `pnpm build` (incompatible with `--tenant`) |
-| `--detach` | keep history | Drop the toolkit git history — disables `pnpm -w toolkit:update` |
+| `--no-install` | install | Skip dependency installation |
+| `--clone` | off | Clone the full toolkit **monorepo** instead (see below) |
 | `-v, --version` | — | Print the scaffolder version and exit |
 
-When run without arguments in a terminal, the CLI prompts for the target directory and tenant slug; in non-interactive contexts (CI) the target directory is required.
+Pin the scaffolder itself with `npm create @shehjad/aem-to-sanity@<version>`; the toolkit version comes from npm at install time (`^` ranges recorded in the scaffold's package.json).
+
+## Clone mode (`--clone`)
+
+The pre-npm distribution model, kept for teams who want to hack on the toolkit source directly: clones the whole monorepo, keeps its git history under an `upstream` remote, and updates via `pnpm -w toolkit:update` (git merge). Clone-mode-only flags: `--tenant <slug>` (scaffold the first tenant), `--ref <git-ref>` (pin a release tag), `--repo <url>` (fork), `--detach` (drop history). Requires pnpm.
 
 ## Requirements
 
-- Node ≥ 22.12 and pnpm ≥ 9 to *run* the scaffolded toolkit (the CLI itself only needs Node ≥ 20)
-- `git` on the PATH
-
-## Versioning & updates
-
-Two versions are in play, pinned independently:
-
-- **Scaffolder version** — which release of this CLI runs. `npm create @shehjad/aem-to-sanity@latest …` forces the newest (plain `npm create` may reuse an older cached copy); `@0.2.0` pins exactly. `npm create @shehjad/aem-to-sanity -- --version` prints it, and every run logs it as its first line.
-- **Toolkit version** — which ref of the toolkit repo gets cloned. Defaults to `main`; pin a release with `--ref aem-to-sanity-core@1.9.0`.
-
-Both are recorded in the scaffold's root `package.json`:
-
-```jsonc
-"aemToSanity": {
-  "scaffolder": "@shehjad/create-aem-to-sanity@0.2.0",
-  "repo": "https://github.com/demo-repositories/aem-to-sanity.git",
-  "ref": "main",
-  "commit": "<sha the clone resolved to>",
-  "createdAt": "…"
-}
-```
-
-**Updating later:** from anywhere in the scaffold, run
-
-```bash
-pnpm -w toolkit:update                          # merge latest upstream/main
-pnpm -w toolkit:update aem-to-sanity-core@2.0.0 # or pin a release tag
-```
-
-It fetches the `upstream` remote (un-shallowing the clone on first run), merges the ref into your branch, runs `pnpm install && pnpm build`, and refreshes the `aemToSanity` stamp (`ref`, `commit`, `updatedAt`). Your tenant folders are gitignored, so the merge never touches them. The script refuses to run on a dirty working tree, and scaffolds created with `--detach` can't update (no shared history) — re-scaffold instead.
-
-The full update walkthrough — including the post-merge `migrate:doctor` / `studio:sync` / `migrate:schema` steps and conflict handling — lives in the scaffolded project at [`docs/updating.md`](https://github.com/demo-repositories/aem-to-sanity/blob/main/docs/updating.md).
-
-## After scaffolding
-
-The scaffolded project is self-documenting — start with its `README.md` and `docs/running-the-migration.md` (the full operator runbook: every env var, every flag, troubleshooting). The short version:
-
-```bash
-cd my-migration
-$EDITOR tenants/acme/.env            # AEM source + Sanity destination credentials
-$EDITOR tenants/acme/studio/.env     # Studio project id + dataset
-pnpm -w migrate:doctor acme          # verify wiring before running
-pnpm -F tenant-acme migrate          # dry-run the full pipeline
-```
+- Node ≥ 20 for the CLI; Node ≥ 22.12 to run the toolkit
+- `git` recommended (initial commit); required for `--clone`

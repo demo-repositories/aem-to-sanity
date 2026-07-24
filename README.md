@@ -58,13 +58,13 @@ For the full operator's runbook (every env var, every flag, troubleshooting), se
 
 ## Quickstart
 
-Starting a fresh project? The scaffolder does steps 0–1 for you — clones this repo (toolkit history kept under an `upstream` remote so `pnpm -w toolkit:update` can pull future releases), installs, builds, and sets up your first tenant:
+Starting a fresh project? The scaffolder emits a small standalone project — your config + Studio, with the toolkit installed **from npm** — and updating later is a plain `npm install`:
 
 ```bash
-npm create @shehjad/aem-to-sanity my-migration -- --tenant acme
+npm create @shehjad/aem-to-sanity my-migration
 ```
 
-See [`packages/create-aem-to-sanity`](packages/create-aem-to-sanity/README.md) for flags (`--ref` to pin a release tag, `--repo` for forks). Working from a clone of this repo instead:
+See [`packages/create-aem-to-sanity`](packages/create-aem-to-sanity/README.md) for flags (including `--clone` for a full monorepo checkout with git-merge updates). Working from a clone of this repo instead:
 
 ```bash
 # 0. Install + build (pnpm ≥ 9, Node ≥ 22.12)
@@ -115,7 +115,8 @@ aem-to-sanity/
 │   ├── aem-to-sanity-schema/          Dialog → Sanity object types + TypeGen + pageBuilder synthesizer
 │   ├── aem-to-sanity-content/         extract → tags → transform → assets → import CLIs
 │   ├── aem-to-sanity-studio/          Studio primitives: category type, AEM widget inputs, ML aspect
-│   └── create-aem-to-sanity/          `npm create` scaffolder — clones this repo + inits the first tenant
+│   ├── aem-to-sanity-cli/             `aem-to-sanity` operator CLI (doctor, studio-sync, run) + project template
+│   └── create-aem-to-sanity/          `npm create` scaffolder — standalone npm-dep project (or --clone)
 │
 ├── apps/                              Local apps consuming the pipeline output
 │   └── studio/                        Sanity Studio — loads emitted schemas; visual verification
@@ -132,11 +133,8 @@ aem-to-sanity/
 │
 ├── scripts/                           Repo-wide tooling
 │   ├── migrate-init.ts                Scaffold a new tenant from tenants/template/
-│   ├── migrate-doctor.ts              Detect tenant drift + auto-repair package.json scripts
-│   ├── toolkit-update.ts              Pull toolkit updates into a scaffolded clone (merge upstream ref)
-│   ├── studio-sync.ts                 Sync a tenant Studio's file shell with the template (copy-new, keep-yours)
+│   ├── toolkit-update.ts              Pull toolkit updates into a clone-mode scaffold (merge upstream ref)
 │   ├── aem-probe.ts                   Resolve a single AEM dialog (supertype chain) without running the full migrator
-│   ├── wipe-media-library.ts          Delete every Sanity ML asset (test environments only)
 │   └── ensure-studio-stub.ts          Writes a minimal schemas/generated stub so Studio boots on bare clone
 │
 ├── docs/
@@ -173,7 +171,7 @@ Every migration runs from `tenants/<your-tenant>/`. Only `tenants/template/` (th
 
 ## Packages
 
-Four runtime packages designed so external teams can consume only what they need, plus the npm-published project scaffolder.
+Five packages, all published to npm, designed so external teams can consume only what they need — plus the `npm create` scaffolder.
 
 ### `aem-to-sanity-core`
 Shared primitives — AEM client (basic auth / bearer / Service Credentials via Adobe IMS), config loader, logger, depth-truncation handler. No business logic. → [README](packages/aem-to-sanity-core/README.md)
@@ -187,8 +185,11 @@ Five CLIs (`aem-extract`, `aem-tags`, `aem-transform`, `aem-assets`, `aem-import
 ### `aem-to-sanity-studio`
 Studio-side primitives tenant studios import instead of copying: the `category` taxonomy type (populated by `aem-tags`), `aemFormComponents` input routing for migrated AEM widgets, and the `aemSource` Media Library aspect (`aem-assets` dedup). Because they're imported, toolkit updates deliver Studio changes without touching operator studios. → [README](packages/aem-to-sanity-studio/README.md)
 
+### `aem-to-sanity-cli`
+The `aem-to-sanity` operator bin — `doctor` (env/config drift checks), `studio-sync` (template file sync, never overwrites), `run` (logged pipeline runs), `wipe-media-library`. Workspace-mode aware: works in standalone scaffolds and in this monorepo (the root `pnpm -w migrate:doctor` / `studio:sync` scripts wrap it). Also ships the project template that `create-aem-to-sanity` scaffolds from, embedded at build time. → [README](packages/aem-to-sanity-cli/README.md)
+
 ### `@shehjad/create-aem-to-sanity`
-The `npm create` scaffolder — the only package published to npm. Clones this repo at a pinned ref (history kept under an `upstream` remote for later `pnpm -w toolkit:update`; `--detach` for a clean slate), stamps provenance into the scaffold's package.json, installs + builds, and optionally scaffolds the first tenant via `migrate:init`. → [README](packages/create-aem-to-sanity/README.md)
+The `npm create` scaffolder. Default: a thin standalone project (config + Studio at the root) with the toolkit installed from npm — updates are a plain `npm install`. `--clone` gives the old full-monorepo checkout with git-merge updates for teams hacking on toolkit source. → [README](packages/create-aem-to-sanity/README.md)
 
 ---
 
@@ -259,7 +260,7 @@ pnpm migrate:doctor --all
 
 ## Versioning & releases
 
-The three runtime packages share one version line (currently **1.0.0**), managed with [Changesets](https://github.com/changesets/changesets). Every release ships as git tags + [GitHub Releases](https://github.com/demo-repositories/aem-to-sanity/releases) with release notes, so you decide when to move:
+The five toolkit packages share one version line, managed with [Changesets](https://github.com/changesets/changesets). Every release is published to npm and ships git tags + [GitHub Releases](https://github.com/demo-repositories/aem-to-sanity/releases) with release notes, so you decide when to move:
 
 ```bash
 git fetch --tags

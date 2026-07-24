@@ -5,7 +5,7 @@
     { "repo": "demo-repositories/aem-to-sanity" }
   ],
   "commit": false,
-  "fixed": [["aem-to-sanity-core", "aem-to-sanity-schema", "aem-to-sanity-content", "aem-to-sanity-studio"]],
+  "fixed": [["aem-to-sanity-core", "aem-to-sanity-schema", "aem-to-sanity-content", "aem-to-sanity-studio", "aem-to-sanity-cli"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",

@@ -1,24 +1,25 @@
-#!/usr/bin/env node
 /**
- * Detect drift between an operator tenant folder and tenants/template/, plus
+ * Detect drift between a migration project and the reference template, plus
  * sanity-check the operator's .env against .env.example.
  *
- *   pnpm migrate:doctor <slug>          report only
- *   pnpm migrate:doctor <slug> --fix    auto-repair safe surfaces (scripts block)
+ * Monorepo mode:
+ *   aem-to-sanity doctor <slug> [--fix]     one tenant under tenants/
+ *   aem-to-sanity doctor --all [--fix]      every tenant
+ *
+ * Standalone mode (thin scaffold — the project root is the tenant):
+ *   aem-to-sanity doctor [--fix]
  *
  * Exits 0 when clean, 1 when findings remain after any fixes were applied.
  */
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 
 import {
   AEM_AUTH_FLOWS,
   AEM_CONNECTIVITY_KEYS,
   COMMITTED_TENANTS,
   OPERATOR_FILES,
-  TEMPLATE_DIR,
   TEMPLATE_FILES,
-  TENANTS_DIR,
   hasFixturesContent,
   inspectFixturesLayout,
   isMeaningfulValue,
@@ -26,9 +27,9 @@ import {
   parseEnvExample,
   readFileIfExists,
   resolveFixturesRoot,
-  tenantDir,
   type FixturesLayout,
 } from "./lib/tenant-template.ts";
+import { inferTenantSlug, type WorkspaceContext } from "./paths.ts";
 
 type Severity = "error" | "warn" | "info";
 
@@ -44,18 +45,23 @@ const record = (severity: Severity, area: Finding["area"], message: string): voi
 };
 
 function fail(msg: string): never {
-  console.error(`[migrate:doctor] ${msg}`);
+  console.error(`[doctor] ${msg}`);
   process.exit(2);
 }
 
-function checkPackageJson(dir: string, fix: boolean, slug: string): void {
-  const templatePkgPath = join(TEMPLATE_DIR, "package.json");
+/** In standalone mode nothing is a committed tenant. */
+function isCommitted(ctx: WorkspaceContext, slug: string): boolean {
+  return ctx.mode === "monorepo" && COMMITTED_TENANTS.has(slug);
+}
+
+function checkPackageJson(ctx: WorkspaceContext, dir: string, fix: boolean, slug: string): void {
+  const templatePkgPath = join(ctx.templateDir, "package.json");
   const tenantPkgPath = join(dir, "package.json");
   if (!existsSync(tenantPkgPath)) {
     record("error", "structure", "package.json is missing");
     return;
   }
-  if (COMMITTED_TENANTS.has(slug)) {
+  if (isCommitted(ctx, slug)) {
     record("info", "package.json", "committed tenant — scripts block not compared to template");
     return;
   }
@@ -91,13 +97,13 @@ function checkPackageJson(dir: string, fix: boolean, slug: string): void {
   }
 }
 
-function checkTemplateFiles(dir: string, slug: string): void {
-  if (COMMITTED_TENANTS.has(slug)) {
+function checkTemplateFiles(ctx: WorkspaceContext, dir: string, slug: string): void {
+  if (isCommitted(ctx, slug)) {
     record("info", "template-file", "committed tenant — template file drift not checked");
     return;
   }
   for (const name of TEMPLATE_FILES) {
-    const templatePath = join(TEMPLATE_DIR, name);
+    const templatePath = join(ctx.templateDir, name);
     const tenantPath = join(dir, name);
     const templateContent = readFileIfExists(templatePath);
     const tenantContent = readFileIfExists(tenantPath);
@@ -135,18 +141,10 @@ function recordFixturesLayoutFindings(
   const hint = opts.buildHint ? ` — ${opts.buildHint}` : "";
 
   if (!hasContent) {
-    record(
-      "error",
-      "fixtures",
-      `fixtures missing /content/ .infinity.json trees${hint}`,
-    );
+    record("error", "fixtures", `fixtures missing /content/ .infinity.json trees${hint}`);
   }
   if (!hasComponents) {
-    record(
-      "error",
-      "fixtures",
-      `fixtures missing /apps/ .infinity.json trees${hint}`,
-    );
+    record("error", "fixtures", `fixtures missing /apps/ .infinity.json trees${hint}`);
   }
   if (hasFlat && !hasContent && !hasComponents) {
     record(
@@ -191,7 +189,7 @@ function validateTenantEnvRequired(
   }
 }
 
-function checkEnv(dir: string, slug: string): void {
+function checkEnv(ctx: WorkspaceContext, dir: string, slug: string): void {
   const envExamplePath = join(dir, ".env.example");
   const envPath = join(dir, ".env");
   const envExampleContent = readFileIfExists(envExamplePath);
@@ -201,7 +199,7 @@ function checkEnv(dir: string, slug: string): void {
   }
 
   const declared = parseEnvExample(envExampleContent);
-  const isCommittedDemo = slug === "demo" && COMMITTED_TENANTS.has(slug);
+  const isCommittedDemo = slug === "demo" && isCommitted(ctx, slug);
 
   if (isCommittedDemo) {
     const fixturesVar = declared.find((d) => d.key === "AEM_FIXTURES_DIR");
@@ -226,11 +224,7 @@ function checkEnv(dir: string, slug: string): void {
 
     const fixturesDirRaw = tenantEnv.get("AEM_FIXTURES_DIR");
     if (!isMeaningfulValue(fixturesDirRaw)) {
-      record(
-        "warn",
-        "env",
-        "AEM_FIXTURES_DIR unset in .env — offline replay requires ./fixtures/aem",
-      );
+      record("warn", "env", "AEM_FIXTURES_DIR unset in .env — offline replay requires ./fixtures/aem");
     }
 
     const fixturesRoot = resolveFixturesRoot(
@@ -330,11 +324,11 @@ function ensureNotIgnoringOperatorFiles(dir: string): void {
   }
 }
 
-function render(slug: string): number {
+function render(label: string): number {
   const groups: Record<Severity, Finding[]> = { error: [], warn: [], info: [] };
   for (const f of findings) groups[f.severity].push(f);
 
-  const banner = `[migrate:doctor] tenants/${slug}/`;
+  const banner = `[doctor] ${label}`;
   if (groups.error.length === 0 && groups.warn.length === 0) {
     console.log(`${banner} — clean`);
     if (groups.info.length > 0) {
@@ -357,47 +351,65 @@ function render(slug: string): number {
   return groups.error.length > 0 ? 1 : 0;
 }
 
-function listTenants(): string[] {
-  if (!existsSync(TENANTS_DIR)) return [];
-  return readdirSync(TENANTS_DIR).filter((name) => {
+function listTenants(tenantsDir: string): string[] {
+  if (!existsSync(tenantsDir)) return [];
+  return readdirSync(tenantsDir).filter((name) => {
     if (name === "template") return false;
-    const path = join(TENANTS_DIR, name);
+    const path = join(tenantsDir, name);
     if (!statSync(path).isDirectory()) return false;
     return existsSync(join(path, "package.json"));
   });
 }
 
-function main(): void {
-  const args = process.argv.slice(2);
+export function runDoctor(args: string[], ctx: WorkspaceContext): never {
   const fix = args.includes("--fix");
   const all = args.includes("--all");
   const positional = args.filter((a) => !a.startsWith("--"));
-  const slugs = all ? listTenants() : positional;
 
-  if (slugs.length === 0) {
-    fail(
-      "usage: pnpm migrate:doctor <slug> [--fix]   or   pnpm migrate:doctor --all [--fix]",
-    );
+  interface Target {
+    slug: string;
+    dir: string;
+    label: string;
+  }
+  let targets: Target[];
+
+  if (ctx.mode === "standalone") {
+    if (all || positional.length > 0) {
+      fail("standalone project — run `aem-to-sanity doctor [--fix]` with no tenant argument");
+    }
+    targets = [{ slug: ".", dir: ctx.root, label: `${ctx.root}/` }];
+  } else {
+    const tenantsDir = ctx.tenantsDir!;
+    let slugs = all ? listTenants(tenantsDir) : positional;
+    if (slugs.length === 0) {
+      const inferred = inferTenantSlug(ctx);
+      if (inferred) slugs = [inferred];
+    }
+    if (slugs.length === 0) {
+      fail("usage: aem-to-sanity doctor <slug> [--fix]   or   aem-to-sanity doctor --all [--fix]");
+    }
+    targets = slugs.map((slug) => ({
+      slug,
+      dir: join(tenantsDir, slug),
+      label: `tenants/${slug}/`,
+    }));
   }
 
   let exitCode = 0;
-  for (let i = 0; i < slugs.length; i++) {
+  for (let i = 0; i < targets.length; i++) {
     if (i > 0) console.log("");
-    const slug = slugs[i];
+    const { slug, dir, label } = targets[i]!;
     findings.length = 0;
-    const dir = tenantDir(slug);
     if (!existsSync(dir)) {
-      console.error(`[migrate:doctor] tenants/${slug}/ does not exist`);
+      console.error(`[doctor] ${label} does not exist`);
       exitCode = Math.max(exitCode, 2);
       continue;
     }
-    checkPackageJson(dir, fix, slug);
-    checkTemplateFiles(dir, slug);
+    checkPackageJson(ctx, dir, fix, slug);
+    checkTemplateFiles(ctx, dir, slug);
     ensureNotIgnoringOperatorFiles(dir);
-    checkEnv(dir, slug);
-    exitCode = Math.max(exitCode, render(slug));
+    checkEnv(ctx, dir, slug);
+    exitCode = Math.max(exitCode, render(label));
   }
   process.exit(exitCode);
 }
-
-main();

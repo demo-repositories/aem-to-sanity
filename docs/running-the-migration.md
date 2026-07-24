@@ -24,7 +24,7 @@ pnpm install
 pnpm build   # builds all three packages into packages/*/dist
 ```
 
-> **Shortcut for fresh projects:** `npm create @shehjad/aem-to-sanity <dir> -- --tenant <slug>` clones this repo, runs install + build, and scaffolds the first tenant — steps 0 and 1-pre in one command. The toolkit history is kept under an `upstream` remote, so later `pnpm -w toolkit:update [ref]` merges a newer toolkit release into your scaffold — full walkthrough in [`docs/updating.md`](updating.md). See [`packages/create-aem-to-sanity`](../packages/create-aem-to-sanity/README.md) for scaffolder flags.
+> **Shortcut for fresh projects:** `npm create @shehjad/aem-to-sanity <dir>` scaffolds a standalone single-tenant project (config + Studio at the root, toolkit installed from npm) — steps 0 and 1-pre in one command. In that layout the per-tenant commands below lose their `tenants/<slug>` prefix (`npx aem-to-sanity doctor`, `npm run migrate`) and toolkit updates are a plain `npm install` — walkthrough in [`docs/updating.md`](updating.md). See [`packages/create-aem-to-sanity`](../packages/create-aem-to-sanity/README.md) for flags, including `--clone` for a full monorepo checkout.
 
 ---
 
