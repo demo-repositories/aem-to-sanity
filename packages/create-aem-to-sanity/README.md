@@ -65,7 +65,9 @@ pnpm -w toolkit:update                          # merge latest upstream/main
 pnpm -w toolkit:update aem-to-sanity-core@2.0.0 # or pin a release tag
 ```
 
-It fetches the `upstream` remote (un-shallowing the clone on first run), merges the ref into your branch, runs `pnpm install && pnpm build`, and refreshes the `aemToSanity` stamp (`ref`, `commit`, `updatedAt`). Your tenant folders are gitignored, so the merge never touches them; commit the result, then `pnpm -w migrate:doctor --all --fix` syncs tenants with any template changes. The script refuses to run on a dirty working tree, and scaffolds created with `--detach` can't update (no shared history) — re-scaffold instead.
+It fetches the `upstream` remote (un-shallowing the clone on first run), merges the ref into your branch, runs `pnpm install && pnpm build`, and refreshes the `aemToSanity` stamp (`ref`, `commit`, `updatedAt`). Your tenant folders are gitignored, so the merge never touches them. The script refuses to run on a dirty working tree, and scaffolds created with `--detach` can't update (no shared history) — re-scaffold instead.
+
+The full update walkthrough — including the post-merge `migrate:doctor` / `studio:sync` / `migrate:schema` steps and conflict handling — lives in the scaffolded project at [`docs/updating.md`](https://github.com/demo-repositories/aem-to-sanity/blob/main/docs/updating.md).
 
 ## After scaffolding
 

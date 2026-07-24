@@ -10,6 +10,7 @@ Every user-facing change must update its documentation in the same commit. Drift
 - `README.md` (root) — high-level overview.
 - `packages/*/README.md` — per-package surface (flags, env vars, phases, outputs).
 - `docs/running-the-migration.md` — canonical operator's guide (env vars table, per-stage flag tables, troubleshooting).
+- `docs/updating.md` — the update walkthrough for scaffolded projects; keep in sync when `toolkit:update`, `studio:sync`, `migrate:doctor`, or the scaffolder's git behavior changes.
 - `docs/overview.md` — architecture + layout.
 - `docs/aem-to-sanity-mapping.md` — **auto-generated** by `packages/aem-to-sanity-schema/src/docs.ts`. Do not edit by hand; regenerate.
 - `tenants/template/.env.example` — must list every env var a CLI reads. `tenants/template/` is the **committed template**; operator working copies live at `tenants/<their-tenant>/` and are gitignored.
