@@ -1,6 +1,6 @@
 {
   "name": "aem-to-sanity-core",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "Shared primitives for AEM → Sanity migration tooling: AEM fetcher, config, logger.",
   "repository": {
     "type": "git",

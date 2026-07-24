@@ -1,5 +1,12 @@
 # aem-to-sanity-schema
 
+## 1.11.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - aem-to-sanity-core@1.11.1
+
 ## 1.11.0
 
 ### Minor Changes

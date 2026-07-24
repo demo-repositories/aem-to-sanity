@@ -1,5 +1,14 @@
 # @shehjad/create-aem-to-sanity
 
+## 0.3.1
+
+### Patch Changes
+
+- [#71](https://github.com/demo-repositories/aem-to-sanity/pull/71) [`913e4b3`](https://github.com/demo-repositories/aem-to-sanity/commit/913e4b381d029b09eb32f12abf40c0217167ed13) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Standalone scaffolds get their `.gitignore` back. npm strips `.gitignore` files from published tarballs, so the template's ignore file never reached scaffolded projects — the scaffolder's initial commit captured `node_modules/` and the seeded `.env`, and any later commit would have put real AEM/Sanity credentials into git history. The template now ships the file as `dot-gitignore` (which npm keeps) and the scaffolder renames it on copy; as a safety net the scaffolder also writes a default `.gitignore` before `git init` if none exists. **If you scaffolded with `create-aem-to-sanity` 0.3.0:** check `git ls-files` for `.env` — if present, add the `.gitignore` (`node_modules/`, `dist/`, `output/`, `.env`, `.turbo/`, `.DS_Store`), run `git rm -r --cached .` then `git add -A`, and rewrite/avoid pushing any history that contains credentials.
+
+- Updated dependencies [[`913e4b3`](https://github.com/demo-repositories/aem-to-sanity/commit/913e4b381d029b09eb32f12abf40c0217167ed13)]:
+  - aem-to-sanity-cli@1.11.1
+
 ## 0.3.0
 
 ### Minor Changes
