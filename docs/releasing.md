@@ -94,6 +94,10 @@ npm run migrate                      # extract → tags → schema → transform
 #    - `migrate` exits 0 and the import stage prints "Would commit: N page(s), M categories"
 #    - studio/schemas/generated/index.ts is a real barrel (not the 4-line bootstrap stub)
 #    - `cd studio && npx tsc --noEmit` is clean
+#    - .gitignore exists and `git ls-files` shows no node_modules/ or .env
+#      (npm pack strips `.gitignore` from tarballs — the template ships it as
+#      `dot-gitignore` and the scaffolder renames it; a regression here commits
+#      the operator's credentials)
 ```
 
 With real credentials, continue as an actual migration would: fill `.env` / `studio/.env`, `npx aem-to-sanity doctor` until green, `npm run migrate`, then `MIGRATION_DRY_RUN=false npm run migrate` and open the Studio (`cd studio && npx sanity dev`).
