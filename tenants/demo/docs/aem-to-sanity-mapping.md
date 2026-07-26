@@ -125,7 +125,7 @@ AEM's JCR is schemaless on dialog inputs: `.infinity.json` serializes everything
 
 ### Richtext → Portable Text
 
-Both richtext variants — `cq/gui/components/authoring/dialog/richtext` (legacy) and `granite/ui/components/coral/foundation/form/richtext` (Coral) — map to `array-of-blocks`. When the ingested value is a string, `aem-transform` parses it as HTML via `@portabletext/block-tools` (with `jsdom` as the DOM):
+Both richtext variants — `cq/gui/components/authoring/dialog/richtext` (legacy) and `granite/ui/components/coral/foundation/form/richtext` (Coral) — map to `array-of-blocks`, emitted as `of: [{ type: "block" }, { type: "table" }]`. When the ingested value is a string, `aem-transform` parses it as HTML via `@portabletext/block-tools` (with `jsdom` as the DOM):
 
 - Decorators preserved: `strong`, `em`, `underline`, `strike-through`, `code`.
 - Styles preserved: `normal`, `h1`–`h4`, `blockquote`.
@@ -133,6 +133,16 @@ Both richtext variants — `cq/gui/components/authoring/dialog/richtext` (legacy
 - `<a href="...">` preserved as a `link` annotation with an `href` field.
 - `_key`s derived from SHA1 of `{jcrPath}::{fieldName}:{counter}` so re-runs produce byte-identical clean docs (deterministic-diff invariant).
 - Parser failure leaves the original string in place — no silent data loss.
+
+**Tables.** `<table>` elements convert to Sanity's native Portable Text table block (Studio ≥ 6.6): `{ _type: "table", headerRows, rows: [{ _type: "row", cells: [{ _type: "cell", value: [ ...blocks ] }] }] }`. The three type definitions are emitted alongside the component schemas on every `migrate:schema` run (`table.ts` / `row.ts` / `cell.ts` in the generated barrel), and the toolkit's `aemFormComponents` enables the Studio's table plugin so ingested tables render as editable tables. Conversion rules:
+
+- `headerRows` = the `<thead>` row count when present, else the number of leading rows whose cells are all `<th>`, else `0`.
+- Cell content goes through the same HTML → Portable Text pass as the surrounding richtext, so decorators, links, and lists inside cells survive.
+- `colspan` / `rowspan` are dropped (content is kept at its DOM position); short rows are padded with empty cells so the grid stays rectangular.
+- Nested tables are not converted — an inner table's text flattens to plain blocks inside the parent cell (no data loss).
+- Malformed or empty tables fall back to block-tools' default flattening, so their text still lands as normal blocks.
+
+The names `table`, `row`, and `cell` are **reserved** for this feature: an AEM component that would derive one of them is renamed with the `aem` prefix (e.g. `aemTable`) — the same mechanism as the `image` built-in.
 
 ### Number and boolean
 

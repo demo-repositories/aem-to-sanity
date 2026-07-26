@@ -16,9 +16,7 @@ import {
   type AuthoringHintConfig,
   type ContainerConfig,
 } from "aem-to-sanity-core";
-import { htmlToBlocks } from "@portabletext/block-tools";
-import { compileSchema, defineSchema, type Schema } from "@portabletext/schema";
-import { JSDOM } from "jsdom";
+import { htmlStringToPortableText } from "./portable-text.ts";
 import type { Manifest as CategoryManifest, ManifestEntry as CategoryManifestEntry } from "./tags.ts";
 
 interface AemNode {
@@ -705,75 +703,6 @@ function splitAemFileUploadDamPaths(
     for (const v of Object.values(rec)) walk(v);
   }
   walk(value);
-}
-
-/**
- * Default Portable Text schema used to compile AEM richtext HTML into Sanity
- * blocks. Matches the shape our emitter produces for `array-of-blocks` fields
- * (`{ type: "array", of: [{ type: "block" }] }`): Sanity's default decorators
- * + styles + lists + a `link` annotation. Kept module-level so every call
- * reuses the same compiled schema — the compile pass is not free.
- */
-const PORTABLE_TEXT_SCHEMA: Schema = compileSchema(
-  defineSchema({
-    decorators: [
-      { name: "strong" },
-      { name: "em" },
-      { name: "underline" },
-      { name: "strike-through" },
-      { name: "code" },
-    ],
-    styles: [
-      { name: "normal" },
-      { name: "h1" },
-      { name: "h2" },
-      { name: "h3" },
-      { name: "h4" },
-      { name: "blockquote" },
-    ],
-    lists: [{ name: "bullet" }, { name: "number" }],
-    annotations: [
-      { name: "link", fields: [{ name: "href", type: "string" }] },
-    ],
-  }),
-);
-
-const parseHtml = (html: string): Document =>
-  new JSDOM(html, { contentType: "text/html" }).window.document;
-
-/**
- * Deterministic `_key` generator for a single htmlToBlocks call. Seeds a
- * SHA1 stream with `{seed}:{counter}` so re-running the transform on
- * byte-identical input produces byte-identical Portable Text — preserving
- * the "re-runs produce clean git diffs" invariant that makes this pipeline
- * usable in CI.
- */
-function deterministicKeyGen(seed: string): () => string {
-  let counter = 0;
-  return () =>
-    createHash("sha1")
-      .update(`${seed}:${counter++}`)
-      .digest("hex")
-      .slice(0, 12);
-}
-
-/**
- * Convert an AEM richtext HTML string into Portable Text blocks. Returns
- * `null` on parser failure so the caller can keep the original string and
- * surface the failure via the audit — never drops content silently.
- */
-function htmlStringToPortableText(
-  html: string,
-  seed: string,
-): unknown[] | null {
-  try {
-    return htmlToBlocks(html, PORTABLE_TEXT_SCHEMA, {
-      parseHtml,
-      keyGenerator: deterministicKeyGen(seed),
-    }) as unknown[];
-  } catch {
-    return null;
-  }
 }
 
 const MONTH_INDEX: Record<string, number> = {

@@ -364,7 +364,10 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     }
     case "array-of-blocks": {
       props.type = '"array"';
-      props.of = '[{ type: "block" }]';
+      // `table` is the canonical Portable Text table type (Sanity ≥ 6.6),
+      // emitted alongside the component schemas by `pt-table.ts`; AEM
+      // richtext HTML tables are converted to it by `aem-transform`.
+      props.of = '[{ type: "block" }, { type: "table" }]';
       break;
     }
     case "array-of-string": {

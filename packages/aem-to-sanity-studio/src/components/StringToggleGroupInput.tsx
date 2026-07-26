@@ -1,5 +1,10 @@
 import React from "react";
-import type { FieldProps, InputProps, StringInputProps } from "sanity";
+import type {
+  FieldProps,
+  InputProps,
+  PortableTextPluginsProps,
+  StringInputProps,
+} from "sanity";
 import { set } from "sanity";
 import { Button, Flex } from "@sanity/ui";
 import styled from "styled-components";
@@ -82,12 +87,32 @@ function isButtonGroupString(props: InputProps): props is StringInputProps {
 }
 
 /**
+ * Enables the Studio's built-in Portable Text table editing (sanity ≥ 6.6,
+ * off by default) for every richtext field. The plugin binds to the
+ * canonical `table`/`row`/`cell` types that `migrate:schema` emits into the
+ * generated barrel, and `aem-transform` converts richtext HTML tables to —
+ * so ingested tables render as editable tables, not raw objects.
+ */
+function AemPortableTextPlugins(props: PortableTextPluginsProps) {
+  return props.renderDefault({
+    ...props,
+    plugins: {
+      ...props.plugins,
+      table: { enabled: true },
+    },
+  });
+}
+
+/**
  * `form.components` for `defineConfig` — routes fields the schema emitter
  * marked with an `options.aemWidget` hint:
  *
  * - `"buttonGroup"` → toggle-button-group input (this file)
  * - `"note"` → display-only caution banner replacing the whole field
  *   (`NoteField.tsx`) — AEM Coral `text` authoring instructions
+ *
+ * Also enables the native Portable Text table plugin for all richtext
+ * fields ({@link AemPortableTextPlugins}).
  */
 export const aemFormComponents = {
   input: (props: InputProps) => {
@@ -101,5 +126,8 @@ export const aemFormComponents = {
       return <NoteField {...props} />;
     }
     return props.renderDefault(props);
+  },
+  portableText: {
+    plugins: AemPortableTextPlugins,
   },
 };
