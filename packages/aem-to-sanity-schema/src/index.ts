@@ -22,6 +22,8 @@ export type {
 } from "./mapper.ts";
 export {
   RESERVED_SANITY_TYPE_NAMES,
+  SANITY_BUILTIN_TYPE_NAMES,
+  PORTABLE_TEXT_TABLE_TYPE_NAMES,
   componentPathToTypeName,
   displayTitleFromAemComponentJcrTitle,
   resolveSanityTypeNames,
@@ -35,6 +37,10 @@ export type { Outcome, FailureKind, ReportSummary } from "./report.ts";
 export { auditUnmappedTypes } from "./audit.ts";
 export type { AuditOptions, AuditResult, AuditExample } from "./audit.ts";
 export { writeMappingDocs } from "./docs.ts";
+export {
+  PT_TABLE_TYPE_NAMES,
+  writePortableTextTableArtifacts,
+} from "./pt-table.ts";
 export { runTypegen } from "./typegen/index.ts";
 export type { RunTypegenOptions, RunTypegenResult } from "./typegen/index.ts";
 export { sanitizeSchemaTypes } from "./sanitize.ts";

@@ -1,5 +1,5 @@
 import { defineField } from "sanity";
-import { RESERVED_SANITY_TYPE_NAMES } from "./naming.ts";
+import { SANITY_BUILTIN_TYPE_NAMES } from "./naming.ts";
 
 function aemPrefix(name: string): string {
   return "aem" + name.charAt(0).toUpperCase() + name.slice(1);
@@ -25,9 +25,14 @@ function aemPrefix(name: string): string {
 export function sanitizeSchemaTypes<T>(types: T[]): T[] {
   return types.map((raw) => {
     const t = { ...(raw as Record<string, unknown>) };
+    // Only genuine Sanity built-ins — NOT the full reserved set. The
+    // toolkit's own `table` / `row` / `cell` types (Portable Text tables)
+    // are legitimately named and must load as-is; renaming them here would
+    // break every richtext field's `{ type: "table" }` reference and the
+    // Studio table plugin's binding.
     if (
       typeof t.name === "string" &&
-      RESERVED_SANITY_TYPE_NAMES.has(t.name)
+      SANITY_BUILTIN_TYPE_NAMES.has(t.name)
     ) {
       t.name = aemPrefix(t.name);
     }

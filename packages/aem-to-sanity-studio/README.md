@@ -7,7 +7,7 @@ Studio-side primitives for AEM → Sanity migrations. Tenant Studios import thes
 | Export | What it is | Which stage needs it |
 |---|---|---|
 | `category` | Parent-child taxonomy document type ([pattern](https://www.sanity.io/docs/developer-guides/parent-child-taxonomy)) | `aem-tags` writes one `category` doc per `cq:Tag`; tagfield widgets emit `array of reference-to-category` |
-| `aemFormComponents` | `form.components` for `defineConfig` — routes fields marked `options.aemWidget` (`buttonGroup` → toggle group, `note` → caution banner) to their inputs | Studio rendering of migrated Coral widgets |
+| `aemFormComponents` | `form.components` for `defineConfig` — routes fields marked `options.aemWidget` (`buttonGroup` → toggle group, `note` → caution banner) to their inputs, and enables the built-in Portable Text table plugin (sanity ≥ 6.6) so migrated richtext tables are editable in place | Studio rendering of migrated Coral widgets + tables |
 | `StringToggleGroupInput`, `NoteField`, `isNoteField` | The individual components behind `aemFormComponents`, exported for custom routing | — |
 | `aemSourceAspect` (also `aem-to-sanity-studio/aspects/aemSource`) | Media Library aspect stamped on every uploaded asset (`damPath`, `assetInstanceId`) | `aem-assets` dedup + link steps |
 

@@ -36,6 +36,10 @@ import {
   rewriteBarrelFromDisk,
   writePageBuilderArtifacts,
 } from "./pagebuilder.ts";
+import {
+  PT_TABLE_TYPE_NAMES,
+  writePortableTextTableArtifacts,
+} from "./pt-table.ts";
 import { writeContentRegistry } from "./content-registry.ts";
 import { writeTemplatePageArtifacts } from "./template-pages.ts";
 
@@ -426,6 +430,11 @@ export async function migrateSchemas(
     ...(pageBuilderExclude ?? []),
     ...pageShellExclude,
   ];
+
+  // Canonical Portable Text table types (table/row/cell) — always emitted so
+  // the `{ type: "table" }` member every richtext field now declares resolves
+  // in any Studio consuming the generated barrel.
+  await writePortableTextTableArtifacts({ schemasDir });
 
   let pageBuilderFile: string | undefined;
   let pageFile: string | undefined;
@@ -891,6 +900,7 @@ async function pruneGeneratedSchemaFiles(
 
   const keep = new Set(componentTypeNames);
   keep.add("index");
+  for (const name of PT_TABLE_TYPE_NAMES) keep.add(name);
   if (opts.emitPageBuilder) {
     keep.add("page");
     keep.add(opts.pageBuilderName);
@@ -937,7 +947,7 @@ async function writeSchemasBarrel(
   if (successNames.length === 0) return;
 
   const pageExtras = opts.emitPageBuilder ? [opts.pageBuilderName, "page"] : [];
-  const allNames = [...successNames, ...pageExtras];
+  const allNames = [...PT_TABLE_TYPE_NAMES, ...successNames, ...pageExtras];
 
   const imports = allNames
     .map((n) => `import { ${n} } from "./${n}.ts";`)

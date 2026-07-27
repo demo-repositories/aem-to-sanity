@@ -1,10 +1,10 @@
 /**
  * Sanity built-in type names that can't be re-used for user-defined types.
- * Shared across the emitter pipeline (`resolveSanityTypeNames`) and the
- * Studio-side `sanitizeSchemaTypes` defense-in-depth step so both agree on
- * what counts as a collision.
+ * The Studio-side `sanitizeSchemaTypes` defense-in-depth step renames only
+ * these — never the toolkit-claimed table names below, which are legitimate
+ * user-defined types.
  */
-export const RESERVED_SANITY_TYPE_NAMES: ReadonlySet<string> = new Set<string>([
+export const SANITY_BUILTIN_TYPE_NAMES: ReadonlySet<string> = new Set<string>([
   "image",
   "file",
   "geopoint",
@@ -22,6 +22,24 @@ export const RESERVED_SANITY_TYPE_NAMES: ReadonlySet<string> = new Set<string>([
   "array",
   "email",
   "span",
+]);
+
+/**
+ * Claimed by the native Portable Text table feature (Sanity ≥ 6.6): the
+ * table plugin binds to these canonical type names, and the schema migrator
+ * emits them as toolkit-owned generated types (`pt-table.ts`). Ordered
+ * leaf-first (cell → row → table).
+ */
+export const PORTABLE_TEXT_TABLE_TYPE_NAMES = ["cell", "row", "table"] as const;
+
+/**
+ * Names AEM components can't claim: Sanity built-ins plus the toolkit-owned
+ * Portable Text table types. `resolveSanityTypeNames` renames a colliding
+ * component with the `aem` prefix (e.g. `aemTable`).
+ */
+export const RESERVED_SANITY_TYPE_NAMES: ReadonlySet<string> = new Set<string>([
+  ...SANITY_BUILTIN_TYPE_NAMES,
+  ...PORTABLE_TEXT_TABLE_TYPE_NAMES,
 ]);
 
 /**
