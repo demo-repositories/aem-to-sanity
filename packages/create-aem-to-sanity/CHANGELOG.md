@@ -1,5 +1,12 @@
 # @shehjad/create-aem-to-sanity
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - aem-to-sanity-cli@2.0.0
+
 ## 0.3.1
 
 ### Patch Changes
