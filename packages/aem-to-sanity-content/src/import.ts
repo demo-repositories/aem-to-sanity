@@ -137,6 +137,23 @@ async function main(): Promise<void> {
         console.error(
           `[import] ${typeChangedIds.size} doc(s) will be re-created (existing _type differs from new _type).`,
         );
+        // Commit the deletes in their own transaction BEFORE any page
+        // transaction. The content lake validates `_type` immutability
+        // against pre-transaction state, so a delete + create of the same
+        // id inside one transaction still fails with "immutable attribute
+        // _type may not be modified" — the delete must be durable first.
+        // Drafts are deleted regardless of `--discard-drafts`: they inherit
+        // the same constraint and would shadow the freshly-created doc.
+        const BATCH = 50;
+        const idList = [...typeChangedIds];
+        for (let i = 0; i < idList.length; i += BATCH) {
+          const delTx = (client as SanityClientLike).transaction();
+          for (const id of idList.slice(i, i + BATCH)) {
+            delTx.delete(id);
+            delTx.delete(id.startsWith("drafts.") ? id : `drafts.${id}`);
+          }
+          await delTx.commit();
+        }
       }
     }
   }
@@ -190,14 +207,9 @@ async function main(): Promise<void> {
       for (const doc of clean.docs) {
         const draftId = doc._id.startsWith("drafts.") ? doc._id : `drafts.${doc._id}`;
         if (typeChangedIds.has(doc._id)) {
-          // Sanity treats `_type` as immutable, so a re-import that changes
-          // the type fails with "immutable attribute _type may not be
-          // modified". Delete the published doc (and any draft, regardless
-          // of `--discard-drafts` — drafts inherit the same constraint and
-          // would otherwise shadow the freshly-created doc) before
-          // re-creating it under the new type.
-          tx.delete(doc._id);
-          tx.delete(draftId);
+          // Published doc + draft were already deleted in the upfront
+          // transaction (see the recreate-on-type-change block above), so
+          // this is a genuine create under the new `_type`.
           if (discardDrafts) draftsDiscarded++;
           tx.create(doc);
           typeChangedDocs++;

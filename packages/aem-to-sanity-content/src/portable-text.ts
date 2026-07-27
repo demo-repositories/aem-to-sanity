@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { htmlToBlocks, type DeserializerRule } from "@portabletext/block-tools";
+import {
+  htmlToBlocks,
+  type DeserializerRule,
+  type TypedObject,
+} from "@portabletext/block-tools";
 import { compileSchema, defineSchema, type Schema } from "@portabletext/schema";
 import { JSDOM } from "jsdom";
 
@@ -88,6 +92,10 @@ function deterministicKeyGen(seed: string): () => string {
  * - colspan/rowspan are dropped (content is kept at its DOM position); short
  *   rows are padded with empty cells so the Studio plugin's rectangular grid
  *   model holds.
+ * - `<caption>` content is preserved as regular text block(s) emitted
+ *   immediately before the table block — the canonical table shape has no
+ *   caption field, and dropping authored captions would violate the
+ *   keep-original contract (AEM's RTE table plugin authors them).
  * - Nested tables are not converted: the cell pass carries no table rule, so
  *   inner tables flatten to plain blocks inside the parent cell (no data
  *   loss).
@@ -102,6 +110,17 @@ function createTableRule(keyGenerator: () => string): DeserializerRule {
       if (tag !== "table") return undefined;
       try {
         const el = node as HTMLTableElement;
+        // Caption first (matches DOM order — `<caption>` is the table's
+        // first child). Keys are drawn before the rows' so re-runs stay
+        // byte-identical; caption-less tables draw nothing extra.
+        const captionEl = el.caption;
+        const captionBlocks =
+          captionEl && captionEl.textContent?.trim()
+            ? htmlToBlocks(captionEl.innerHTML, PORTABLE_TEXT_SCHEMA, {
+                parseHtml,
+                keyGenerator,
+              })
+            : [];
         // `.rows` walks thead → tbodies → tfoot in section order and skips
         // rows belonging to nested tables.
         const domRows = Array.from(el.rows);
@@ -130,7 +149,10 @@ function createTableRule(keyGenerator: () => string): DeserializerRule {
           }
         }
 
-        return createBlock({ _type: "table", headerRows, rows });
+        const tableBlock = createBlock({ _type: "table", headerRows, rows });
+        return captionBlocks.length > 0
+          ? ([...captionBlocks, tableBlock] as TypedObject[])
+          : tableBlock;
       } catch {
         return undefined;
       }

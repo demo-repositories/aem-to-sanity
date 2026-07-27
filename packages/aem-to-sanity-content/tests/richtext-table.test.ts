@@ -130,6 +130,23 @@ describe("richtext tables: cell content", () => {
     assert.deepEqual(rows[1]!.cells[1]!.value, []);
   });
 
+  it("preserves <caption> content as a text block before the table", () => {
+    const blocks = convert(
+      "<table><caption>Fee <strong>schedule</strong></caption>" +
+        "<tr><td>v</td></tr></table>",
+    );
+    assert.deepEqual(
+      blocks.map((b) => b._type),
+      ["block", "table"],
+    );
+    assert.equal(blockText(blocks[0]!), "Fee schedule");
+    assert.deepEqual(blocks[0]!.children![1]!.marks, ["strong"]);
+    assert.ok(
+      blocks[1]!.rows!.every((r) => r.cells.every((c) => cellText(c) !== "Fee schedule")),
+      "caption text does not leak into cells",
+    );
+  });
+
   it("flattens nested tables to plain blocks inside the parent cell", () => {
     const blocks = convert(
       "<table><tr><td>outer <table><tr><td>inner</td></tr></table></td></tr></table>",

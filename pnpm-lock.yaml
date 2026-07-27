@@ -239,6 +239,9 @@ importers:
 
   tenants/demo:
     devDependencies:
+      aem-to-sanity-cli:
+        specifier: workspace:*
+        version: link:../../packages/aem-to-sanity-cli
       aem-to-sanity-content:
         specifier: workspace:*
         version: link:../../packages/aem-to-sanity-content
@@ -254,6 +257,9 @@ importers:
 
   tenants/t-mobile:
     devDependencies:
+      aem-to-sanity-cli:
+        specifier: workspace:*
+        version: link:../../packages/aem-to-sanity-cli
       aem-to-sanity-content:
         specifier: workspace:*
         version: link:../../packages/aem-to-sanity-content

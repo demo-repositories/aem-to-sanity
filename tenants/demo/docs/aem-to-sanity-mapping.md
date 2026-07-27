@@ -139,6 +139,7 @@ Both richtext variants — `cq/gui/components/authoring/dialog/richtext` (legacy
 - `headerRows` = the `<thead>` row count when present, else the number of leading rows whose cells are all `<th>`, else `0`.
 - Cell content goes through the same HTML → Portable Text pass as the surrounding richtext, so decorators, links, and lists inside cells survive.
 - `colspan` / `rowspan` are dropped (content is kept at its DOM position); short rows are padded with empty cells so the grid stays rectangular.
+- `<caption>` content is preserved as regular text block(s) emitted immediately before the table block — the canonical table shape has no caption field.
 - Nested tables are not converted — an inner table's text flattens to plain blocks inside the parent cell (no data loss).
 - Malformed or empty tables fall back to block-tools' default flattening, so their text still lands as normal blocks.
 

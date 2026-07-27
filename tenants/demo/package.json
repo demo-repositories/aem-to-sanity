@@ -13,12 +13,13 @@
     "transform": "aem-transform --registry ./output/cache/content-type-registry.json",
     "assets": "aem-assets",
     "import": "aem-import",
-    "migrate:demo": "tsx ../../scripts/run-with-log.ts \"pnpm run extract && pnpm run tags && pnpm run migrate:schema && pnpm run transform && pnpm run assets && pnpm run import -- --discard-drafts\"",
-    "migrate:content": "tsx ../../scripts/run-with-log.ts \"pnpm run extract && pnpm run tags && pnpm run transform && pnpm run assets && pnpm run import\"",
+    "migrate:demo": "aem-to-sanity run \"pnpm run extract && pnpm run tags && pnpm run migrate:schema && pnpm run transform && pnpm run assets && pnpm run import -- --discard-drafts\"",
+    "migrate:content": "aem-to-sanity run \"pnpm run extract && pnpm run tags && pnpm run transform && pnpm run assets && pnpm run import\"",
     "migrate:all": "pnpm run migrate:schema && pnpm run typegen",
-    "migrate": "tsx ../../scripts/run-with-log.ts \"pnpm run extract && pnpm run tags && pnpm run migrate:schema && pnpm run transform && pnpm run assets && pnpm run import -- --discard-drafts\""
+    "migrate": "aem-to-sanity run \"pnpm run extract && pnpm run tags && pnpm run migrate:schema && pnpm run transform && pnpm run assets && pnpm run import -- --discard-drafts\""
   },
   "devDependencies": {
+    "aem-to-sanity-cli": "workspace:*",
     "aem-to-sanity-content": "workspace:*",
     "aem-to-sanity-schema": "workspace:*",
     "sanity": "^6.6.0",
