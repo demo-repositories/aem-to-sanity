@@ -1,5 +1,7 @@
 # aem-to-sanity-cli
 
+## 2.0.0
+
 ## 1.11.1
 
 ### Patch Changes

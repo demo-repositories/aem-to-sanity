@@ -1,6 +1,6 @@
 {
   "name": "@shehjad/create-aem-to-sanity",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Scaffold a new AEM → Sanity migration project: a standalone config + Studio project with the toolkit installed from npm (or --clone for the full monorepo).",
   "dependencies": {
     "aem-to-sanity-cli": "workspace:^"
