@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { discoverSlots } from "../src/slots.ts";
+import {
+  collectSlotOnlyResourceTypes,
+  discoverSlotGraph,
+  discoverSlots,
+  type DiscoveredSlots,
+} from "../src/slots.ts";
 
 /**
  * Slot discovery is run over raw extracted AEM trees. We don't want to
@@ -96,5 +101,125 @@ describe("slots: discoverSlots", () => {
     };
     const slots = discoverSlots([root]);
     assert.equal(slots.size, 0);
+  });
+});
+
+describe("slots: discoverSlotGraph page-body types", () => {
+  it("records direct children of structural wrappers as page-body types", () => {
+    const root = {
+      "sling:resourceType": "aem-integration/components/page",
+      root: {
+        "sling:resourceType": "wcm/foundation/components/responsivegrid",
+        promo: {
+          "sling:resourceType": "uxp/components/proxy/content/promocard",
+          buttonPrimary: {
+            "sling:resourceType": "uxp/components/proxy/content/button",
+          },
+        },
+      },
+    };
+    const { pageBodyTypes } = discoverSlotGraph([root]);
+    assert.ok(
+      pageBodyTypes.has("uxp/components/proxy/content/promocard"),
+      "grid child is a page-body block",
+    );
+    assert.ok(
+      !pageBodyTypes.has("uxp/components/proxy/content/button"),
+      "slot fill inside a component is not a page-body block",
+    );
+  });
+
+  it("counts a type as page-body when any page authors it at top level", () => {
+    // Button fills promocard's slot on one page AND sits directly on the
+    // grid on another — the page-level appearance must keep it in the
+    // page builder.
+    const pageA = {
+      root: {
+        "sling:resourceType": "wcm/foundation/components/responsivegrid",
+        promo: {
+          "sling:resourceType": "uxp/components/proxy/content/promocard",
+          buttonPrimary: {
+            "sling:resourceType": "uxp/components/proxy/content/button",
+          },
+        },
+      },
+    };
+    const pageB = {
+      root: {
+        "sling:resourceType": "wcm/foundation/components/responsivegrid",
+        cta: { "sling:resourceType": "uxp/components/proxy/content/button" },
+      },
+    };
+    const { pageBodyTypes } = discoverSlotGraph([pageA, pageB]);
+    assert.ok(pageBodyTypes.has("uxp/components/proxy/content/button"));
+  });
+});
+
+describe("slots: collectSlotOnlyResourceTypes", () => {
+  const BUTTON = "uxp/components/proxy/content/button";
+  const CONTENT = "aem-integration/components/content";
+
+  it("returns types that only ever fill slots", () => {
+    const result = collectSlotOnlyResourceTypes({
+      synthesizedSlotChildTypes: new Set([BUTTON, CONTENT]),
+      pageBodyTypes: new Set(),
+      discoveredSlots: new Map(),
+      containerParents: new Set(),
+    });
+    assert.deepEqual(result, [CONTENT, BUTTON].sort());
+  });
+
+  it("keeps a type that also appears in a page body", () => {
+    const result = collectSlotOnlyResourceTypes({
+      synthesizedSlotChildTypes: new Set([BUTTON, CONTENT]),
+      pageBodyTypes: new Set([CONTENT]),
+      discoveredSlots: new Map(),
+      containerParents: new Set(),
+    });
+    assert.deepEqual(result, [BUTTON]);
+  });
+
+  it("keeps a type that also fills a container drop zone", () => {
+    const discoveredSlots: DiscoveredSlots = new Map([
+      [
+        "aem-integration/components/box",
+        new Map([
+          [
+            "item_123",
+            { childTypes: new Map([[BUTTON, { examplePath: "/x" }]]) },
+          ],
+        ]),
+      ],
+    ]);
+    const result = collectSlotOnlyResourceTypes({
+      synthesizedSlotChildTypes: new Set([BUTTON]),
+      pageBodyTypes: new Set(),
+      discoveredSlots,
+      containerParents: new Set(["aem-integration/components/box"]),
+    });
+    assert.deepEqual(result, []);
+  });
+
+  it("ignores non-container parents in the discovery map", () => {
+    // Same shape as above but box is NOT registered as a container — its
+    // child entries are regular slots, so button stays slot-only.
+    const discoveredSlots: DiscoveredSlots = new Map([
+      [
+        "aem-integration/components/box",
+        new Map([
+          [
+            "item_123",
+            { childTypes: new Map([[BUTTON, { examplePath: "/x" }]]) },
+          ],
+        ]),
+      ],
+    ]);
+    const result = collectSlotOnlyResourceTypes({
+      synthesizedSlotChildTypes: new Set([BUTTON]),
+      pageBodyTypes: new Set(),
+      discoveredSlots,
+      containerParents: new Set(),
+    });
+    assert.deepEqual(result, [BUTTON]);
   });
 });

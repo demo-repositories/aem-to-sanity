@@ -49,8 +49,20 @@ export {
   scanSchemaTypeNames,
   rewriteBarrelFromDisk,
 } from "./pagebuilder.ts";
-export { discoverSlots, scanSlotsFromExtractCache, scanSlotsFromRawDir } from "./slots.ts";
-export type { DiscoveredSlots, ScanOptions as SlotScanOptions, SlotMapEntry } from "./slots.ts";
+export {
+  collectSlotOnlyResourceTypes,
+  discoverSlotGraph,
+  discoverSlots,
+  scanSlotGraphFromExtractCache,
+  scanSlotsFromExtractCache,
+  scanSlotsFromRawDir,
+} from "./slots.ts";
+export type {
+  DiscoveredSlots,
+  ScanOptions as SlotScanOptions,
+  SlotMapEntry,
+  SlotScanResult,
+} from "./slots.ts";
 export { writeContentRegistry } from "./content-registry.ts";
 export type {
   RegistryEntry as ContentRegistryEntry,

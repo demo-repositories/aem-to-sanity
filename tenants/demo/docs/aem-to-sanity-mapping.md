@@ -81,7 +81,11 @@ Some AEM components embed a **single named child component** under a fixed JCR k
 **Repeated slots collapse to one array field.** AEM auto-names every authored instance of the same child — `content`, `content_1793623844`, `content_1893078103_c`, `content…_copy_copy`, `title_1967938466_cop_1581547696`, … — so a single logical slot surfaces under hundreds of distinct JCR keys on content-heavy pages. Emitting one field per key would produce one `defineField` per author-drop and blow past Sanity's per-dataset attribute limit. Instead the scan groups keys by their **logical base** (suffix-stripped: timestamps, paste ids, and `_c`/`_co`/`_cop`/`_copy`/`C…` copy markers all peeled off), and emits:
 
 - a single **array** field (`array of <childType>`) when the base was authored more than once or under an auto-generated key — the common case for drop-zone-style slots, and
-- a single inline **reference** field when it's a lone, hand-named slot (key equals base, seen once).
+- a single inline **reference** field when it's a lone, hand-named slot (key equals base, seen once). These render **collapsed** in the Studio (`options: { collapsible: true, collapsed: true }`) — one row the author clicks to open, the closest native equivalent of AEM's edit-child-in-its-own-dialog flow — instead of the child's full field set expanded inline among the parent's own fields.
+
+When the parent dialog declares field groups (tabs), synthesized slot fields — and the container `childrenField` — join the **default group** (the first one, matching the tab the Studio auto-selects). Without a group they'd only surface under the "All fields" tab, which authors read as the field being missing.
+
+**Slot-only components leave the page builder.** A component type whose every observed appearance is as a slot fill (e.g. a `button` that only ever lives under `promocard`'s `buttonPrimary` / `buttonSecondary` keys) is dropped from `pageBuilder.of[]` so it doesn't clutter the page-level "+ Add" menu — its schema type is still emitted and the parents' slot fields still reference it. A type seen even once **directly in a page body** (under the page root / responsive grid) or **inside a container drop zone** stays in the page builder — excluding it would orphan those blocks. `migrate:schema` logs each exclusion; authoring the component at page level in AEM brings it back on the next run. Like slot discovery itself this is driven by extracted content, so a first run without an extract cache excludes nothing. Note the standalone `aem-to-sanity-pagebuilder` CLI works from schema filenames alone and cannot know slot-only status — re-running the full `migrate:schema` restores the exclusions.
 
 - **First run has no extracted content** → scan returns empty, no slot fields emitted. Run `aem-extract` then re-run `migrate:schema`; the second pass picks up every slot.
 - **Dialog field with the same name** → dialog field wins; slot synthesis skipped.
@@ -90,6 +94,28 @@ Some AEM components embed a **single named child component** under a fixed JCR k
 - **Unmapped child type** (not in `aem-component-paths`) → skipped + warned. Add the path to the list, re-run `migrate:schema`.
 
 The content transform mirrors this offline: it groups a node's child components by the same logical base and emits them under the base field name — an **array** when the registry marks the field as a repeated slot, a single inline object otherwise — using the same `_type` + `_key` + coercion pipeline as top-level blocks. The schema makes the array-vs-single decision once (from its global view of every page) and records it in `content-type-registry.json`; the transform obeys it, so both sides agree on the shape regardless of how many instances any single page happens to carry. Data flows correctly on the first run; the second `migrate:schema` upgrades "Unknown field" warnings to typed fields in the Studio.
+
+### Slot visibility (`aem-component-slots.json`)
+
+Many slot-carrying components gate each child behind an enable-toggle in their own dialog — e.g. `uxp/components/proxy/content/promocard` carries `buttonPrimary` / `buttonSecondary` / `image` child slots controlled by its `enablePrimaryButton` / `enableSecondaryButton` / `enableForegroundImage` checkboxes. AEM's render logic reads the toggle; nothing in the dialog or the content links toggle to child, so the pipeline can't wire it automatically. The optional per-tenant file `aem-component-slots.json` (override via `AEM_COMPONENT_SLOTS_FILE`) declares that link, keyed by the parent `sling:resourceType` (a leading `/apps/` is accepted and stripped), then by the **emitted slot field name** (the camelCased logical base — for hand-named slots like `buttonPrimary` that's just the JCR key):
+
+```json
+{
+  "uxp/components/proxy/content/promocard": {
+    "buttonPrimary":   { "visibleWhen": "enablePrimaryButton" },
+    "buttonSecondary": { "visibleWhen": "enableSecondaryButton" },
+    "image":           { "visibleWhen": "enableForegroundImage" },
+    "banner":          { "visibleWhen": { "field": "cardStyle", "equals": "flood" } }
+  }
+}
+```
+
+- **`"visibleWhen": "<field>"`** — boolean-toggle shorthand: the slot field is visible only while the sibling **boolean** field is `true`.
+- **`"visibleWhen": { "field": "<field>", "equals": "<value>" | ["<v1>", "<v2>"] }`** — the slot field is visible while the sibling **string** field holds one of the listed values.
+
+**Schema** — the synthesized slot field carries `hidden: ({ parent }) => …` through the same conditional-visibility machinery as the [dialog show/hide idioms](#showhide-widgets-conditional-fields): controller defaults (checkbox `checked`, select `selected`) apply so an unset value on a migrated document lands where a fresh AEM dialog would show it. A rule whose controller is missing or wrongly typed **warns and is skipped** — the slot stays visible, because attaching a condition against a field that never matches would hide it unconditionally. A rule naming a slot that never synthesizes (typo, dialog field claimed the name, container parent, or no extract cache yet) also warns.
+
+**Content** — nothing changes at transform/import. Hiding is a Studio display concern: authored slot content migrates and persists regardless of the toggle's value, exactly as AEM keeps a disabled child node in the JCR.
 
 ## Container components (`cq:isContainer`)
 
