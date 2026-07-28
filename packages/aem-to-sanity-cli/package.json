@@ -1,6 +1,6 @@
 {
   "name": "aem-to-sanity-cli",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Operator CLI for AEM → Sanity migration projects: doctor (config/env drift checks), studio-sync (template file sync), run (logged pipeline runs), wipe-media-library. Ships the project template used by create-aem-to-sanity.",
   "license": "MIT",
   "type": "module",
