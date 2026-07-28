@@ -134,6 +134,8 @@ AEM "container" components (cq:isContainer=true) carry two shapes in one JCR nod
 
 Transform then does the right thing: dialog fields go through the normal inline + coercion path, while direct child keys with `sling:resourceType` are recursively emitted as pageBuilder blocks under `childrenField`. Nesting works — expander > box > content roundtrips. On the schema side, `migrate:schema` appends a matching `type: "pageBuilder"` field so the Studio palette inside the container matches the top-level page builder (any block is droppable).
 
+`flatten: true` (optional) drops the container's own block and hoists its items into the parent's pageBuilder array — for pure-layout containers like AEM's responsive grid. **Styled wrappers** (a dialog full of per-breakpoint layout config — padding, gap, height, background for mobile/tablet/desktop — around a drop zone) are just non-flatten containers: their layout fields survive with full coercion and their children land in `childrenField`, whether authored directly on the wrapper node or inside a nested responsive-grid container (a nested `flatten: true` container collapses into the wrapper's items; the wrapper's own block stays). A childless wrapper emits an empty array.
+
 ## AEM authoring hints (`cq:panelTitle` and friends)
 
 Some AEM authoring metadata lives **outside** the dialog payload — the most common case is the panel heading on accordion / expander panels, which AEM writes as `cq:panelTitle` on each child node rather than as a dialog field. The transform's normal property iterator drops anything with a colon, so the value would be lost without an explicit lift step.

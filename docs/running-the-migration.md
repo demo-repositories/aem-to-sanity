@@ -241,9 +241,12 @@ For each listed resource type:
 ```json
 {
   "uxp/components/structure/page":          { "childrenField": "items" },
-  "uxp/components/proxy/content/container": { "childrenField": "items", "flatten": true }
+  "uxp/components/proxy/content/container": { "childrenField": "items", "flatten": true },
+  "uxp/components/proxy/content/wrapper":   { "childrenField": "items" }
 }
 ```
+
+**Styled wrappers** — components whose dialog is all layout config (per-breakpoint padding / gap / height / background for mobile, tablet, desktop) around a drop zone — are just non-flatten containers. Register them with `{ "childrenField": "items" }` (no `flatten`): the layout fields survive as ordinary typed fields with full coercion, slot discovery is skipped for the component, and its children land in `items`. Both authored shapes work: children placed directly on the wrapper node, and children inside a nested responsive-grid `container` — a `flatten: true` container nested inside a wrapper collapses into the wrapper's `items` (the intermediate container block disappears; the wrapper's own block does not). A childless wrapper emits `items: []`.
 
 Missing file → container behavior stays off. Malformed JSON or invalid entries are a hard error (fail loudly rather than silently drop child content).
 
