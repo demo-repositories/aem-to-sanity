@@ -839,6 +839,36 @@ function coerceDateString(
 }
 
 /**
+ * The schema emitter camelCases dialog `name` values (`./linkURL` →
+ * `linkUrl`, `./altValueFromDAM` → `altValueFromDam`), but JCR persists the
+ * raw name — so authored values arrive under a key that differs from the
+ * declared field only by letter case. Rename those keys in place so the
+ * value lands in the declared (typed, coerced) field instead of surfacing
+ * as an "unknown field" in the Studio next to an empty declared one.
+ * Only case-insensitive matches are renamed; anything else stays put and
+ * shows up in the drift report as before. A declared key that's already
+ * populated is never clobbered.
+ */
+function canonicalizeFieldNameCase(
+  inline: Record<string, unknown>,
+  fieldTypes: Map<string, FieldTypeNode>,
+): void {
+  let lowerToDeclared: Map<string, string> | null = null;
+  for (const key of Object.keys(inline)) {
+    if (fieldTypes.has(key)) continue;
+    if (lowerToDeclared === null) {
+      lowerToDeclared = new Map();
+      for (const name of fieldTypes.keys()) lowerToDeclared.set(name.toLowerCase(), name);
+    }
+    const declared = lowerToDeclared.get(key.toLowerCase());
+    if (declared === undefined || declared === key) continue;
+    if (inline[declared] !== undefined) continue;
+    inline[declared] = inline[key];
+    delete inline[key];
+  }
+}
+
+/**
  * In-place coercion: for every field the registry declares a type on,
  * coerce the ingested AEM value to match that type. Walks nested
  * array-of-object members using the registry's `itemFields` tree so
@@ -863,6 +893,7 @@ function coerceFieldTypes(
   ctx: TransformContext,
 ): void {
   if (fieldTypes.size === 0) return;
+  canonicalizeFieldNameCase(inline, fieldTypes);
   for (const [name, node] of fieldTypes) {
     const v = inline[name];
     if (node.type === "array-of-blocks") {
@@ -1471,6 +1502,9 @@ function diffProps(
 ): Array<{ prop: string; value: unknown }> {
   if (!entry?.fieldNames?.length) return [];
   const expected = new Set(entry.fieldNames);
+  // Case-only mismatches aren't drift: `canonicalizeFieldNameCase` renames
+  // the authored key onto the declared field before the doc is emitted.
+  const expectedLower = new Set(entry.fieldNames.map((n) => n.toLowerCase()));
   const nodeResourceType = typeof node["sling:resourceType"] === "string"
     ? (node["sling:resourceType"] as string)
     : undefined;
@@ -1481,7 +1515,7 @@ function diffProps(
     // Skip AEM keys this component opted into — they're lifted to the
     // declared Sanity field, not stray.
     if (optedInHints?.has(key)) continue;
-    if (expected.has(key)) continue;
+    if (expected.has(key) || expectedLower.has(key.toLowerCase())) continue;
     if (typeof value === "object" && value !== null && !Array.isArray(value)) continue;
     out.push({ prop: key, value });
   }
