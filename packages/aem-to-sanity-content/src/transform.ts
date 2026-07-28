@@ -1305,7 +1305,15 @@ function collectPageBuilder(
           );
           items.push(...childItems);
         }
-        if (containerEntry.flatten) {
+        // A flatten container that carries `cq:panelTitle` is a tabs /
+        // accordion panel, not a pure layout wrapper — AEM's tab and
+        // accordion components drop the SAME container resource type into
+        // their panels and stamp the panel title on it. The title and the
+        // panel boundary are authored content, so keep the block (the title
+        // lifts to `panelTitle` via the authoring-hints opt-in for the
+        // container's resource type in `aem-component-hints.json`).
+        const isPanel = asString(frame.node["cq:panelTitle"]) !== undefined;
+        if (containerEntry.flatten && !isPanel) {
           // Layout-only container — drop the wrapper and emit its items
           // directly in the parent's pageBuilder array. Without this, deeply
           // nested AEM responsive-grid layouts (container → container →
