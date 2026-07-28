@@ -291,9 +291,13 @@ function renderField(field: SanityField, indentLevel: number): string {
   const body = fieldBody(field, indentLevel + 1);
   // `options.aemWidget` is not a standard Sanity string option, so the
   // defineField call opts out of strict definition typing for that field.
+  // Slot references opt out too: their `type` is a generated alias name
+  // `defineField` can't narrow, so the object-level `options.collapsible`
+  // pair doesn't typecheck under strict definitions.
   const defineOptions =
     (field.type === "string" && field.options?.aemWidget) ||
-    field.type === "note"
+    field.type === "note" ||
+    field.type === "slot-reference"
       ? ", { strict: false }"
       : "";
   return `${indent}defineField(${body}${defineOptions})`;
@@ -412,7 +416,12 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
       // Direct type reference — the slot carries one nested block inline,
       // not an array. Transform writes `{slotKey: {_type, ...}}` under this
       // field; schema agrees by declaring the field as that block type.
+      // Collapsed by default: the nested block's full field set expanded
+      // inline would dwarf the parent's own dialog fields, so the Studio
+      // shows a single row the author clicks to open — the closest native
+      // equivalent of AEM's edit-child-in-its-own-dialog flow.
       props.type = JSON.stringify(field.slotTypeName);
+      props.options = "{ collapsible: true, collapsed: true }";
       break;
     }
     case "slot-array": {

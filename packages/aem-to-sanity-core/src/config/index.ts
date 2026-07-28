@@ -22,6 +22,13 @@ export {
   DEFAULT_PAGE_BUILDER_NAME,
   resolvePageBuilderName,
 } from "./page-builder-name.ts";
+export { loadSlotConfig } from "./slots.ts";
+export type {
+  SlotConfig,
+  SlotConfigEntry,
+  SlotVisibleWhen,
+  LoadSlotConfigOptions,
+} from "./slots.ts";
 export { loadPageComponentConfig } from "./page-components.ts";
 export type {
   PageComponentConfig,

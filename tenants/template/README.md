@@ -23,6 +23,7 @@ Existing tenant folders may lag the template as new env vars or scripts get adde
 | `aem-component-hints.json` | Map `sling:resourceType` → list of `cq:*` authoring-hint keys to preserve. Empty by default. |
 | `aem-page-components.json` | Map page-shell `sling:resourceType` → `{templates: [cq:template paths]}`. Each (resourceType, template) pair becomes one Sanity document type whose `pageProperties` lift from `jcr:content`. Empty by default — pages then use the generic `page` doc. |
 | `aem-component-names.json` | Map `sling:resourceType` → explicit Sanity type name (string) or `{name, title}`, overriding the `MIGRATION_TYPE_NAMING` strategy per component. Empty by default. |
+| `aem-component-slots.json` | Map `sling:resourceType` → `{<slotField>: {visibleWhen}}` visibility rules for auto-discovered named slots (e.g. fold promocard's `buttonPrimary` behind its `enablePrimaryButton` toggle). Empty by default — slots stay always visible. |
 | `aem-component-exceptions` | resource types / paths to skip during schema + transform. |
 | `package.json` | Pre-wired scripts (`pnpm migrate:schema`, `extract`, `transform`, `assets`, `import`, `migrate`). Rename the `name` field after copying. |
 | `studio/` | A per-tenant Sanity Studio (see `studio/README.md`). Scaffolded along with the tenant; point the tenant `.env`'s `SCHEMAS_OUT_DIR` at `./studio/schemas/generated` so emitted schemas land in it. Add one to an older tenant with `pnpm -w studio:init <your-tenant>`. |

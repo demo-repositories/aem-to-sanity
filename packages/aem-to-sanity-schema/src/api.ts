@@ -14,7 +14,13 @@ import {
   type DialogNode,
   type Logger,
   type PageComponentConfig,
+  type SlotConfig,
+  type SlotConfigEntry,
 } from "aem-to-sanity-core";
+import {
+  collectSlotOnlyResourceTypes,
+  resolveSlotVisibilityCondition,
+} from "./slots.ts";
 import {
   describeSchemaFields,
   flattenSchemaFieldNames,
@@ -156,6 +162,30 @@ export interface MigrateSchemasOptions {
    */
   discoveredSlots?: Map<string, Map<string, { childTypes: Map<string, unknown> }>>;
   /**
+   * Resource types seen as **direct page-body blocks** during the slot scan
+   * (children of structural wrappers — page root / responsive grid). Guards
+   * the slot-only page-builder exclusion: a component type that only ever
+   * fills slots (e.g. promocard's button children) is dropped from
+   * `pageBuilder.of[]` so it doesn't clutter the page-level "+ Add" menu,
+   * but any type listed here stays — excluding it would orphan the page-body
+   * blocks that already use it.
+   *
+   * Omitted / empty → no slot-only exclusion (every mapped component stays
+   * in the page builder, the previous behavior).
+   */
+  slotPageBodyTypes?: Set<string>;
+  /**
+   * Per-slot configuration from `aem-component-slots.json`, keyed by parent
+   * `sling:resourceType` → emitted slot field name. Currently carries
+   * `visibleWhen` rules that mirror AEM enable-toggles (e.g. promocard's
+   * `enablePrimaryButton` child gate) as Sanity conditional `hidden`
+   * callbacks on the synthesized slot fields. Display-only: authored slot
+   * content migrates regardless of the toggle's value.
+   *
+   * Empty / omitted → slots are always visible (current default).
+   */
+  slotVisibility?: SlotConfig;
+  /**
    * Per-component opt-in for AEM authoring hints (e.g. `cq:panelTitle` on
    * accordion children). Listed components get the hint lifted at
    * transform time and a corresponding read-only Sanity field declared
@@ -241,6 +271,7 @@ export async function migrateSchemas(
   const containers = opts.containers ?? new Map();
   const effectiveJcrPrefix = opts.jcrPrefix ?? "/apps/";
   const discoveredSlots = opts.discoveredSlots ?? new Map();
+  const slotVisibility = opts.slotVisibility ?? new Map();
   const authoringHints = opts.authoringHints ?? new Map();
 
   const report = new Report();
@@ -357,8 +388,28 @@ export async function migrateSchemas(
     if (n) typeNameByResourceType.set(rt, n);
   }
 
+  // Slot config keyed to a resource type that isn't a listed component
+  // would never reach processOne — surface the mismatch instead of
+  // silently ignoring the entry (operator typo, or component removed from
+  // `aem-component-paths`).
+  for (const rt of slotVisibility.keys()) {
+    if (!typeNameByResourceType.has(rt)) {
+      logger?.warn(
+        `slot-visibility: aem-component-slots.json entry "${rt}" matches no listed component path — ignored. Add ${effectiveJcrPrefix}${rt} to aem-component-paths or fix the key.`,
+      );
+    }
+  }
+
   let authFailures = 0;
   let successes = 0;
+
+  // Child resource types that land on a synthesized slot field — collected
+  // across every processed component, then reconciled against page-body and
+  // container appearances to decide which types are slot-only (and can drop
+  // out of `pageBuilder.of[]`). Page-shell components don't feed the sink:
+  // their direct children sit on `jcr:content`, so "slot child of a page
+  // shell" says nothing about whether the type belongs in the page builder.
+  const synthesizedSlotChildTypes = new Set<string>();
 
   await runWithConcurrency(
     componentPaths,
@@ -378,6 +429,10 @@ export async function migrateSchemas(
         prefetchedComponentNode: prefetchedNodes.get(p),
         containerEntry: containers.get(rt),
         slotMap: discoveredSlots.get(rt),
+        slotVisibility: slotVisibility.get(rt),
+        slotChildTypeSink: pageComponents?.has(rt)
+          ? undefined
+          : synthesizedSlotChildTypes,
         hintKeys: authoringHints.get(rt),
         typeNameByResourceType,
       });
@@ -426,9 +481,35 @@ export async function migrateSchemas(
       if (sanityType) pageShellExclude.push(sanityType);
     }
   }
+  // Slot-only components: types whose every observed appearance is as the
+  // fill of a synthesized slot field (promocard's buttons, media-paragraph's
+  // lone content child). Their schema types stay emitted and referenced by
+  // the parents' slot fields; they just don't belong in the page-level
+  // "+ Add" menu. Types also seen in a page body or a container drop zone
+  // are kept — pulling those out of `pageBuilder.of[]` would orphan blocks.
+  const slotOnlyResourceTypes = collectSlotOnlyResourceTypes({
+    synthesizedSlotChildTypes,
+    pageBodyTypes: opts.slotPageBodyTypes ?? new Set(),
+    discoveredSlots,
+    containerParents: new Set(containers.keys()),
+  });
+  const slotOnlyExclude: string[] = [];
+  for (const rt of slotOnlyResourceTypes) {
+    const typeName = typeNameByResourceType.get(rt);
+    if (typeName) slotOnlyExclude.push(typeName);
+  }
+  if (slotOnlyExclude.length > 0) {
+    logger?.info(
+      `pagebuilder: excluding ${slotOnlyExclude.length} slot-only component type(s) from pageBuilder.of[] — ` +
+        `${slotOnlyExclude.join(", ")}. They appear only inside parent slot fields (never directly in a page body or container drop zone); ` +
+        `authoring them at page level somewhere in AEM would bring them back on the next run.`,
+    );
+  }
+
   const effectivePageBuilderExclude = [
     ...(pageBuilderExclude ?? []),
     ...pageShellExclude,
+    ...slotOnlyExclude,
   ];
 
   // Canonical Portable Text table types (table/row/cell) — always emitted so
@@ -564,6 +645,14 @@ interface ProcessOneDeps {
   containerEntry?: { childrenField: string };
   /** Discovered named-slot keys for this resource type → set of child resource types. */
   slotMap?: Map<string, { childTypes: Map<string, unknown> }>;
+  /** Per-slot config (visibility rules) for this resource type, keyed by emitted field name. */
+  slotVisibility?: Map<string, SlotConfigEntry>;
+  /**
+   * Collects the child resource type of every slot field this component
+   * synthesizes. Shared across the whole run; feeds the slot-only
+   * page-builder exclusion. Omitted for page-shell components.
+   */
+  slotChildTypeSink?: Set<string>;
   /**
    * AEM authoring-hint keys (e.g. `cq:panelTitle`) opted in for this component
    * via the per-project hints config. Translated through `AEM_AUTHORING_HINTS`
@@ -699,6 +788,12 @@ async function processOne(
         type: "container-children",
         pageBuilderTypeName: deps.pageBuilderName,
       };
+      // When the dialog declares field groups, the Studio auto-selects the
+      // first group tab (sanity 6.6: group with `default: true`, else first
+      // non-hidden group) — an ungrouped synthesized field would only
+      // surface under "All fields", which authors read as the field being
+      // missing. Join the default tab instead.
+      if (mapped.groups.length > 0) container.group = mapped.groups[0]!.name;
       mapped.fields.push(container);
     }
   }
@@ -723,6 +818,13 @@ async function processOne(
   //   - Child resource type without a known Sanity mapping (not in
   //     componentPaths) → skip + warn; can't reference a type that doesn't
   //     exist yet.
+  // Track which `aem-component-slots.json` entries actually land on a
+  // synthesized field. Leftovers get a warning below — a config key that
+  // matches nothing is either a typo or a slot that no longer synthesizes
+  // (dialog field took the name, container parent, no extract cache yet),
+  // and silently ignoring it would leave the operator wondering why the
+  // Studio still shows the field.
+  const unusedSlotConfig = new Set(deps.slotVisibility?.keys() ?? []);
   if (!deps.containerEntry && deps.slotMap && deps.slotMap.size > 0) {
     const existingNames = new Set(mapped.fields.map((f) => f.name));
 
@@ -803,9 +905,39 @@ async function processOne(
             type: "slot-reference",
             slotTypeName: childTypeName,
           };
+      // Same default-group rule as the container-children field above:
+      // without a group, a slot field on a tabbed dialog hides behind
+      // "All fields" and authors never find it.
+      if (mapped.groups.length > 0) slotField.group = mapped.groups[0]!.name;
+      // Config-declared visibility (`aem-component-slots.json` →
+      // `visibleWhen`): mirror the AEM enable-toggle as a conditional
+      // `hidden` callback via the same ShowHideCondition machinery the
+      // dialog show/hide mapper uses. A failed resolution (missing or
+      // wrongly-typed controller) warns and leaves the slot visible.
+      const slotEntry = deps.slotVisibility?.get(fieldName);
+      if (slotEntry) {
+        unusedSlotConfig.delete(fieldName);
+        if (slotEntry.visibleWhen) {
+          const condition = resolveSlotVisibilityCondition(
+            slotEntry.visibleWhen,
+            mapped.fields,
+            (msg) =>
+              deps.logger?.warn(
+                `slot-visibility: ${componentPath} slot "${fieldName}" — ${msg}`,
+              ),
+          );
+          if (condition) slotField.hiddenConditions = [condition];
+        }
+      }
       mapped.fields.push(slotField);
       existingNames.add(fieldName);
+      deps.slotChildTypeSink?.add(childResourceType);
     }
+  }
+  for (const configuredSlot of unusedSlotConfig) {
+    deps.logger?.warn(
+      `slot-visibility: ${componentPath} configures slot "${configuredSlot}" in aem-component-slots.json, but no such slot field was synthesized — check the spelling against the emitted field name, and make sure content containing the slot has been extracted (slots are discovered from the extract cache).`,
+    );
   }
 
   // AEM authoring hints (e.g. `cq:panelTitle` lifted to `panelTitle` at

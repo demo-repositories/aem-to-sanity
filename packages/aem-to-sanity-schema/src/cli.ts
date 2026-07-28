@@ -12,6 +12,7 @@ import {
   loadComponentNameConfig,
   loadContainerConfig,
   loadPageComponentConfig,
+  loadSlotConfig,
   logStartupBanner,
   resolveConfig,
   resolvePageBuilderName,
@@ -20,7 +21,7 @@ import {
   type SanityRuntimeSummary,
 } from "aem-to-sanity-core";
 import { migrateSchemas } from "./api.ts";
-import { scanSlotsFromExtractCache } from "./slots.ts";
+import { scanSlotGraphFromExtractCache } from "./slots.ts";
 import {
   mergeDiscoveredTemplates,
   scanTemplatesFromExtractCache,
@@ -125,6 +126,20 @@ async function main(): Promise<void> {
     );
   }
 
+  // Per-slot configuration (visibility rules) for auto-discovered named
+  // slots — e.g. promocard's `buttonPrimary` child folding behind its
+  // `enablePrimaryButton` toggle. Optional file; missing file → slots stay
+  // always visible.
+  const slotsFile = resolve(
+    process.env.AEM_COMPONENT_SLOTS_FILE ?? "./aem-component-slots.json",
+  );
+  const slotVisibility = loadSlotConfig({ file: slotsFile });
+  if (slotVisibility.size > 0) {
+    logger.info(
+      `Applied slot config for ${slotVisibility.size} component(s) from ${slotsFile}`,
+    );
+  }
+
   // Explicit type-name / Studio-title overrides. Optional file; missing
   // file → strategy naming only. Set-once-before-first-import: changing an
   // override later renames the emitted type and orphans ingested `_type`s.
@@ -183,8 +198,10 @@ async function main(): Promise<void> {
     return mergeDiscoveredTemplates(declaredPageComponents, discovered);
   })();
 
-  // Slot discovery — scan extract/tag cache for named-slot child components.
-  const discoveredSlots = scanSlotsFromExtractCache(config.outputDir);
+  // Slot discovery — scan extract/tag cache for named-slot child components
+  // (plus the page-body type set that guards slot-only pageBuilder exclusion).
+  const slotScan = scanSlotGraphFromExtractCache(config.outputDir);
+  const discoveredSlots = slotScan.slots;
   if (discoveredSlots.size > 0) {
     let slotCount = 0;
     for (const m of discoveredSlots.values()) slotCount += m.size;
@@ -238,6 +255,8 @@ async function main(): Promise<void> {
     typeNaming,
     containers,
     discoveredSlots,
+    slotPageBodyTypes: slotScan.pageBodyTypes,
+    slotVisibility,
     authoringHints,
     componentNames,
     pageComponents,
