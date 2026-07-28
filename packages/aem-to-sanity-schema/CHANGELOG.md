@@ -1,5 +1,48 @@
 # aem-to-sanity-schema
 
+## 2.1.0
+
+### Minor Changes
+
+- [#75](https://github.com/demo-repositories/aem-to-sanity/pull/75) [`de5efdb`](https://github.com/demo-repositories/aem-to-sanity/commit/de5efdbce3b9900454298b55d1970cf478550e97) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Slot-fill components stop cluttering the page-level "+ Add" menu, and single-slot fields render as a click-to-open row.
+
+  Two Studio-facing refinements to auto-discovered named slots (e.g. `promocard`'s `buttonPrimary` / `buttonSecondary` children):
+
+  - **Slot-only types leave `pageBuilder.of[]`.** A component type whose every observed appearance in extracted content is as a slot fill is now excluded from the page-builder array — its schema type is still emitted and the parents' slot fields still reference it, so nothing about the migrated data changes; it just no longer appears as an insertable page-level block. A type authored even once directly in a page body (under the page root / responsive grid) or inside a container drop zone stays in the menu, so no existing block is ever orphaned. `migrate:schema` logs each exclusion. Like slot discovery, this is driven by the extract cache: a first run without one excludes nothing, and authoring the component at page level in AEM brings it back on the next run.
+  - **Lone hand-named slot fields render collapsed** (`options: { collapsible: true, collapsed: true }`): the Studio shows one row the author clicks to open — the closest native equivalent of AEM's edit-child-in-its-own-dialog flow — instead of the child's full field set expanded inline among the parent's own fields.
+
+  **What you must do:** nothing — re-run `migrate:schema` and both changes apply to the regenerated schemas. If a slot-only component disappears from the "+ Add" menu that you still want insertable at page level, author one instance at page level in AEM (any page in your content roots) and re-run.
+
+- [#75](https://github.com/demo-repositories/aem-to-sanity/pull/75) [`de5efdb`](https://github.com/demo-repositories/aem-to-sanity/commit/de5efdbce3b9900454298b55d1970cf478550e97) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - New optional tenant config `aem-component-slots.json`: per-slot visibility rules for auto-discovered named slots.
+
+  Components that embed direct child components under fixed JCR keys (e.g. `promocard` carrying `buttonPrimary` / `buttonSecondary` / `image` children) were already auto-discovered and emitted as typed slot fields. This release lets you mirror the AEM enable-toggles that gate those children — `enablePrimaryButton`, `enableSecondaryButton`, `enableForegroundImage`, … — so the Studio hides a slot field exactly when AEM would hide the child:
+
+  ```json
+  {
+    "uxp/components/proxy/content/promocard": {
+      "buttonPrimary": { "visibleWhen": "enablePrimaryButton" },
+      "buttonSecondary": { "visibleWhen": "enableSecondaryButton" },
+      "image": { "visibleWhen": "enableForegroundImage" }
+    }
+  }
+  ```
+
+  - Keys: parent `sling:resourceType` (leading `/apps/` accepted) → emitted slot field name.
+  - `"visibleWhen": "<field>"` — visible while the sibling **boolean** field is `true`.
+  - `"visibleWhen": { "field": "...", "equals": "v" | ["v1", "v2"] }` — visible while the sibling **string** field matches.
+  - Emitted as a Sanity `hidden: ({ parent }) => …` callback via the same machinery as the dialog show/hide idioms, including controller defaults.
+  - Display-only: authored slot content migrates and persists regardless of the toggle. Rules with a missing/wrongly-typed controller, or naming a slot that never synthesized, warn and are skipped — nothing is ever hidden by accident.
+  - Override the file path with `AEM_COMPONENT_SLOTS_FILE` (default `./aem-component-slots.json`); a missing file means no visibility behavior, as before.
+
+  Also fixed: on dialogs with field groups (tabs), synthesized slot fields and the container drop-zone `childrenField` now join the first (default) group. Previously they carried no group, so the Studio — which auto-selects the first group tab — only showed them under "All fields", where authors couldn't find them. Re-run `migrate:schema` to pick up the regenerated schemas.
+
+  **What you must do:** nothing, unless you want the behavior — then add `aem-component-slots.json` next to your other `aem-component-*` config and re-run `migrate:schema`. New tenants get an empty file scaffolded by `migrate:init`; on existing tenants `aem-to-sanity doctor` now points out when it's absent.
+
+### Patch Changes
+
+- Updated dependencies [[`de5efdb`](https://github.com/demo-repositories/aem-to-sanity/commit/de5efdbce3b9900454298b55d1970cf478550e97)]:
+  - aem-to-sanity-core@2.1.0
+
 ## 2.0.0
 
 ### Major Changes
