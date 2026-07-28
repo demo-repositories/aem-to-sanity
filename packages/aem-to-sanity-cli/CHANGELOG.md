@@ -1,5 +1,11 @@
 # aem-to-sanity-cli
 
+## 2.1.1
+
+### Patch Changes
+
+- [#78](https://github.com/demo-repositories/aem-to-sanity/pull/78) [`6528a75`](https://github.com/demo-repositories/aem-to-sanity/commit/6528a75ae3dd9d8409a67dbc08b31688cccb204d) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - `aem-to-sanity doctor` no longer errors on a missing or placeholder `SANITY_MEDIA_LIBRARY_ID` when `MIGRATION_ASSETS_DOWNLOAD_ONLY=true`. Download-only asset runs stop after the AEM download phase and never read the Media Library id, so the doctor now reports an info line explaining the exemption instead of a hard error. No action needed: tenants that upload to the Media Library are checked exactly as before.
+
 ## 2.1.0
 
 ### Minor Changes
