@@ -10,7 +10,7 @@ npx aem-to-sanity <command>
 
 | Command | What it does |
 |---|---|
-| `doctor [--fix]` | Checks the project against the reference template: missing/placeholder env vars (from `.env.example`), AEM auth configured (one of service credentials / dev token / basic auth), package.json scripts drift (`--fix` repairs), missing config files, fixtures layout when `AEM_FIXTURES_DIR` is set. Exit 1 on errors. |
+| `doctor [--fix]` | Checks the project against the reference template: missing/placeholder env vars (from `.env.example`; `SANITY_MEDIA_LIBRARY_ID` is exempt when `MIGRATION_ASSETS_DOWNLOAD_ONLY=true`, since download-only asset runs never touch the Media Library), AEM auth configured (one of service credentials / dev token / basic auth), package.json scripts drift (`--fix` repairs), missing config files, fixtures layout when `AEM_FIXTURES_DIR` is set. Exit 1 on errors. |
 | `studio-sync [--fix]` | Copies *new* template Studio files into your `studio/` and adds missing deps (`--fix`); reports — never overwrites — files you've customized. |
 | `run "<command>"` | Runs a shell command with output mirrored to `output/execution-<timestamp>.log`. Wired into the template's `migrate` scripts. |
 | `wipe-media-library [--confirm-delete]` | Deletes ALL Sanity Media Library assets (test environments only). Dry-run by default. |

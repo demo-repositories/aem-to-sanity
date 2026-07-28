@@ -189,6 +189,34 @@ function validateTenantEnvRequired(
   }
 }
 
+/**
+ * Required-in-.env.example keys that this tenant's configuration renders
+ * unused, so missing / empty / placeholder values must not error.
+ *
+ * Download-only asset mode (`MIGRATION_ASSETS_DOWNLOAD_ONLY=true`, same as
+ * `aem-assets --download-only`) stops after phase 1 (AEM download) — no ML
+ * dedup lookup, upload, link, or rewrite, regardless of `MIGRATION_DRY_RUN` —
+ * so `SANITY_MEDIA_LIBRARY_ID` is never read. `SANITY_TOKEN` stays required:
+ * `aem-import` needs it even when assets never touch the Media Library.
+ */
+export function conditionallyUnusedEnvKeys(tenantEnv: Map<string, string>): Set<string> {
+  const out = new Set<string>();
+  if (tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") === "true") {
+    out.add("SANITY_MEDIA_LIBRARY_ID");
+  }
+  return out;
+}
+
+function recordConditionallyUnused(unused: Set<string>): void {
+  if (unused.has("SANITY_MEDIA_LIBRARY_ID")) {
+    record(
+      "info",
+      "env",
+      "MIGRATION_ASSETS_DOWNLOAD_ONLY=true — SANITY_MEDIA_LIBRARY_ID not required (assets stop after AEM download)",
+    );
+  }
+}
+
 function checkEnv(ctx: WorkspaceContext, dir: string, slug: string): void {
   const envExamplePath = join(dir, ".env.example");
   const envPath = join(dir, ".env");
@@ -220,7 +248,13 @@ function checkEnv(ctx: WorkspaceContext, dir: string, slug: string): void {
     }
 
     const tenantEnv = parseEnv(envContent);
-    validateTenantEnvRequired(declared, tenantEnv, AEM_CONNECTIVITY_KEYS);
+    const demoUnused = conditionallyUnusedEnvKeys(tenantEnv);
+    recordConditionallyUnused(demoUnused);
+    validateTenantEnvRequired(
+      declared,
+      tenantEnv,
+      new Set([...AEM_CONNECTIVITY_KEYS, ...demoUnused]),
+    );
 
     const fixturesDirRaw = tenantEnv.get("AEM_FIXTURES_DIR");
     if (!isMeaningfulValue(fixturesDirRaw)) {
@@ -262,10 +296,12 @@ function checkEnv(ctx: WorkspaceContext, dir: string, slug: string): void {
   const fixturesDirRaw = tenantEnv.get("AEM_FIXTURES_DIR");
   const fixtureMode = isMeaningfulValue(fixturesDirRaw);
 
+  const unused = conditionallyUnusedEnvKeys(tenantEnv);
+  recordConditionallyUnused(unused);
   validateTenantEnvRequired(
     declared,
     tenantEnv,
-    fixtureMode ? AEM_CONNECTIVITY_KEYS : new Set(),
+    fixtureMode ? new Set([...AEM_CONNECTIVITY_KEYS, ...unused]) : unused,
   );
 
   if (fixtureMode) {
