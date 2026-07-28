@@ -115,7 +115,7 @@ cp tenants/<your-tenant>/.env.example tenants/<your-tenant>/.env
 | `SANITY_PROJECT_ID` | required for writes | Only read when `MIGRATION_DRY_RUN=false`. |
 | `SANITY_DATASET` | required for writes | |
 | `SANITY_TOKEN` | required for writes | API token. Used for `aem-import` and for the Media Library **upload** phase of `aem-assets`. A project robot token (Editor+) works for `aem-import` and historically worked for ML upload too, but newer Media Library API versions reject robot tokens with `401 SIO-401-ANF "Session not found"` — if you hit that on phase 2, use a personal token here. See § 4c-bis for how to generate one. |
-| `SANITY_MEDIA_LIBRARY_ID` | required for `aem-assets` writes | Id of the org-level Sanity Media Library that assets go into (e.g. `mlTnBiUKRzfi`). Must belong to the same org as `SANITY_PROJECT_ID`. |
+| `SANITY_MEDIA_LIBRARY_ID` | required for `aem-assets` writes | Id of the org-level Sanity Media Library that assets go into (e.g. `mlTnBiUKRzfi`). Must belong to the same org as `SANITY_PROJECT_ID`. Not needed (and not checked by `migrate:doctor`) when `MIGRATION_ASSETS_DOWNLOAD_ONLY=true`. |
 | `SANITY_ML_LINK_TOKEN` | conditional | Personal auth token used for the Media Library **link** step in `aem-assets`. Required when `SANITY_TOKEN` is a project robot token (the link API rejects non-global sessions with `401 SIO-401-ANF`). See § 4c-bis for how to generate one. |
 | `SANITY_API_VERSION` | optional | Default: `2024-01-01` for import; `aem-assets` pins `2025-02-19` because Media Library endpoints require it. |
 

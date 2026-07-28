@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { conditionallyUnusedEnvKeys } from "../src/doctor.ts";
 import { isMeaningfulValue, parseEnv, parseEnvExample } from "../src/lib/tenant-template.ts";
 import { resolveContext } from "../src/paths.ts";
 
@@ -85,5 +86,27 @@ describe("resolveContext", () => {
 
   it("throws outside any project", () => {
     expect(() => resolveContext(tmp())).toThrow(/not inside an aem-to-sanity project/);
+  });
+});
+
+describe("conditionallyUnusedEnvKeys", () => {
+  it("skips SANITY_MEDIA_LIBRARY_ID when assets are download-only", () => {
+    const env = parseEnv("MIGRATION_ASSETS_DOWNLOAD_ONLY=true\nSANITY_MEDIA_LIBRARY_ID=ml-xxxxxxxxxxxx\n");
+    expect(conditionallyUnusedEnvKeys(env)).toEqual(new Set(["SANITY_MEDIA_LIBRARY_ID"]));
+  });
+
+  it("requires SANITY_MEDIA_LIBRARY_ID otherwise, regardless of dry-run", () => {
+    for (const envText of [
+      "",
+      "MIGRATION_DRY_RUN=false\n",
+      "MIGRATION_DRY_RUN=true\n",
+      "MIGRATION_ASSETS_DOWNLOAD_ONLY=false\n",
+      // string "true" only — anything else keeps the requirement
+      "MIGRATION_ASSETS_DOWNLOAD_ONLY=1\n",
+    ]) {
+      expect(conditionallyUnusedEnvKeys(parseEnv(envText)), JSON.stringify(envText)).toEqual(
+        new Set(),
+      );
+    }
   });
 });
