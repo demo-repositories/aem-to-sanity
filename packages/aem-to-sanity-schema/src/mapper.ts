@@ -144,6 +144,16 @@ export interface CommonFieldProps {
   fieldset?: string;
   /** Resolved ACS show/hide visibility conditions (ANDed) → emitted `hidden` callback. */
   hiddenConditions?: ShowHideCondition[];
+  /**
+   * Sibling field names that suppress this field's `required` when truthy.
+   * Set for the AEM core-image alt pattern (`./alt` marked required next to
+   * `isDecorative` / `altValueFromDam` / `altValueFromPageImage` checkboxes):
+   * AEM only enforces the requirement when none of the inherit/decorative
+   * toggles are on, and authored content routinely relies on them — so the
+   * emitter renders a conditional `Rule.custom` instead of a hard
+   * `Rule.required()`.
+   */
+  requiredUnless?: string[];
   /** @internal Raw target linkage; resolved into `hiddenConditions` and removed before mapDialog returns. */
   showHideTargets?: RawShowHideTarget[];
   /** @internal Controller linkage; consumed during resolution and removed before mapDialog returns. */
@@ -390,6 +400,7 @@ export async function mapDialog(
   dedupeFieldNames(fields, ctx.renamed);
   // After dedupe so conditions reference final controller field names.
   resolveShowHideConditions(fields);
+  resolveAltRequiredCompanions(fields);
   return {
     fields,
     unmapped: ctx.unmapped,
@@ -1196,6 +1207,38 @@ function resolveShowHideConditions(fields: SanityField[]): void {
     }
   }
   for (const field of fields) delete field.showHideController;
+}
+
+/**
+ * AEM's core-image editor marks the `./alt` textfield `required: true`, but
+ * only enforces it while the field is editable — checking "Don't provide an
+ * alternative text" (`isDecorative`) or either inherit toggle
+ * (`altValueFromDAM` / `altValueFromPageImage`) hides the field and stores
+ * no alt on the page node at all. The toggle wiring lives in the image
+ * editor's JS (via `granite:class`), not in `granite:data` show/hide
+ * attributes, so the generic show/hide machinery can't see it — detect the
+ * pattern structurally instead: a required field named `alt` with at least
+ * one companion sibling. The emitter then renders a conditional rule so
+ * migrated content that relied on inheritance doesn't fail validation.
+ */
+const ALT_REQUIRED_COMPANIONS = new Set([
+  "isdecorative",
+  "altvaluefromdam",
+  "altvaluefrompageimage",
+]);
+
+function resolveAltRequiredCompanions(fields: SanityField[]): void {
+  for (const field of fields) {
+    if (field.name === "alt" && field.required) {
+      const companions = fields
+        .filter((f) => f !== field && ALT_REQUIRED_COMPANIONS.has(f.name.toLowerCase()))
+        .map((f) => f.name);
+      if (companions.length > 0) field.requiredUnless = companions;
+    }
+    if (field.type === "array-of-object") {
+      resolveAltRequiredCompanions(field.itemFields);
+    }
+  }
 }
 
 function fieldNameForKind(

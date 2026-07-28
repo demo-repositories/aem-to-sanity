@@ -459,6 +459,31 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     props.hidden = renderHiddenCallback(field.hiddenConditions);
   }
 
+  // AEM core-image alt pattern: `required` is conditional on the
+  // inherit/decorative toggles (see `resolveAltRequiredCompanions` in
+  // mapper.ts). Tolerate both coerced booleans and legacy uncoerced "true"
+  // strings on already-imported documents.
+  if (
+    field.required &&
+    field.requiredUnless &&
+    field.requiredUnless.length > 0 &&
+    props.validation === undefined
+  ) {
+    const checks = field.requiredUnless
+      .map((name) => `inherited(parent?.${name})`)
+      .join(" || ");
+    props.validation =
+      `(Rule) =>\n` +
+      `        Rule.custom((value, context) => {\n` +
+      `          const parent = context.parent as Record<string, unknown> | undefined;\n` +
+      `          const inherited = (v: unknown) => v === true || v === "true";\n` +
+      `          if (${checks}) return true;\n` +
+      `          return typeof value === "string" && value.trim().length > 0\n` +
+      `            ? true\n` +
+      `            : "Required unless the alternative text is inherited or the image is decorative";\n` +
+      `        })`;
+  }
+
   // Don't double-apply validation if it was already set for number min/max.
   if (
     field.required &&

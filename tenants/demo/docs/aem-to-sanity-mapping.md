@@ -329,6 +329,10 @@ Predicates compare **raw values, deliberately without type coercion** — select
 
 **Content** — nothing changes at transform/import: AEM persists authored values even while their widget is hidden, and so does Sanity — the `hidden` callback is purely a Studio display concern.
 
+### Conditional alt required (core-image pattern)
+
+AEM's core-image editor marks the `./alt` textfield `required: true` but only enforces it while the field is editable — checking "Don't provide an alternative text" (`isDecorative`) or either inherit toggle (`altValueFromDAM` / `altValueFromPageImage`) hides the field and stores **no alt on the page node**; the runtime resolves it from the DAM asset's `dc:description` or the page's featured image instead. That toggle wiring lives in the image editor's JS (`granite:class`), not in `granite:data` show/hide attributes, so the generic machinery above can't see it. The mapper detects the pattern structurally — a required field named `alt` with at least one of those companion checkboxes in the same object scope — and the emitter renders a conditional `Rule.custom` instead of a hard `Rule.required()`: validation passes when any toggle is on (tolerating both coerced booleans and legacy uncoerced `"true"` strings on already-imported docs), and demands a non-empty value only when the author was actually expected to type one. Required fields without those companions keep the unconditional rule.
+
 ## Dialog structure: tabs, accordions, wells
 
 Coral `tabs`, `accordion`, and `well` nodes all flatten — their fields hoist into the object's single field list — but they land on different Studio primitives, mirroring how AEM renders them:
