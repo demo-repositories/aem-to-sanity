@@ -163,6 +163,11 @@ export const MAPPING: Record<string, MappingEntry> = {
     kind: "hidden",
     description: "Decorative UI heading inside a dialog → skipped (not a field)",
   },
+  "granite/ui/components/foundation/section": {
+    kind: "container",
+    description:
+      "Granite UI v1 section → same handling as coral containers: a titled section directly under tabs becomes a group (tab); untitled layout sections flatten and children hoist up",
+  },
   "granite/ui/components/coral/foundation/heading": {
     kind: "hidden",
     description:
