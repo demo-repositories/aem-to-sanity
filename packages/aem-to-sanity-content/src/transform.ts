@@ -611,6 +611,15 @@ interface TransformContext {
   audit: Audit;
   /** Resource types whose drop-zone children should be emitted under `childrenField`. */
   containers: ContainerConfig;
+  /** Sanity `_id` of the page document being transformed — seeds fragment ids. */
+  docId: string;
+  /**
+   * Sink for `contentFragment` documents produced while walking this page:
+   * containers configured `document: true` extract every instance here (a
+   * `contentFragmentRef` block goes into the parent array instead). Written
+   * into the same clean file as the page doc.
+   */
+  fragments: Array<Record<string, unknown>>;
   /**
    * Per-resource-type opt-ins for AEM authoring hints (e.g. `cq:panelTitle`).
    * Listed components have those keys lifted to the corresponding Sanity
@@ -1158,6 +1167,14 @@ function collectPageBuilder(
   ctx: TransformContext,
   filter: Set<string> | undefined,
   exceptions: Set<string>,
+  /**
+   * Nearest enclosing panel title (`cq:panelTitle`), threaded down so
+   * `document: true` extractions can title their fragment docs after the
+   * panel they sit in ("Get started — accordion") when the component's own
+   * dialog has no title — 20 documents all named "accordion" are unusable
+   * in the Studio's document lists.
+   */
+  contextTitle?: string,
 ): PageBuilderItem[] {
   const out: PageBuilderItem[] = [];
   const stack: Array<{ node: AemNode; jcrPath: string }> = [{ node: root, jcrPath: rootPath }];
@@ -1268,6 +1285,7 @@ function collectPageBuilder(
               ctx,
               filter,
               exceptions,
+              asString(frame.node["cq:panelTitle"]) ?? contextTitle,
             ),
           );
         }
@@ -1302,6 +1320,7 @@ function collectPageBuilder(
             ctx,
             filter,
             exceptions,
+            asString(frame.node["cq:panelTitle"]) ?? contextTitle,
           );
           items.push(...childItems);
         }
@@ -1326,11 +1345,41 @@ function collectPageBuilder(
         inline[containerEntry.childrenField] = items;
       }
 
-      out.push({
+      const blockKey = stableKey(asString(frame.node["jcr:uuid"]), frame.jcrPath);
+      const block: PageBuilderItem = {
         _type: entry.sanityType,
-        _key: stableKey(asString(frame.node["jcr:uuid"]), frame.jcrPath),
+        _key: blockKey,
         ...inline,
-      });
+      };
+      if (containerEntry?.document) {
+        // `document: true` container — extract EVERY instance into its own
+        // contentFragment doc and emit a reference block in its place.
+        // Depth is counted per document, so recursive structures (tabs in
+        // tabs) never approach the attribute-depth limit: inner instances
+        // were already extracted by the recursive collect above, so this
+        // block only holds refs where nested instances sat.
+        const fragmentId = `${ctx.docId}-frag-${blockKey}`;
+        const ownTitle = [inline.title, inline.panelTitle, inline.accessibilityLabel].find(
+          (v): v is string => typeof v === "string" && v.trim().length > 0,
+        );
+        const title =
+          ownTitle ??
+          (contextTitle ? `${contextTitle} — ${entry.sanityType}` : entry.sanityType);
+        ctx.fragments.push({
+          _id: fragmentId,
+          _type: "contentFragment",
+          title,
+          content: [block],
+        });
+        ctx.audit.blockExtractedAsDocument(frame.jcrPath, fragmentId, entry.sanityType);
+        out.push({
+          _type: "contentFragmentRef",
+          _key: blockKey,
+          fragment: { _type: "reference", _ref: fragmentId },
+        });
+      } else {
+        out.push(block);
+      }
       ctx.audit.tick();
       const drift = diffProps(frame.node, entry, ctx.authoringHints);
       if (drift.length > 0) ctx.audit.unknownProps(entry.sanityType, frame.jcrPath, drift);
@@ -1622,6 +1671,12 @@ interface Audit {
    * See `enforceAttributeDepthBudget`. Kept uncapped.
    */
   fragmentExtractedForDepth(path: string, fragmentId: string, title: string): void;
+  /**
+   * A container configured `document: true` was extracted into its own
+   * `contentFragment` document (by design, not depth pressure). Kept
+   * uncapped so the operator can reconcile fragment docs per page.
+   */
+  blockExtractedAsDocument(path: string, fragmentId: string, blockType: string): void;
   report(): unknown;
 }
 
@@ -1639,6 +1694,7 @@ function createAudit(maxExamples = 3): Audit {
   const skippedChildPages: string[] = [];
   const depthFlattenedPanels: Array<{ path: string; panelTitle: string }> = [];
   const depthExtractedFragments: Array<{ path: string; fragmentId: string; title: string }> = [];
+  const configExtractedFragments: Array<{ path: string; fragmentId: string; blockType: string }> = [];
 
   function bump<T>(list: T[], item: T): void {
     if (list.length < maxExamples) list.push(item);
@@ -1707,6 +1763,9 @@ function createAudit(maxExamples = 3): Audit {
       totalFindings++;
       depthExtractedFragments.push({ path, fragmentId, title });
     },
+    blockExtractedAsDocument(path, fragmentId, blockType) {
+      configExtractedFragments.push({ path, fragmentId, blockType });
+    },
     report() {
       return {
         summary: {
@@ -1720,6 +1779,7 @@ function createAudit(maxExamples = 3): Audit {
           skippedChildPages: skippedChildPages.length,
           depthFlattenedPanels: depthFlattenedPanels.length,
           depthExtractedFragments: depthExtractedFragments.length,
+          configExtractedFragments: configExtractedFragments.length,
         },
         unknownResourceTypes: [...unknownTypes.entries()].map(([resourceType, { hits, examples }]) => ({
           resourceType,
@@ -1745,6 +1805,7 @@ function createAudit(maxExamples = 3): Audit {
         skippedChildPages: [...skippedChildPages].sort(),
         depthFlattenedPanels,
         depthExtractedFragments,
+        configExtractedFragments,
         transformBails: bails,
       };
     },
@@ -2064,6 +2125,7 @@ function main(): void {
       else missingRelativePath++;
     }
 
+    const docId = pathToDocId(jcrPath);
     const ctx: TransformContext = {
       visited: new WeakSet(),
       depth: 0,
@@ -2073,6 +2135,8 @@ function main(): void {
       categoryManifest,
       audit,
       pageShellResourceTypes: declaredPageComponentResourceTypes,
+      docId,
+      fragments: [],
     };
 
     let pageBuilder: PageBuilderItem[];
@@ -2114,7 +2178,7 @@ function main(): void {
     }
 
     const pageDoc: PageDoc = {
-      _id: pathToDocId(jcrPath),
+      _id: docId,
       _type: templateMatch ? templateMatch.sanityType : "page",
       title: derivePageTitle(tree, slug, jcrPath),
       slug: { _type: "slug", current: currentSlug },
@@ -2136,22 +2200,29 @@ function main(): void {
       pageDoc.cqTemplate = templateMatch.cqTemplate;
     }
 
-    const fragmentDocs = enforceAttributeDepthBudget(
-      pageDoc as unknown as Record<string, unknown>,
-      jcrPath,
-      pageDoc._id,
-      audit,
-    );
+    // Depth safety net over the page AND every config-extracted fragment —
+    // a `document: true` container can still hold arbitrary inline nesting.
+    const fragmentDocs = [
+      ...ctx.fragments,
+      ...enforceAttributeDepthBudget(
+        pageDoc as unknown as Record<string, unknown>,
+        jcrPath,
+        pageDoc._id,
+        audit,
+      ),
+    ];
+    for (const fragment of ctx.fragments) {
+      fragmentDocs.push(
+        ...enforceAttributeDepthBudget(fragment, jcrPath, fragment._id as string, audit),
+      );
+    }
 
     const outFile = join(cleanDir, relPath);
     mkdirSync(dirname(outFile), { recursive: true });
     writeFileSync(
       outFile,
-      JSON.stringify(
-        { jcrPath, slug: currentSlug, docs: [pageDoc, ...fragmentDocs] },
-        null,
-        2,
-      ) + "\n",
+      JSON.stringify({ jcrPath, slug: currentSlug, docs: [pageDoc, ...fragmentDocs] }, null, 2) +
+        "\n",
       "utf8",
     );
     pagesWritten++;

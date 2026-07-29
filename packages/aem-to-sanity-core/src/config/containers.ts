@@ -44,6 +44,22 @@ export interface ContainerConfigEntry {
    * (accordions, expanders) should stay non-flatten.
    */
   flatten?: boolean;
+  /**
+   * When true, every instance of this container is extracted into its own
+   * `contentFragment` document and a `contentFragmentRef` block takes its
+   * place in the parent array — ALWAYS, not just when a page runs over
+   * Sanity's attribute-depth limit.
+   *
+   * Use this for recursive structural components (tabs, accordions) whose
+   * nesting would otherwise approach the hard 20-level attribute-depth
+   * limit: depth is counted per document, so each extracted level resets
+   * the budget by construction, the Studio always shows the component as a
+   * click-through reference (one consistent shape), and the frontend needs
+   * exactly one join per configured type.
+   *
+   * Mutually exclusive with `flatten`. Default: false.
+   */
+  document?: boolean;
 }
 
 export type ContainerConfig = Map<string, ContainerConfigEntry>;
@@ -100,7 +116,17 @@ export function loadContainerConfig(
       );
     }
     const flatten = v.flatten === true ? true : undefined;
-    out.set(resourceType, flatten ? { childrenField, flatten } : { childrenField });
+    const document = v.document === true ? true : undefined;
+    if (flatten && document) {
+      throw new Error(
+        `container config: entry for "${resourceType}" sets both "flatten" and "document" — a flattened container has no block to extract; pick one`,
+      );
+    }
+    out.set(resourceType, {
+      childrenField,
+      ...(flatten ? { flatten } : {}),
+      ...(document ? { document } : {}),
+    });
   }
   return out;
 }
