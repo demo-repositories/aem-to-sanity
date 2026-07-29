@@ -200,7 +200,13 @@ async function main(): Promise<void> {
     );
   }
 
-  // 2) Pages — one transaction per page, same as before.
+  // 2) Pages — one transaction per page, same as before. A failed page
+  // commit no longer aborts the whole run: each page is its own atomic
+  // transaction, so later pages are unaffected — record the failure,
+  // keep importing, and exit non-zero with a summary at the end. (Without
+  // this, one bad doc — e.g. a deeply nested page tripping Sanity's
+  // 20-level attribute-depth limit — silently blocked every page after it.)
+  const failedPages: Array<{ jcrPath: string; error: string }> = [];
   for (const { clean } of cleanFiles) {
     if (!dryRun && client) {
       const tx = (client as SanityClientLike).transaction();
@@ -224,18 +230,21 @@ async function main(): Promise<void> {
       try {
         await tx.commit();
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        let msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("immutable attribute") && msg.includes("_type")) {
-          throw new Error(
-            `${msg}\n\n` +
-              `  This doc exists in Sanity with a different _type than what the migration is\n` +
-              `  writing. Re-run with --recreate-on-type-change (or set\n` +
-              `  MIGRATION_RECREATE_ON_TYPE_CHANGE=true) to delete + create the affected docs\n` +
-              `  atomically. This destroys their publish history and any drafts, so opt in\n` +
-              `  only when you're confident the new schema shape is correct.`,
-          );
+          msg +=
+            `\n\n` +
+            `  This doc exists in Sanity with a different _type than what the migration is\n` +
+            `  writing. Re-run with --recreate-on-type-change (or set\n` +
+            `  MIGRATION_RECREATE_ON_TYPE_CHANGE=true) to delete + create the affected docs\n` +
+            `  atomically. This destroys their publish history and any drafts, so opt in\n` +
+            `  only when you're confident the new schema shape is correct.`;
         }
-        throw err;
+        failedPages.push({ jcrPath: clean.jcrPath, error: msg });
+        console.error(
+          `  ${c.dim(clean.jcrPath)} ${c.dim("→")} FAILED: ${msg.split("\n")[0]}`,
+        );
+        continue;
       }
     }
     pages++;
@@ -256,6 +265,17 @@ async function main(): Promise<void> {
     console.error(`${c.dim("Re-created (_type changed):")} ${c.green(typeChangedDocs)}`);
   }
   console.error(`${c.dim("Elapsed:         ")} ${c.dim(timer.elapsed())}`);
+
+  if (failedPages.length > 0) {
+    console.error(
+      `\n${failedPages.length} page(s) failed to import (all other pages committed — each page is its own transaction):`,
+    );
+    for (const f of failedPages) {
+      console.error(`   ${f.jcrPath}`);
+      console.error(`      ${f.error.split("\n")[0]}`);
+    }
+    process.exitCode = 1;
+  }
 }
 
 interface SanityTransactionLike {

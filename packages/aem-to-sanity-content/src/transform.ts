@@ -1353,6 +1353,127 @@ function collectPageBuilder(
   return out;
 }
 
+/** Sanity rejects documents whose attribute paths nest deeper than this. */
+const SANITY_MAX_ATTRIBUTE_DEPTH = 20;
+
+function jsonDepth(v: unknown): number {
+  if (Array.isArray(v)) {
+    let max = 0;
+    for (const item of v) {
+      const d = jsonDepth(item);
+      if (d > max) max = d;
+    }
+    return 1 + max;
+  }
+  if (v !== null && typeof v === "object") {
+    let max = 0;
+    for (const item of Object.values(v as Record<string, unknown>)) {
+      const d = jsonDepth(item);
+      if (d > max) max = d;
+    }
+    return 1 + max;
+  }
+  return 0;
+}
+
+interface PanelCandidate {
+  parent: unknown[];
+  index: number;
+  panelTitle: string;
+  /** Attribute depth of the panel node itself, from the doc root. */
+  depthFromRoot: number;
+  /** Depth of the panel's own subtree. */
+  subtreeDepth: number;
+}
+
+function collectPanelCandidates(
+  node: unknown,
+  depthFromRoot: number,
+  out: PanelCandidate[],
+): void {
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i++) {
+      const item = node[i];
+      if (
+        item !== null &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        typeof (item as Record<string, unknown>).panelTitle === "string" &&
+        Array.isArray((item as Record<string, unknown>).items)
+      ) {
+        out.push({
+          parent: node,
+          index: i,
+          panelTitle: (item as Record<string, unknown>).panelTitle as string,
+          depthFromRoot: depthFromRoot + 1,
+          subtreeDepth: jsonDepth(item),
+        });
+      }
+      collectPanelCandidates(item, depthFromRoot + 1, out);
+    }
+    return;
+  }
+  if (node !== null && typeof node === "object") {
+    for (const value of Object.values(node as Record<string, unknown>)) {
+      collectPanelCandidates(value, depthFromRoot + 1, out);
+    }
+  }
+}
+
+/**
+ * Keep the emitted doc under Sanity's hard attribute-depth limit.
+ *
+ * Preserving tabs / accordion panels as blocks (see the `cq:panelTitle`
+ * exception in `collectPageBuilder`) costs two attribute levels per panel,
+ * and pathological authoring (tabs-in-tabs-in-accordions with rich text at
+ * the bottom) can push a page past the limit — the import API rejects the
+ * whole document ("attribute depth N exceeds limit of 20").
+ *
+ * Rather than lose the page, degrade the deepest structure only: while the
+ * doc is over budget, pick the titled panel on the deepest chain and splice
+ * its children into the parent array (exactly what `flatten: true` would
+ * have done), dropping the panel boundary and its title. Every flattened
+ * panel is surfaced in the transform report so the operator knows which
+ * titles were sacrificed — the alternative is the page not importing at all.
+ */
+function enforceAttributeDepthBudget(
+  doc: Record<string, unknown>,
+  jcrPath: string,
+  audit: Audit,
+): void {
+  let flattened = 0;
+  for (;;) {
+    const depth = jsonDepth(doc);
+    if (depth <= SANITY_MAX_ATTRIBUTE_DEPTH) break;
+    const candidates: PanelCandidate[] = [];
+    collectPanelCandidates(doc, 0, candidates);
+    if (candidates.length === 0) {
+      console.error(
+        `[transform] ${jcrPath}: attribute depth ${depth} exceeds Sanity's limit of ${SANITY_MAX_ATTRIBUTE_DEPTH} and no panels are left to flatten — import will reject this document`,
+      );
+      break;
+    }
+    // The panel on the deepest chain, breaking ties toward the deepest
+    // node — flattening it shortens the offending path by two levels
+    // while touching as little structure as possible.
+    candidates.sort(
+      (a, b) =>
+        b.depthFromRoot + b.subtreeDepth - (a.depthFromRoot + a.subtreeDepth) ||
+        b.depthFromRoot - a.depthFromRoot,
+    );
+    const target = candidates[0]!;
+    const panel = target.parent[target.index] as Record<string, unknown>;
+    target.parent.splice(target.index, 1, ...(panel.items as unknown[]));
+    audit.panelFlattenedForDepth(jcrPath, target.panelTitle);
+    flattened++;
+  }
+  if (flattened > 0) {
+    console.error(
+      `[transform] ${jcrPath}: over the ${SANITY_MAX_ATTRIBUTE_DEPTH}-level attribute-depth limit — flattened ${flattened} deepest panel(s) to fit (titles listed in transform-report.json → depthFlattenedPanels)`,
+    );
+  }
+}
+
 // Slim audit. Tracks: unknown resource types (with a few example paths),
 // unknown props per mapped component, transform bails. One JSON file per run.
 interface Audit {
@@ -1388,6 +1509,13 @@ interface Audit {
    * operator can paste them into `aem-content-roots`.
    */
   childPageSkipped(path: string): void;
+  /**
+   * A tabs/accordion panel was flattened (boundary + `panelTitle` dropped)
+   * because the document exceeded Sanity's attribute-depth limit — see
+   * `enforceAttributeDepthBudget`. Kept uncapped so the operator can see
+   * every sacrificed title.
+   */
+  panelFlattenedForDepth(path: string, panelTitle: string): void;
   report(): unknown;
 }
 
@@ -1403,6 +1531,7 @@ function createAudit(maxExamples = 3): Audit {
     { resourceType: string | undefined; cqTemplate: string | undefined; hits: number; examples: string[] }
   >();
   const skippedChildPages: string[] = [];
+  const depthFlattenedPanels: Array<{ path: string; panelTitle: string }> = [];
 
   function bump<T>(list: T[], item: T): void {
     if (list.length < maxExamples) list.push(item);
@@ -1463,6 +1592,10 @@ function createAudit(maxExamples = 3): Audit {
     childPageSkipped(path) {
       skippedChildPages.push(path);
     },
+    panelFlattenedForDepth(path, panelTitle) {
+      totalFindings++;
+      depthFlattenedPanels.push({ path, panelTitle });
+    },
     report() {
       return {
         summary: {
@@ -1474,6 +1607,7 @@ function createAudit(maxExamples = 3): Audit {
           unresolvedTagRefs: unresolvedTags.size,
           unknownPageTemplates: unknownPageTemplates.size,
           skippedChildPages: skippedChildPages.length,
+          depthFlattenedPanels: depthFlattenedPanels.length,
         },
         unknownResourceTypes: [...unknownTypes.entries()].map(([resourceType, { hits, examples }]) => ({
           resourceType,
@@ -1497,6 +1631,7 @@ function createAudit(maxExamples = 3): Audit {
           examples: e.examples,
         })),
         skippedChildPages: [...skippedChildPages].sort(),
+        depthFlattenedPanels,
         transformBails: bails,
       };
     },
@@ -1887,6 +2022,8 @@ function main(): void {
       if (featuredImage) pageDoc.featuredImage = featuredImage;
       pageDoc.cqTemplate = templateMatch.cqTemplate;
     }
+
+    enforceAttributeDepthBudget(pageDoc as unknown as Record<string, unknown>, jcrPath, audit);
 
     const outFile = join(cleanDir, relPath);
     mkdirSync(dirname(outFile), { recursive: true });
