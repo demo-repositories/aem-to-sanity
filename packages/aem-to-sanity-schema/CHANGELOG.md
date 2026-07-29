@@ -1,5 +1,12 @@
 # aem-to-sanity-schema
 
+## 2.3.0
+
+### Patch Changes
+
+- Updated dependencies [[`2230cad`](https://github.com/demo-repositories/aem-to-sanity/commit/2230cadcd7f3b72e77e7fbbcb46d82e55ec7b509)]:
+  - aem-to-sanity-core@2.3.0
+
 ## 2.2.0
 
 ### Minor Changes
