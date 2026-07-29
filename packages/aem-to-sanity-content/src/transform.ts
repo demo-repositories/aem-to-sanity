@@ -1420,58 +1420,157 @@ function collectPanelCandidates(
   }
 }
 
+interface CutCandidate {
+  parent: unknown[];
+  index: number;
+  block: Record<string, unknown>;
+  /** Attribute depth of the block node itself, from the doc root. */
+  depthFromRoot: number;
+  /** Depth of the block's own subtree (block object counts as 1). */
+  subtreeDepth: number;
+}
+
 /**
- * Keep the emitted doc under Sanity's hard attribute-depth limit.
+ * Blocks eligible for fragment extraction: objects inside arrays carrying a
+ * `_type`, a stable `_key` (feeds the fragment's deterministic `_id`), and
+ * an `items` child array (container-shaped — tabs, panels, wrappers, card
+ * containers). Portable Text internals (blocks, spans, table rows) never
+ * match because they don't carry `items`.
+ */
+function collectCutCandidates(
+  node: unknown,
+  depthFromRoot: number,
+  out: CutCandidate[],
+): void {
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i++) {
+      const item = node[i];
+      if (
+        item !== null &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        typeof (item as Record<string, unknown>)._type === "string" &&
+        typeof (item as Record<string, unknown>)._key === "string" &&
+        Array.isArray((item as Record<string, unknown>).items)
+      ) {
+        out.push({
+          parent: node,
+          index: i,
+          block: item as Record<string, unknown>,
+          depthFromRoot: depthFromRoot + 1,
+          subtreeDepth: jsonDepth(item),
+        });
+      }
+      collectCutCandidates(item, depthFromRoot + 1, out);
+    }
+    return;
+  }
+  if (node !== null && typeof node === "object") {
+    for (const value of Object.values(node as Record<string, unknown>)) {
+      collectCutCandidates(value, depthFromRoot + 1, out);
+    }
+  }
+}
+
+/**
+ * Keep the emitted doc under Sanity's hard attribute-depth limit — LOSSLESSLY
+ * where possible. Preserving tabs / accordion panels as blocks (see the
+ * `cq:panelTitle` exception in `collectPageBuilder`) costs two attribute
+ * levels per panel, and pathological authoring (tabs-in-tabs-in-accordions
+ * with rich text at the bottom) can push a page past the limit — the import
+ * API rejects the whole document ("attribute depth N exceeds limit of 20").
  *
- * Preserving tabs / accordion panels as blocks (see the `cq:panelTitle`
- * exception in `collectPageBuilder`) costs two attribute levels per panel,
- * and pathological authoring (tabs-in-tabs-in-accordions with rich text at
- * the bottom) can push a page past the limit — the import API rejects the
- * whole document ("attribute depth N exceeds limit of 20").
+ * The limit is counted PER DOCUMENT, so while the doc is over budget the
+ * deepest chain is CUT instead of flattened: the topmost container block on
+ * that chain whose subtree fits a standalone document is moved into a
+ * `contentFragment` doc (title + a page-builder `content` array; `_id`
+ * derived from the page id + the block's stable `_key`, so re-runs are
+ * idempotent) and a `contentFragmentRef` block referencing it takes its
+ * place. No structure or titles are lost — editors follow the reference.
+ * Fragments are returned so the caller writes them alongside the page doc
+ * (same clean file, same import transaction). Every cut is surfaced in the
+ * transform report (`depthExtractedFragments`).
  *
- * Rather than lose the page, degrade the deepest structure only: while the
- * doc is over budget, pick the titled panel on the deepest chain and splice
- * its children into the parent array (exactly what `flatten: true` would
- * have done), dropping the panel boundary and its title. Every flattened
- * panel is surfaced in the transform report so the operator knows which
- * titles were sacrificed — the alternative is the page not importing at all.
+ * Fallback: if no candidate subtree fits a fragment (degenerate shapes),
+ * the previous lossy repair — flattening the deepest titled panel — still
+ * applies, reported under `depthFlattenedPanels`.
  */
 function enforceAttributeDepthBudget(
   doc: Record<string, unknown>,
   jcrPath: string,
+  docId: string,
   audit: Audit,
-): void {
+): Array<Record<string, unknown>> {
+  const fragments: Array<Record<string, unknown>> = [];
   let flattened = 0;
-  for (;;) {
+  // The fragment doc adds two levels above the cut block (document object +
+  // its `content` array), so a subtree fits when subtreeDepth ≤ limit - 2.
+  const maxFragmentSubtree = SANITY_MAX_ATTRIBUTE_DEPTH - 2;
+  for (let guard = 0; guard < 200; guard++) {
     const depth = jsonDepth(doc);
     if (depth <= SANITY_MAX_ATTRIBUTE_DEPTH) break;
-    const candidates: PanelCandidate[] = [];
-    collectPanelCandidates(doc, 0, candidates);
-    if (candidates.length === 0) {
+
+    const candidates: CutCandidate[] = [];
+    collectCutCandidates(doc, 0, candidates);
+    // Deepest chain first; within a chain prefer the TOPMOST viable cut —
+    // it removes the most depth per fragment, so pages need the fewest cuts.
+    candidates.sort(
+      (a, b) =>
+        b.depthFromRoot + b.subtreeDepth - (a.depthFromRoot + a.subtreeDepth) ||
+        a.depthFromRoot - b.depthFromRoot,
+    );
+    const target = candidates.find((c) => c.subtreeDepth <= maxFragmentSubtree);
+
+    if (target) {
+      const block = target.block;
+      const fragmentId = `${docId}-frag-${block._key as string}`;
+      const panelTitle = typeof block.panelTitle === "string" ? block.panelTitle : undefined;
+      fragments.push({
+        _id: fragmentId,
+        _type: "contentFragment",
+        title: panelTitle ?? (block._type as string),
+        content: [block],
+      });
+      target.parent.splice(target.index, 1, {
+        _type: "contentFragmentRef",
+        _key: block._key,
+        fragment: { _type: "reference", _ref: fragmentId },
+      });
+      audit.fragmentExtractedForDepth(jcrPath, fragmentId, panelTitle ?? (block._type as string));
+      continue;
+    }
+
+    // No cuttable subtree fits a fragment — fall back to the lossy repair.
+    const panels: PanelCandidate[] = [];
+    collectPanelCandidates(doc, 0, panels);
+    if (panels.length === 0) {
       console.error(
-        `[transform] ${jcrPath}: attribute depth ${depth} exceeds Sanity's limit of ${SANITY_MAX_ATTRIBUTE_DEPTH} and no panels are left to flatten — import will reject this document`,
+        `[transform] ${jcrPath}: attribute depth ${depth} exceeds Sanity's limit of ${SANITY_MAX_ATTRIBUTE_DEPTH} and nothing is left to cut or flatten — import will reject this document`,
       );
       break;
     }
-    // The panel on the deepest chain, breaking ties toward the deepest
-    // node — flattening it shortens the offending path by two levels
-    // while touching as little structure as possible.
-    candidates.sort(
+    panels.sort(
       (a, b) =>
         b.depthFromRoot + b.subtreeDepth - (a.depthFromRoot + a.subtreeDepth) ||
         b.depthFromRoot - a.depthFromRoot,
     );
-    const target = candidates[0]!;
-    const panel = target.parent[target.index] as Record<string, unknown>;
-    target.parent.splice(target.index, 1, ...(panel.items as unknown[]));
-    audit.panelFlattenedForDepth(jcrPath, target.panelTitle);
+    const panel = panels[0]!;
+    const panelBlock = panel.parent[panel.index] as Record<string, unknown>;
+    panel.parent.splice(panel.index, 1, ...(panelBlock.items as unknown[]));
+    audit.panelFlattenedForDepth(jcrPath, panel.panelTitle);
     flattened++;
+  }
+  if (fragments.length > 0) {
+    console.error(
+      `[transform] ${jcrPath}: over the ${SANITY_MAX_ATTRIBUTE_DEPTH}-level attribute-depth limit — cut ${fragments.length} subtree(s) into contentFragment doc(s) (see transform-report.json → depthExtractedFragments)`,
+    );
   }
   if (flattened > 0) {
     console.error(
-      `[transform] ${jcrPath}: over the ${SANITY_MAX_ATTRIBUTE_DEPTH}-level attribute-depth limit — flattened ${flattened} deepest panel(s) to fit (titles listed in transform-report.json → depthFlattenedPanels)`,
+      `[transform] ${jcrPath}: flattened ${flattened} deepest panel(s) to fit the depth limit (titles listed in transform-report.json → depthFlattenedPanels)`,
     );
   }
+  return fragments;
 }
 
 // Slim audit. Tracks: unknown resource types (with a few example paths),
@@ -1516,6 +1615,13 @@ interface Audit {
    * every sacrificed title.
    */
   panelFlattenedForDepth(path: string, panelTitle: string): void;
+  /**
+   * A subtree was cut into a standalone `contentFragment` document because
+   * the page exceeded Sanity's attribute-depth limit — lossless: a
+   * `contentFragmentRef` block references it from the original position.
+   * See `enforceAttributeDepthBudget`. Kept uncapped.
+   */
+  fragmentExtractedForDepth(path: string, fragmentId: string, title: string): void;
   report(): unknown;
 }
 
@@ -1532,6 +1638,7 @@ function createAudit(maxExamples = 3): Audit {
   >();
   const skippedChildPages: string[] = [];
   const depthFlattenedPanels: Array<{ path: string; panelTitle: string }> = [];
+  const depthExtractedFragments: Array<{ path: string; fragmentId: string; title: string }> = [];
 
   function bump<T>(list: T[], item: T): void {
     if (list.length < maxExamples) list.push(item);
@@ -1596,6 +1703,10 @@ function createAudit(maxExamples = 3): Audit {
       totalFindings++;
       depthFlattenedPanels.push({ path, panelTitle });
     },
+    fragmentExtractedForDepth(path, fragmentId, title) {
+      totalFindings++;
+      depthExtractedFragments.push({ path, fragmentId, title });
+    },
     report() {
       return {
         summary: {
@@ -1608,6 +1719,7 @@ function createAudit(maxExamples = 3): Audit {
           unknownPageTemplates: unknownPageTemplates.size,
           skippedChildPages: skippedChildPages.length,
           depthFlattenedPanels: depthFlattenedPanels.length,
+          depthExtractedFragments: depthExtractedFragments.length,
         },
         unknownResourceTypes: [...unknownTypes.entries()].map(([resourceType, { hits, examples }]) => ({
           resourceType,
@@ -1632,6 +1744,7 @@ function createAudit(maxExamples = 3): Audit {
         })),
         skippedChildPages: [...skippedChildPages].sort(),
         depthFlattenedPanels,
+        depthExtractedFragments,
         transformBails: bails,
       };
     },
@@ -2023,13 +2136,22 @@ function main(): void {
       pageDoc.cqTemplate = templateMatch.cqTemplate;
     }
 
-    enforceAttributeDepthBudget(pageDoc as unknown as Record<string, unknown>, jcrPath, audit);
+    const fragmentDocs = enforceAttributeDepthBudget(
+      pageDoc as unknown as Record<string, unknown>,
+      jcrPath,
+      pageDoc._id,
+      audit,
+    );
 
     const outFile = join(cleanDir, relPath);
     mkdirSync(dirname(outFile), { recursive: true });
     writeFileSync(
       outFile,
-      JSON.stringify({ jcrPath, slug: currentSlug, docs: [pageDoc] }, null, 2) + "\n",
+      JSON.stringify(
+        { jcrPath, slug: currentSlug, docs: [pageDoc, ...fragmentDocs] },
+        null,
+        2,
+      ) + "\n",
       "utf8",
     );
     pagesWritten++;

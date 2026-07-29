@@ -60,11 +60,13 @@ export async function writePageBuilderArtifacts(
 
   // Portable Text table types are block-level members inside richtext
   // fields, not page-body components — keep them out of the "+ Add" menu.
-  // Baked in here (not per-caller) so the filename-scanning CLI entry point
-  // is covered too.
+  // Same for the `contentFragment` DOCUMENT type (its `contentFragmentRef`
+  // block IS a palette member). Baked in here (not per-caller) so the
+  // filename-scanning CLI entry point is covered too.
   const excludeSet = new Set([
     ...exclude,
     ...PT_TABLE_TYPE_NAMES,
+    "contentFragment",
     pageTypeName,
     pageBuilderTypeName,
   ]);

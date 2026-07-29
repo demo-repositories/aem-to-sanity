@@ -8,14 +8,16 @@ import { fileURLToPath } from "node:url";
 
 /**
  * Integration test: documents that would exceed Sanity's hard 20-level
- * attribute-depth limit (import rejects the whole doc) are repaired by
- * flattening the DEEPEST titled panels only — outer structure survives,
- * every sacrificed panel title lands in the transform report under
- * `depthFlattenedPanels`, and the emitted doc fits the budget.
+ * attribute-depth limit (import rejects the whole doc) are repaired
+ * LOSSLESSLY — the deepest chain is cut into a standalone `contentFragment`
+ * document (written into the same clean file, imported in the same
+ * transaction) and a `contentFragmentRef` block takes its place. No panel
+ * titles or structure are lost; each cut is reported under
+ * `depthExtractedFragments`.
  *
  * Fixture: five levels of tabs → titled panel → tabs → … with a text block
  * at the bottom. Each tabs+panel pair costs 4 attribute levels, so the raw
- * doc measures 24 — two panels must flatten to reach 20.
+ * doc measures 24 — over budget, forcing at least one cut.
  */
 
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
@@ -74,15 +76,29 @@ function jsonDepth(v: unknown): number {
 
 interface Block {
   _type: string;
+  _key?: string;
   panelTitle?: string;
   items?: Block[];
+  fragment?: { _type: string; _ref: string };
 }
 
-describe("attribute-depth budget: deepest panels flatten so the doc imports", () => {
+interface Doc {
+  _id: string;
+  _type: string;
+  title?: string;
+  pageBuilder?: Block[];
+  content?: Block[];
+}
+
+describe("attribute-depth budget: deep subtrees cut into contentFragment docs", () => {
   let tmp: string;
   let outputDir: string;
-  let doc: { pageBuilder: Block[] };
-  let report: { depthFlattenedPanels: Array<{ path: string; panelTitle: string }> };
+  let docs: Doc[];
+  let doc: Doc;
+  let report: {
+    depthExtractedFragments: Array<{ path: string; fragmentId: string; title: string }>;
+    depthFlattenedPanels: Array<{ path: string; panelTitle: string }>;
+  };
 
   before(() => {
     tmp = mkdtempSync(join(tmpdir(), "aem-transform-depth-"));
@@ -153,11 +169,12 @@ describe("attribute-depth budget: deepest panels flatten so the doc imports", ()
       { cwd: packageDir, env, stdio: "pipe" },
     );
 
-    doc = (
+    docs = (
       JSON.parse(
         readFileSync(join(outputDir, "cache", "clean", "content", "site", "deep-page.json"), "utf8"),
-      ) as { docs: Array<{ pageBuilder: Block[] }> }
-    ).docs[0]!;
+      ) as { docs: Doc[] }
+    ).docs;
+    doc = docs[0]!;
     report = JSON.parse(
       readFileSync(join(outputDir, "cache", "transform-report.json"), "utf8"),
     ) as typeof report;
@@ -167,23 +184,47 @@ describe("attribute-depth budget: deepest panels flatten so the doc imports", ()
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("keeps the emitted doc at or under 20 attribute levels", () => {
-    assert.ok(jsonDepth(doc) <= 20, `depth ${jsonDepth(doc)} > 20`);
+  it("keeps every emitted doc at or under 20 attribute levels", () => {
+    for (const d of docs) {
+      assert.ok(jsonDepth(d) <= 20, `${d._id}: depth ${jsonDepth(d)} > 20`);
+    }
   });
 
-  it("flattens only the deepest panels and reports each sacrificed title", () => {
+  it("writes contentFragment docs alongside the page and reports each cut", () => {
+    const fragments = docs.filter((d) => d._type === "contentFragment");
+    assert.ok(fragments.length >= 1);
+    assert.equal(report.depthExtractedFragments.length, fragments.length);
     assert.deepEqual(
-      report.depthFlattenedPanels.map((p) => p.panelTitle).sort(),
-      ["Level 4", "Level 5"],
+      report.depthExtractedFragments.map((f) => f.fragmentId).sort(),
+      fragments.map((f) => f._id).sort(),
     );
+    // Lossless repair — the lossy fallback must not have fired.
+    assert.deepEqual(report.depthFlattenedPanels, []);
   });
 
-  it("preserves the outer panel structure and the bottom content", () => {
-    // Outermost panel survives with its title…
-    const outer = doc.pageBuilder[0]!.items![0]!;
+  it("replaces the cut subtree with a contentFragmentRef pointing at the fragment", () => {
+    const refs: Block[] = [];
+    const walk = (b: Block): void => {
+      if (b._type === "contentFragmentRef") refs.push(b);
+      for (const c of b.items ?? []) walk(c);
+    };
+    for (const b of doc.pageBuilder!) walk(b);
+    assert.equal(refs.length, docs.filter((d) => d._type === "contentFragment").length);
+    for (const ref of refs) {
+      assert.equal(ref.fragment!._type, "reference");
+      assert.ok(docs.some((d) => d._id === ref.fragment!._ref));
+    }
+  });
+
+  it("loses nothing: every panel title and the bottom text survive across the docs", () => {
+    const all = JSON.stringify(docs);
+    for (let level = 1; level <= NEST; level++) {
+      assert.ok(all.includes(`"Level ${level}"`), `Level ${level} missing`);
+    }
+    assert.ok(all.includes('"bottom"'));
+    // The outermost panel is untouched on the page doc itself.
+    const outer = doc.pageBuilder![0]!.items![0]!;
     assert.equal(outer._type, "container");
     assert.equal(outer.panelTitle, "Level 1");
-    // …and the bottom text block is still reachable (nothing dropped).
-    assert.ok(JSON.stringify(doc).includes('"bottom"'));
   });
 });

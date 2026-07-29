@@ -33,6 +33,19 @@ export const SANITY_BUILTIN_TYPE_NAMES: ReadonlySet<string> = new Set<string>([
 export const PORTABLE_TEXT_TABLE_TYPE_NAMES = ["cell", "row", "table"] as const;
 
 /**
+ * Toolkit-owned types for the attribute-depth escape hatch: when a page's
+ * preserved container nesting would exceed Sanity's 20-level attribute-depth
+ * limit, `aem-transform` cuts the deepest subtree into a standalone
+ * `contentFragment` document and leaves a `contentFragmentRef` block in its
+ * place. Emitted as generated types (`content-fragment.ts`) and reserved so
+ * an AEM component can't claim the names.
+ */
+export const CONTENT_FRAGMENT_TYPE_NAMES = [
+  "contentFragment",
+  "contentFragmentRef",
+] as const;
+
+/**
  * Names AEM components can't claim: Sanity built-ins plus the toolkit-owned
  * Portable Text table types. `resolveSanityTypeNames` renames a colliding
  * component with the `aem` prefix (e.g. `aemTable`).
@@ -40,6 +53,7 @@ export const PORTABLE_TEXT_TABLE_TYPE_NAMES = ["cell", "row", "table"] as const;
 export const RESERVED_SANITY_TYPE_NAMES: ReadonlySet<string> = new Set<string>([
   ...SANITY_BUILTIN_TYPE_NAMES,
   ...PORTABLE_TEXT_TABLE_TYPE_NAMES,
+  ...CONTENT_FRAGMENT_TYPE_NAMES,
 ]);
 
 /**

@@ -46,6 +46,10 @@ import {
   PT_TABLE_TYPE_NAMES,
   writePortableTextTableArtifacts,
 } from "./pt-table.ts";
+import {
+  CONTENT_FRAGMENT_TYPE_NAMES,
+  writeContentFragmentArtifacts,
+} from "./content-fragment.ts";
 import { writeContentRegistry } from "./content-registry.ts";
 import { writeTemplatePageArtifacts } from "./template-pages.ts";
 
@@ -520,9 +524,20 @@ export async function migrateSchemas(
   let pageBuilderFile: string | undefined;
   let pageFile: string | undefined;
   if (emitPageBuilder) {
+    // Depth-limit escape hatch: `contentFragment` document + the
+    // `contentFragmentRef` block aem-transform swaps in when a subtree is
+    // cut. The ref block joins the page-builder palette so ingested refs
+    // validate; the fragment document itself is not a droppable block.
+    await writeContentFragmentArtifacts({
+      schemasDir,
+      pageBuilderTypeName: pageBuilderName,
+    });
     const pb = await writePageBuilderArtifacts({
       schemasDir,
-      componentMembers: successMembers,
+      componentMembers: [
+        ...successMembers,
+        { name: "contentFragmentRef", title: "Content Fragment" },
+      ],
       exclude: effectivePageBuilderExclude,
       pageBuilderTypeName: pageBuilderName,
       logger,
@@ -1036,6 +1051,7 @@ async function pruneGeneratedSchemaFiles(
   if (opts.emitPageBuilder) {
     keep.add("page");
     keep.add(opts.pageBuilderName);
+    for (const name of CONTENT_FRAGMENT_TYPE_NAMES) keep.add(name);
   }
 
   for (const file of entries) {
@@ -1078,7 +1094,9 @@ async function writeSchemasBarrel(
     .sort();
   if (successNames.length === 0) return;
 
-  const pageExtras = opts.emitPageBuilder ? [opts.pageBuilderName, "page"] : [];
+  const pageExtras = opts.emitPageBuilder
+    ? [opts.pageBuilderName, "page", ...CONTENT_FRAGMENT_TYPE_NAMES]
+    : [];
   const allNames = [...PT_TABLE_TYPE_NAMES, ...successNames, ...pageExtras];
 
   const imports = allNames
