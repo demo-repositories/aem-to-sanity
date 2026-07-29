@@ -252,6 +252,23 @@ For each listed resource type:
 
 **`document: true`** (optional, mutually exclusive with `flatten`) — extracts every instance of the component into its own `contentFragment` document, with a `contentFragmentRef` block left in the parent array. Use for recursive structural components (tabs, accordions): depth resets per document so nesting never approaches the 20-level limit, the Studio always shows one click-through reference shape, and the frontend needs exactly one join per configured type. Fragment ids derive from the page id + block `_key` (idempotent re-runs); a re-run that stops producing a fragment leaves the old document orphaned — reconcile against `transform-report.json → configExtractedFragments`. Titles come from the component's dialog, falling back to the nearest panel title + block type ("Get started — accordion").
 
+**Querying fragments from the frontend.** A `contentFragmentRef` block has one field — `fragment`, a reference to a `contentFragment` document (`title`, read-only `sourcePath`, and a `content` array of the same page-builder shape as the page's own). Resolve it with GROQ's dereference operator wherever you project a page-builder array:
+
+```groq
+*[_type == "page" && slug.current == $slug][0]{
+  title,
+  pageBuilder[]{
+    ...,
+    _type == "contentFragmentRef" => {
+      ...,
+      fragment->{ _id, title, content }
+    }
+  }
+}
+```
+
+Two shapes to plan for: **refs are not only top-level** (they appear anywhere a page-builder block can, including inside a container's `childrenField` array — repeat the conditional projection at every level you project, or centralize it in a shared projection string), and **fragments nest** (a fragment's `content` can itself contain refs — nested tabs, chained depth cuts). GROQ can't recurse unboundedly, so either build the join in code and inline it to a known maximum depth, or resolve lazily: render the ref block as a component that fetches its fragment on mount (`*[_type == "contentFragment" && _id == $id][0]{ title, content }`). Lazy resolution is depth-proof and cache-friendly (fragment ids are stable across re-runs) — the safer default when authors control nesting depth. Full write-up with the depth-N helper: `docs/aem-to-sanity-mapping.md` § "Container components". Like every block `_type`, `contentFragmentRef` needs a matching primitive in the frontend's block dispatcher (see [`aem-to-sanity-demo-web`](https://github.com/demo-repositories/aem-to-sanity-demo-web)) that pipes the fragment's `content` back through the same dispatcher.
+
 Missing file → container behavior stays off. Malformed JSON or invalid entries are a hard error (fail loudly rather than silently drop child content).
 
 ### 1c-quinquies. Authoring hints — `tenants/<your-tenant>/aem-component-hints.json`

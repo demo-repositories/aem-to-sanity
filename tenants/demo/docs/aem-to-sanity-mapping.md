@@ -144,6 +144,39 @@ AEM marks these with `cq:isContainer=true` in component definitions, but that fl
 
 **`document: true`** (optional, mutually exclusive with `flatten`) extracts EVERY instance of the component into its own `contentFragment` document with a `contentFragmentRef` block in the parent array — by design, not depth pressure. Use it for recursive structural components (tabs, accordions): depth is counted per document, so each extracted level resets the attribute-depth budget by construction; the Studio always shows the component as one click-through reference (a single consistent shape instead of sometimes-inline / sometimes-ref); and the frontend needs exactly one join per configured type. Fragment `_id`s derive from the page id + the block's stable `_key` (idempotent re-runs; note a re-run that stops producing a fragment leaves the old document orphaned — reconcile against `transform-report.json → configExtractedFragments`). Fragment titles come from the component's dialog (`title` / `panelTitle` / `accessibilityLabel`), falling back to the nearest enclosing panel title plus the block type ("Get started — accordion").
 
+**Querying fragments from the frontend.** A `contentFragmentRef` block carries a single field — `fragment`, a Sanity reference to a `contentFragment` document (`title`, read-only `sourcePath` provenance, and a `content` array with the same page-builder shape as the page's own array). Resolve it inline with GROQ's dereference operator wherever a page-builder array is projected:
+
+```groq
+*[_type == "page" && slug.current == $slug][0]{
+  title,
+  pageBuilder[]{
+    ...,
+    _type == "contentFragmentRef" => {
+      ...,
+      fragment->{ _id, title, content }
+    }
+  }
+}
+```
+
+Two shapes to plan for:
+
+1. **Refs are not only top-level.** A `contentFragmentRef` can sit anywhere a page-builder block can — including inside a container block's `childrenField` array (`items` by convention). Repeat the conditional projection at every level you project, or centralize it in a shared projection string your queries interpolate.
+2. **Fragments nest.** A fragment's `content` can itself contain `contentFragmentRef` blocks — `document: true` components nest exactly as deep as authors nested them in AEM (tabs-in-tabs), and depth-triggered cuts chain when one cut isn't enough. GROQ cannot recurse unboundedly, so either **(a)** build the join in code and inline it to a known maximum depth:
+
+   ```js
+   const fragmentJoin = (depth) =>
+     depth === 0
+       ? "..."
+       : `..., _type == "contentFragmentRef" => {
+            ..., fragment->{ _id, title, content[]{ ${fragmentJoin(depth - 1)} } }
+          }`;
+   ```
+
+   or **(b)** resolve lazily: render the ref block as a component that fetches its own fragment on mount (`*[_type == "contentFragment" && _id == $id][0]{ title, content }`) — one extra round-trip per fragment, but depth-proof and cache-friendly (fragment ids are stable across re-runs). Lazy resolution is the safer default when authors control nesting depth.
+
+Like every other block `_type`, `contentFragmentRef` needs a matching primitive in the consuming frontend's block dispatcher — it renders the joined (or lazily fetched) fragment's `content` through the same dispatcher, so fragments and inline blocks share one rendering path.
+
 Containers nest without special-casing — expander → box → content → Portable Text roundtrips through the same recursive call. Missing file → container behavior stays off. Malformed JSON / invalid entries are a hard error so a typo doesn't silently drop children.
 
 ## Type-aware coercion at transform
