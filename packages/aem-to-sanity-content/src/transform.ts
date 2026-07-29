@@ -613,6 +613,10 @@ interface TransformContext {
   containers: ContainerConfig;
   /** Sanity `_id` of the page document being transformed — seeds fragment ids. */
   docId: string;
+  /** Page title — last-resort context for fragment doc titles. */
+  pageTitle: string;
+  /** JCR path of the page — stamped on fragment docs as `sourcePath`. */
+  jcrPath: string;
   /**
    * Sink for `contentFragment` documents produced while walking this page:
    * containers configured `document: true` extract every instance here (a
@@ -1362,13 +1366,16 @@ function collectPageBuilder(
         const ownTitle = [inline.title, inline.panelTitle, inline.accessibilityLabel].find(
           (v): v is string => typeof v === "string" && v.trim().length > 0,
         );
+        // Best available context wins: the component's own dialog title, the
+        // enclosing panel, then the page — never a bare block type, which
+        // renders the Studio's fragment list unidentifiable.
         const title =
-          ownTitle ??
-          (contextTitle ? `${contextTitle} — ${entry.sanityType}` : entry.sanityType);
+          ownTitle ?? `${contextTitle ?? ctx.pageTitle} — ${entry.sanityType}`;
         ctx.fragments.push({
           _id: fragmentId,
           _type: "contentFragment",
           title,
+          sourcePath: ctx.jcrPath,
           content: [block],
         });
         ctx.audit.blockExtractedAsDocument(frame.jcrPath, fragmentId, entry.sanityType);
@@ -1578,6 +1585,7 @@ function enforceAttributeDepthBudget(
         _id: fragmentId,
         _type: "contentFragment",
         title: panelTitle ?? (block._type as string),
+        sourcePath: jcrPath,
         content: [block],
       });
       target.parent.splice(target.index, 1, {
@@ -2126,6 +2134,7 @@ function main(): void {
     }
 
     const docId = pathToDocId(jcrPath);
+    const pageTitle = derivePageTitle(tree, slug, jcrPath);
     const ctx: TransformContext = {
       visited: new WeakSet(),
       depth: 0,
@@ -2136,6 +2145,8 @@ function main(): void {
       audit,
       pageShellResourceTypes: declaredPageComponentResourceTypes,
       docId,
+      pageTitle,
+      jcrPath,
       fragments: [],
     };
 
@@ -2180,7 +2191,7 @@ function main(): void {
     const pageDoc: PageDoc = {
       _id: docId,
       _type: templateMatch ? templateMatch.sanityType : "page",
-      title: derivePageTitle(tree, slug, jcrPath),
+      title: pageTitle,
       slug: { _type: "slug", current: currentSlug },
       [pageBuilderFieldName]: pageBuilder,
     };

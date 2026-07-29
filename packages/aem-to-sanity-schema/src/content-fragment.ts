@@ -43,11 +43,22 @@ export const contentFragment = defineType({
   fields: [
     defineField({ name: "title", title: "Title", type: "string" }),
     defineField({
+      name: "sourcePath",
+      title: "Source page",
+      description:
+        "AEM path of the page this fragment was extracted from (read-only migration provenance).",
+      type: "string",
+      readOnly: true,
+    }),
+    defineField({
       name: "content",
       title: "Content",
       type: ${JSON.stringify(pageBuilderTypeName)},
     }),
   ],
+  preview: {
+    select: { title: "title", subtitle: "sourcePath" },
+  },
 });
 `;
 }
