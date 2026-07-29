@@ -1,5 +1,20 @@
 # aem-to-sanity-content
 
+## 2.2.0
+
+### Minor Changes
+
+- [`cc8f917`](https://github.com/demo-repositories/aem-to-sanity/commit/cc8f917cfb9efa74c5a311af51ddaff8c363f851) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Tabs and accordion panels survive migration. AEM's tab/accordion components drop the same container resource type into their panels that responsive grids use for pure layout — distinguished only by the `cq:panelTitle` stamped on the panel node. A `flatten: true` container carrying `cq:panelTitle` now keeps its block instead of dissolving into the parent (which merged all panels' contents into one flat list and dropped every panel title); title-less layout containers flatten exactly as before, including inside a kept panel, and nested tabs roundtrip recursively.
+
+  To adopt: register the tabs/accordion component as a plain (non-flatten) container in `aem-component-containers.json` and opt the panel container's resource type into the `cq:panelTitle` authoring hint in `aem-component-hints.json`, then re-run `migrate:schema` + `transform` + `import --discard-drafts`. Pages whose preserved panels would exceed Sanity's hard 20-level attribute-depth limit are repaired automatically and losslessly: the transform cuts the offending subtree into a standalone `contentFragment` document and leaves a `contentFragmentRef` block in its place (fragments import in the same per-page transaction; every cut is listed in `transform-report.json → depthExtractedFragments`). Shapes that can't be cut fall back to flattening the deepest titled panel (`depthFlattenedPanels`).
+
+### Patch Changes
+
+- [`5eab4e0`](https://github.com/demo-repositories/aem-to-sanity/commit/5eab4e0d2b1c4ef76d8dba36b6c4100b07598166) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - `aem-import` no longer aborts the whole run when one page's transaction fails (e.g. a document rejected by the API). Each page is already its own atomic transaction, so the importer now records the failure, keeps committing the remaining pages, prints a per-page `FAILED:` line plus an end-of-run summary of failed pages, and exits non-zero. Previously one bad document silently blocked every page after it.
+
+- Updated dependencies []:
+  - aem-to-sanity-core@2.2.0
+
 ## 2.1.3
 
 ### Patch Changes
