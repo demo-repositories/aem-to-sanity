@@ -1,5 +1,27 @@
 # aem-to-sanity-schema
 
+## 2.4.0
+
+### Minor Changes
+
+- [#91](https://github.com/demo-repositories/aem-to-sanity/pull/91) [`63e5133`](https://github.com/demo-repositories/aem-to-sanity/commit/63e5133ac26ee991f24c4e0da56aff1a8896d79d) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Configurable folder layout for the generated schemas directory.
+
+  - New env var `MIGRATION_SCHEMA_LAYOUT` — `flat` (default, current behavior) or `kind`, which groups generated files into `documents/` (the `page` doc, per-template docs, `contentFragment`) and `objects/` (component schemas, the page-builder array, table types, `contentFragmentRef`) subfolders.
+  - Entries in `aem-component-names.json` accept a new optional `folder` key that pins a component's generated file to a custom subfolder (e.g. `{"folder": "navigationObjects"}`). Overrides apply in both layouts. An entry may carry `folder` alone.
+  - The `index.ts` barrel always stays at the root of the schemas dir with an identical `allSchemaTypes` export — Studio imports need no changes.
+  - Unlike the naming knobs, layout and `folder` are safe to change between runs: files move but type names and ingested `_type` values don't, and the pruner removes copies left at old locations (and now-empty subfolders) on the next `migrate:schema` run.
+  - The `aem-to-sanity-pagebuilder` CLI gained a `--layout <flat|kind>` flag (defaults to `MIGRATION_SCHEMA_LAYOUT`).
+  - Typegen now scans the schemas dir recursively and no longer feeds the barrel `index.ts` itself into the synthesized config.
+
+  No action needed to keep the current flat layout.
+
+### Patch Changes
+
+- [#89](https://github.com/demo-repositories/aem-to-sanity/pull/89) [`5749d10`](https://github.com/demo-repositories/aem-to-sanity/commit/5749d10ec744798666966b0e1c98aa3b9003f7fe) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Document how frontends query `contentFragmentRef` blocks: the generated mapping doc (and the operator guide) now include the GROQ dereference pattern (`fragment->{ _id, title, content }`), a note that refs appear at any page-builder depth (including container `items`), and two strategies for nested fragments — a depth-N inline join helper or lazy per-fragment fetching. No behavior change; docs only.
+
+- Updated dependencies [[`63e5133`](https://github.com/demo-repositories/aem-to-sanity/commit/63e5133ac26ee991f24c4e0da56aff1a8896d79d)]:
+  - aem-to-sanity-core@2.4.0
+
 ## 2.3.0
 
 ### Patch Changes

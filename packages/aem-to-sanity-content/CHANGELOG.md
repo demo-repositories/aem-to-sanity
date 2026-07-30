@@ -1,5 +1,14 @@
 # aem-to-sanity-content
 
+## 2.4.0
+
+### Patch Changes
+
+- [#89](https://github.com/demo-repositories/aem-to-sanity/pull/89) [`5749d10`](https://github.com/demo-repositories/aem-to-sanity/commit/5749d10ec744798666966b0e1c98aa3b9003f7fe) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Document how frontends query `contentFragmentRef` blocks: the generated mapping doc (and the operator guide) now include the GROQ dereference pattern (`fragment->{ _id, title, content }`), a note that refs appear at any page-builder depth (including container `items`), and two strategies for nested fragments — a depth-N inline join helper or lazy per-fragment fetching. No behavior change; docs only.
+
+- Updated dependencies [[`63e5133`](https://github.com/demo-repositories/aem-to-sanity/commit/63e5133ac26ee991f24c4e0da56aff1a8896d79d)]:
+  - aem-to-sanity-core@2.4.0
+
 ## 2.3.0
 
 ### Minor Changes
