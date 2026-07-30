@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { writeTextFile } from "aem-to-sanity-core";
 import { PORTABLE_TEXT_TABLE_TYPE_NAMES } from "./naming.ts";
+import { FLAT_PLANNER, type SchemaPathPlanner } from "./layout.ts";
 
 /**
  * Canonical type names claimed by Sanity's native Portable Text table
@@ -16,6 +17,8 @@ export const PT_TABLE_TYPE_NAMES = PORTABLE_TEXT_TABLE_TYPE_NAMES;
 export interface WritePortableTextTableArtifactsOptions {
   /** Directory where generated schema .ts files are written. */
   schemasDir: string;
+  /** Layout planner deciding subfolder placement. Default: flat. */
+  planner?: SchemaPathPlanner;
 }
 
 export interface WritePortableTextTableArtifactsResult {
@@ -97,9 +100,10 @@ export const table = defineType({
 export async function writePortableTextTableArtifacts(
   opts: WritePortableTextTableArtifactsOptions,
 ): Promise<WritePortableTextTableArtifactsResult> {
+  const planner = opts.planner ?? FLAT_PLANNER;
   const files: string[] = [];
   for (const name of PT_TABLE_TYPE_NAMES) {
-    const file = join(opts.schemasDir, `${name}.ts`);
+    const file = join(opts.schemasDir, planner.relPath(name, "object"));
     await writeTextFile(file, FILE_SOURCES[name]);
     files.push(file);
   }

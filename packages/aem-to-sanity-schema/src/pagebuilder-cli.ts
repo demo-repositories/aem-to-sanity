@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 import "./load-env.ts";
 import { join, resolve } from "node:path";
-import { createLogger, resolvePageBuilderName } from "aem-to-sanity-core";
+import {
+  createLogger,
+  resolvePageBuilderName,
+  resolveSchemaLayout,
+  type SchemaLayout,
+} from "aem-to-sanity-core";
 import {
   rewriteBarrelFromDisk,
   scanSchemaTypeNames,
   writePageBuilderArtifacts,
 } from "./pagebuilder.ts";
+import { createSchemaPathPlanner } from "./layout.ts";
 
 interface Args {
   outputDir: string;
@@ -14,6 +20,7 @@ interface Args {
   exclude: string[];
   pageTypeName: string;
   pageBuilderTypeName: string;
+  layout: SchemaLayout;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -26,6 +33,7 @@ function parseArgs(argv: string[]): Args {
     exclude: [],
     pageTypeName: "page",
     pageBuilderTypeName: resolvePageBuilderName(process.env),
+    layout: resolveSchemaLayout(process.env),
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -60,6 +68,14 @@ function parseArgs(argv: string[]): Args {
         result.pageBuilderTypeName = next;
         break;
       }
+      case "--layout": {
+        const next = argv[++i];
+        if (next !== "flat" && next !== "kind") {
+          throw new Error('--layout requires "flat" or "kind"');
+        }
+        result.layout = next;
+        break;
+      }
       case "--help":
       case "-h":
         printHelp();
@@ -86,6 +102,8 @@ Options:
   --exclude <typeName>      Exclude a type from pageBuilder.of[] (repeatable)
   --page-type <name>        Default: page
   --pagebuilder-type <name> Default: $MIGRATION_PAGE_BUILDER_NAME or pageBuilder
+  --layout <flat|kind>      Where page.ts / pageBuilder.ts land inside the
+                            schemas dir. Default: $MIGRATION_SCHEMA_LAYOUT or flat
 `);
 }
 
@@ -110,6 +128,9 @@ async function main(): Promise<void> {
     exclude: args.exclude,
     pageTypeName: args.pageTypeName,
     pageBuilderTypeName: args.pageBuilderTypeName,
+    // No folder overrides here: the CLI only writes page/pageBuilder, which
+    // never take them — component files are just scanned wherever they live.
+    planner: createSchemaPathPlanner({ layout: args.layout }),
     logger,
   });
 

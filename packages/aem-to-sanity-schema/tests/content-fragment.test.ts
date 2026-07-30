@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { writeContentFragmentArtifacts } from "../src/content-fragment.ts";
 import { writePageBuilderArtifacts } from "../src/pagebuilder.ts";
 import { RESERVED_SANITY_TYPE_NAMES } from "../src/naming.ts";
+import { createSchemaPathPlanner } from "../src/layout.ts";
 
 /**
  * The attribute-depth escape hatch: `contentFragment` (document holding a
@@ -34,6 +35,23 @@ describe("contentFragment artifacts", () => {
     const ref = readFileSync(join(tmp, "contentFragmentRef.ts"), "utf8");
     assert.match(ref, /type: "reference"/);
     assert.match(ref, /to: \[\{ type: "contentFragment" \}\]/);
+  });
+
+  it("kind layout splits the document from the ref block", async () => {
+    const kindDir = mkdtempSync(join(tmpdir(), "content-fragment-kind-"));
+    try {
+      const { files } = await writeContentFragmentArtifacts({
+        schemasDir: kindDir,
+        pageBuilderTypeName: "pageBuilder",
+        planner: createSchemaPathPlanner({ layout: "kind" }),
+      });
+      assert.deepEqual(files, [
+        join(kindDir, "documents", "contentFragment.ts"),
+        join(kindDir, "objects", "contentFragmentRef.ts"),
+      ]);
+    } finally {
+      rmSync(kindDir, { recursive: true, force: true });
+    }
   });
 
   it("pageBuilder registers the ref block but never the document type", async () => {

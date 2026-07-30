@@ -21,6 +21,13 @@ import { readFileSync } from "node:fs";
  * after content is ingested renames the emitted type and orphans existing
  * `_type` values.
  *
+ * Entries may also carry a `folder` — a single directory segment the
+ * component's generated `{type}.ts` is emitted under (e.g. `"folder":
+ * "navigationObjects"` → `generated/navigationObjects/navBar.ts`). Folder
+ * overrides apply in both `MIGRATION_SCHEMA_LAYOUT` layouts and, unlike
+ * `name`, are safe to change between runs: moving a file never renames the
+ * type, and the pruner cleans up the old location.
+ *
  * Override the file path via the `AEM_COMPONENT_NAMES_FILE` env var
  * (default `./aem-component-names.json`).
  */
@@ -29,12 +36,20 @@ export interface ComponentNameOverride {
   name?: string;
   /** Studio display title; replaces the component's `jcr:title`. */
   title?: string;
+  /** Subfolder of the schemas dir to emit into (single segment, no `/` or `.`). */
+  folder?: string;
 }
 
 export type ComponentNameConfig = Map<string, ComponentNameOverride>;
 
 /** Sanity type names must be identifier-like; enforced at load so a typo fails fast. */
 const VALID_TYPE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+/**
+ * Folders are a single path segment — no separators or dots, so a config
+ * value can never escape or nest below the schemas dir.
+ */
+const VALID_FOLDER = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 export interface LoadComponentNameConfigOptions {
   /** Absolute or relative path. Missing file → empty config. */
@@ -95,7 +110,7 @@ export function loadComponentNameConfig(
     if (typeof value === "string") {
       override = { name: value };
     } else if (value && typeof value === "object" && !Array.isArray(value)) {
-      const { name, title } = value as Record<string, unknown>;
+      const { name, title, folder } = value as Record<string, unknown>;
       if (name !== undefined && typeof name !== "string") {
         throw new Error(
           `component-name config: "name" for "${rawKey}" must be a string`,
@@ -106,18 +121,24 @@ export function loadComponentNameConfig(
           `component-name config: "title" for "${rawKey}" must be a string`,
         );
       }
-      if (name === undefined && title === undefined) {
+      if (folder !== undefined && typeof folder !== "string") {
         throw new Error(
-          `component-name config: entry for "${rawKey}" needs "name" and/or "title"`,
+          `component-name config: "folder" for "${rawKey}" must be a string`,
+        );
+      }
+      if (name === undefined && title === undefined && folder === undefined) {
+        throw new Error(
+          `component-name config: entry for "${rawKey}" needs "name", "title", and/or "folder"`,
         );
       }
       override = {
         ...(name !== undefined ? { name } : {}),
         ...(title !== undefined ? { title } : {}),
+        ...(folder !== undefined ? { folder } : {}),
       };
     } else {
       throw new Error(
-        `component-name config: entry for "${rawKey}" must be a string type name or an object with "name" / "title"`,
+        `component-name config: entry for "${rawKey}" must be a string type name or an object with "name" / "title" / "folder"`,
       );
     }
 
@@ -138,6 +159,11 @@ export function loadComponentNameConfig(
     if (override.title !== undefined && override.title.trim().length === 0) {
       throw new Error(
         `component-name config: "title" for "${rawKey}" must not be empty`,
+      );
+    }
+    if (override.folder !== undefined && !VALID_FOLDER.test(override.folder)) {
+      throw new Error(
+        `component-name config: "${override.folder}" (folder for "${rawKey}") is not a valid folder name — use a single segment of letters/digits/underscore/hyphen, starting with a letter`,
       );
     }
 

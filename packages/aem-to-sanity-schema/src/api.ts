@@ -1,5 +1,5 @@
 import { join, dirname } from "node:path";
-import { readFile, readdir, unlink } from "node:fs/promises";
+import { readFile, readdir, rmdir, unlink } from "node:fs/promises";
 import {
   AEM_AUTHORING_HINTS,
   AemFetchError,
@@ -14,6 +14,7 @@ import {
   type DialogNode,
   type Logger,
   type PageComponentConfig,
+  type SchemaLayout,
   type SlotConfig,
   type SlotConfigEntry,
 } from "aem-to-sanity-core";
@@ -52,6 +53,11 @@ import {
 } from "./content-fragment.ts";
 import { writeContentRegistry } from "./content-registry.ts";
 import { writeTemplatePageArtifacts } from "./template-pages.ts";
+import {
+  createSchemaPathPlanner,
+  type EmittedKind,
+  type SchemaPathPlanner,
+} from "./layout.ts";
 
 export interface MigrateSchemasOptions {
   /** AEM component paths (e.g. `/apps/<site>/components/promo`). */
@@ -122,6 +128,16 @@ export interface MigrateSchemasOptions {
    * decoupled from `outputDir`, which holds only regenerable cache state.
    */
   schemasDir?: string;
+  /**
+   * On-disk layout of `schemasDir`. `"flat"` (default) writes every file at
+   * the top level; `"kind"` groups them into `documents/` (page docs,
+   * per-template docs, `contentFragment`) and `objects/` (everything else).
+   * Per-component `folder` overrides from `aem-component-names.json` win in
+   * both layouts. The barrel `index.ts` always stays at the root, so Studio
+   * imports are unaffected. Safe to switch between runs — file locations
+   * change but type names don't, and stale copies are pruned.
+   */
+  schemaLayout?: SchemaLayout;
   /**
    * Treat per-component 401/403 failures as skips (logged + reported) rather
    * than aborting the whole batch. Matches the "unknown shapes are audit
@@ -204,10 +220,12 @@ export interface MigrateSchemasOptions {
    */
   authoringHints?: AuthoringHintConfig;
   /**
-   * Explicit type-name / Studio-title overrides keyed by
+   * Explicit type-name / Studio-title / folder overrides keyed by
    * `sling:resourceType` (from `aem-component-names.json`). Names win over
-   * the `typeNaming` strategy; titles replace the component's `jcr:title`.
-   * Entries matching no listed component path are logged and ignored.
+   * the `typeNaming` strategy; titles replace the component's `jcr:title`;
+   * folders place the emitted file in a subfolder of `schemasDir` (in any
+   * `schemaLayout`). Entries matching no listed component path are logged
+   * and ignored.
    */
   componentNames?: ComponentNameConfig;
   /**
@@ -324,14 +342,16 @@ export async function migrateSchemas(
     if (typeof t === "string" && t.trim()) titleByPath.set(p, t.trim());
   }
 
-  // Explicit name / title overrides from `aem-component-names.json`. Names
-  // are re-keyed from resource type to component path for the resolver;
-  // titles are consumed per-component in processOne. Config entries that
-  // match no listed path are logged and dropped (operator typo, or a
-  // component removed from `aem-component-paths`).
+  // Explicit name / title / folder overrides from `aem-component-names.json`.
+  // Names are re-keyed from resource type to component path for the resolver;
+  // titles are consumed per-component in processOne; folders feed the path
+  // planner once names are resolved. Config entries that match no listed path
+  // are logged and dropped (operator typo, or a component removed from
+  // `aem-component-paths`).
   const componentNames = opts.componentNames ?? new Map();
   const nameOverrideByPath = new Map<string, string>();
   const titleOverrideByPath = new Map<string, string>();
+  const folderOverrideByPath = new Map<string, string>();
   if (componentNames.size > 0) {
     const pathByResourceType = new Map<string, string>();
     for (const p of componentPaths) {
@@ -347,6 +367,7 @@ export async function migrateSchemas(
       }
       if (override.name) nameOverrideByPath.set(p, override.name);
       if (override.title) titleOverrideByPath.set(p, override.title);
+      if (override.folder) folderOverrideByPath.set(p, override.folder);
     }
   }
 
@@ -364,6 +385,29 @@ export async function migrateSchemas(
     onFallback: (path, reason, finalName) =>
       logger?.info(`type-naming: ${path} → "${finalName}" (${reason})`),
   });
+
+  // Layout planner: single source of truth for where each generated file
+  // lands inside schemasDir. Folder overrides are keyed by resolved type
+  // name, so this must come after resolveSanityTypeNames.
+  const schemaLayout = opts.schemaLayout ?? "flat";
+  const folderByTypeName = new Map<string, string>();
+  for (const [p, folder] of folderOverrideByPath) {
+    const typeName = typeNameByPath.get(p);
+    if (typeName) folderByTypeName.set(typeName, folder);
+  }
+  const planner = createSchemaPathPlanner({
+    layout: schemaLayout,
+    folderByTypeName,
+  });
+  if (schemaLayout !== "flat") {
+    logger?.info(
+      `schema-layout: "${schemaLayout}" — grouping generated files under documents/ and objects/ (folder overrides win).`,
+    );
+  } else if (folderByTypeName.size > 0) {
+    logger?.info(
+      `schema-layout: flat, with ${folderByTypeName.size} folder override(s) from aem-component-names.json still applied.`,
+    );
+  }
 
   // The page-builder name doubles as a Sanity type name and a schema file
   // name, so it must not shadow a built-in type or a resolved component —
@@ -423,6 +467,7 @@ export async function migrateSchemas(
         fetcher,
         outputDir,
         schemasDir,
+        planner,
         report,
         logger,
         writeAemSnapshot,
@@ -519,7 +564,7 @@ export async function migrateSchemas(
   // Canonical Portable Text table types (table/row/cell) — always emitted so
   // the `{ type: "table" }` member every richtext field now declares resolves
   // in any Studio consuming the generated barrel.
-  await writePortableTextTableArtifacts({ schemasDir });
+  await writePortableTextTableArtifacts({ schemasDir, planner });
 
   let pageBuilderFile: string | undefined;
   let pageFile: string | undefined;
@@ -531,9 +576,11 @@ export async function migrateSchemas(
     await writeContentFragmentArtifacts({
       schemasDir,
       pageBuilderTypeName: pageBuilderName,
+      planner,
     });
     const pb = await writePageBuilderArtifacts({
       schemasDir,
+      planner,
       componentMembers: [
         ...successMembers,
         { name: "contentFragmentRef", title: "Content Fragment" },
@@ -548,10 +595,12 @@ export async function migrateSchemas(
 
   let pageTemplatesFile: string | undefined;
   let templatePageFiles: string[] | undefined;
+  let templatePageTypeNames: string[] = [];
   let missingPageComponentPaths: string[] | undefined;
   if (emitPageBuilder && pageComponents && pageComponents.size > 0) {
     const tp = await writeTemplatePageArtifacts({
       schemasDir,
+      planner,
       manifestOutputDir: outputDir,
       pageComponentsConfig: pageComponents,
       typeNameByResourceType,
@@ -560,6 +609,10 @@ export async function migrateSchemas(
     });
     pageTemplatesFile = tp.manifestFile;
     templatePageFiles = tp.documentFiles;
+    // From the manifest (not documentFiles): hand-authored template pages
+    // are preserved rather than rewritten, but they're still document types
+    // for layout purposes.
+    templatePageTypeNames = tp.manifest.entries.map((e) => e.sanityType);
     missingPageComponentPaths = tp.missingComponentPaths.length > 0
       ? tp.missingComponentPaths
       : undefined;
@@ -579,9 +632,19 @@ export async function migrateSchemas(
         ]
       : successTypeNames;
 
+  // Document-kind names for the pruner's expected-path check: everything
+  // else generated is an object (components, pt-table, pageBuilder, refs).
+  const documentTypeNames = new Set<string>(templatePageTypeNames);
+  if (emitPageBuilder) {
+    documentTypeNames.add("page");
+    documentTypeNames.add("contentFragment");
+  }
+
   await pruneGeneratedSchemaFiles(schemasDir, protectedTypeNames, {
     emitPageBuilder,
     pageBuilderName,
+    planner,
+    documentTypeNames,
     logger,
   });
 
@@ -593,6 +656,7 @@ export async function migrateSchemas(
     await writeSchemasBarrel(schemasDir, report, {
       emitPageBuilder: false,
       pageBuilderName,
+      planner,
     });
   }
 
@@ -641,6 +705,8 @@ interface ProcessOneDeps {
   fetcher: NodeFetcher;
   outputDir: string;
   schemasDir: string;
+  /** Layout planner deciding subfolder placement inside `schemasDir`. */
+  planner: SchemaPathPlanner;
   report: Report;
   logger?: Logger;
   writeAemSnapshot: boolean;
@@ -1004,7 +1070,7 @@ async function processOne(
     return { authFailure: false, success: false };
   }
 
-  const outputFile = join(schemasDir, `${typeName}.ts`);
+  const outputFile = join(schemasDir, deps.planner.relPath(typeName, "object"));
   try {
     await writeTextFile(outputFile, contents);
   } catch (err) {
@@ -1035,18 +1101,42 @@ async function processOne(
 async function pruneGeneratedSchemaFiles(
   schemasDir: string,
   componentTypeNames: string[],
-  opts: { emitPageBuilder: boolean; pageBuilderName: string; logger?: Logger },
+  opts: {
+    emitPageBuilder: boolean;
+    pageBuilderName: string;
+    /** Where each kept type is EXPECTED to live this run. */
+    planner: SchemaPathPlanner;
+    /** Type names emitted as Sanity documents (everything else is an object). */
+    documentTypeNames: ReadonlySet<string>;
+    logger?: Logger;
+  },
 ): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await readdir(schemasDir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw err;
+  // Recursive walk — subfolder layouts put generated files below the root,
+  // and a layout/folder-override switch leaves same-named copies at the old
+  // location that only a full-tree pass can find.
+  const files: string[] = []; // POSIX rel paths
+  const subdirs: string[] = []; // rel paths, parents before children
+  async function walk(dir: string, relPrefix: string): Promise<void> {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
+    for (const entry of entries) {
+      const rel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        subdirs.push(rel);
+        await walk(join(dir, entry.name), rel);
+      } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+        files.push(rel);
+      }
+    }
   }
+  await walk(schemasDir, "");
 
   const keep = new Set(componentTypeNames);
-  keep.add("index");
   for (const name of PT_TABLE_TYPE_NAMES) keep.add(name);
   if (opts.emitPageBuilder) {
     keep.add("page");
@@ -1054,11 +1144,18 @@ async function pruneGeneratedSchemaFiles(
     for (const name of CONTENT_FRAGMENT_TYPE_NAMES) keep.add(name);
   }
 
-  for (const file of entries) {
-    if (!file.endsWith(".ts")) continue;
-    const name = file.slice(0, -3);
-    if (keep.has(name)) continue;
-    const full = join(schemasDir, file);
+  for (const rel of files) {
+    if (rel === "index.ts") continue; // the barrel, rewritten after pruning
+    const name = rel.split("/").pop()!.slice(0, -3);
+    if (keep.has(name)) {
+      // Kept type, but only at the path the current layout plans for it —
+      // a copy left behind by a previous layout / folder override is stale.
+      const kind: EmittedKind = opts.documentTypeNames.has(name)
+        ? "document"
+        : "object";
+      if (rel === opts.planner.relPath(name, kind)) continue;
+    }
+    const full = join(schemasDir, rel);
     let contents = "";
     try {
       contents = await readFile(full, "utf8");
@@ -1071,6 +1168,17 @@ async function pruneGeneratedSchemaFiles(
     if (!generated) continue;
     await unlink(full);
     opts.logger?.info(`prune: removed stale generated schema ${full}`);
+  }
+
+  // Children before parents so nested empties collapse in one pass. rmdir
+  // only removes empty dirs; anything still holding files (hand-authored
+  // schemas, non-.ts assets) survives.
+  for (const rel of subdirs.reverse()) {
+    try {
+      await rmdir(join(schemasDir, rel));
+    } catch {
+      // ENOTEMPTY / ENOENT — keep it.
+    }
   }
 }
 
@@ -1086,7 +1194,11 @@ async function pruneGeneratedSchemaFiles(
 async function writeSchemasBarrel(
   schemasDir: string,
   report: Report,
-  opts: { emitPageBuilder: boolean; pageBuilderName: string },
+  opts: {
+    emitPageBuilder: boolean;
+    pageBuilderName: string;
+    planner: SchemaPathPlanner;
+  },
 ): Promise<void> {
   const successNames = report.results
     .filter((r): r is Extract<typeof r, { status: "success" }> => r.status === "success")
@@ -1098,9 +1210,14 @@ async function writeSchemasBarrel(
     ? [opts.pageBuilderName, "page", ...CONTENT_FRAGMENT_TYPE_NAMES]
     : [];
   const allNames = [...PT_TABLE_TYPE_NAMES, ...successNames, ...pageExtras];
+  const relPathFor = (n: string): string => {
+    const kind: EmittedKind =
+      n === "page" || n === "contentFragment" ? "document" : "object";
+    return opts.planner.relPath(n, kind);
+  };
 
   const imports = allNames
-    .map((n) => `import { ${n} } from "./${n}.ts";`)
+    .map((n) => `import { ${n} } from "./${relPathFor(n)}";`)
     .join("\n");
   const list = allNames.join(", ");
 

@@ -30,6 +30,17 @@ export {
   toCamelCase,
   toTitleCase,
 } from "./naming.ts";
+export {
+  FLAT_PLANNER,
+  createSchemaPathPlanner,
+  scanGeneratedSchemaFiles,
+} from "./layout.ts";
+export type {
+  CreateSchemaPathPlannerOptions,
+  EmittedKind,
+  ScannedSchemaFile,
+  SchemaPathPlanner,
+} from "./layout.ts";
 export { MAPPING, lookup } from "./mapping-table.ts";
 export type { MappingEntry, SanityKind } from "./mapping-table.ts";
 export { Report } from "./report.ts";

@@ -7,6 +7,7 @@ import {
   PT_TABLE_TYPE_NAMES,
   writePortableTextTableArtifacts,
 } from "../src/pt-table.ts";
+import { createSchemaPathPlanner } from "../src/layout.ts";
 import { writePageBuilderArtifacts } from "../src/pagebuilder.ts";
 import { RESERVED_SANITY_TYPE_NAMES, resolveSanityTypeNames } from "../src/naming.ts";
 import { sanitizeSchemaTypes } from "../src/sanitize.ts";
@@ -42,6 +43,22 @@ describe("writePortableTextTableArtifacts", () => {
       );
       assert.match(src, new RegExp(`export const ${name} = defineType\\(`));
       assert.match(src, new RegExp(`name: "${name}"`));
+    }
+  });
+
+  it("kind layout places the table types under objects/", async () => {
+    const kindDir = mkdtempSync(join(tmpdir(), "pt-table-kind-"));
+    try {
+      const { files } = await writePortableTextTableArtifacts({
+        schemasDir: kindDir,
+        planner: createSchemaPathPlanner({ layout: "kind" }),
+      });
+      for (const name of PT_TABLE_TYPE_NAMES) {
+        assert.ok(files.includes(join(kindDir, "objects", `${name}.ts`)));
+        assert.ok(existsSync(join(kindDir, "objects", `${name}.ts`)));
+      }
+    } finally {
+      rmSync(kindDir, { recursive: true, force: true });
     }
   });
 

@@ -22,6 +22,11 @@ export {
   DEFAULT_PAGE_BUILDER_NAME,
   resolvePageBuilderName,
 } from "./page-builder-name.ts";
+export {
+  DEFAULT_SCHEMA_LAYOUT,
+  resolveSchemaLayout,
+} from "./schema-layout.ts";
+export type { SchemaLayout } from "./schema-layout.ts";
 export { loadSlotConfig } from "./slots.ts";
 export type {
   SlotConfig,

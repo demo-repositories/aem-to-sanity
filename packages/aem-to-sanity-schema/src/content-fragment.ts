@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { writeTextFile } from "aem-to-sanity-core";
 import { CONTENT_FRAGMENT_TYPE_NAMES } from "./naming.ts";
+import { FLAT_PLANNER, type SchemaPathPlanner } from "./layout.ts";
 
 /**
  * Toolkit-owned escape hatch for Sanity's hard 20-level attribute-depth
@@ -20,6 +21,8 @@ export interface WriteContentFragmentArtifactsOptions {
   schemasDir: string;
   /** Page-builder array type the fragment's `content` field reuses. */
   pageBuilderTypeName: string;
+  /** Layout planner deciding subfolder placement. Default: flat. */
+  planner?: SchemaPathPlanner;
 }
 
 export interface WriteContentFragmentArtifactsResult {
@@ -84,11 +87,18 @@ export const contentFragmentRef = defineType({
 export async function writeContentFragmentArtifacts(
   opts: WriteContentFragmentArtifactsOptions,
 ): Promise<WriteContentFragmentArtifactsResult> {
+  const planner = opts.planner ?? FLAT_PLANNER;
   const files: string[] = [];
-  const fragmentFile = join(opts.schemasDir, "contentFragment.ts");
+  const fragmentFile = join(
+    opts.schemasDir,
+    planner.relPath("contentFragment", "document"),
+  );
   await writeTextFile(fragmentFile, contentFragmentSource(opts.pageBuilderTypeName));
   files.push(fragmentFile);
-  const refFile = join(opts.schemasDir, "contentFragmentRef.ts");
+  const refFile = join(
+    opts.schemasDir,
+    planner.relPath("contentFragmentRef", "object"),
+  );
   await writeTextFile(refFile, CONTENT_FRAGMENT_REF_SOURCE);
   files.push(refFile);
   return { files };
