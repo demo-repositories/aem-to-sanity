@@ -53,10 +53,29 @@ describe("loadComponentNameConfig", () => {
     ).toThrow(/must be unique/);
   });
 
-  it("rejects entries with neither name nor title", () => {
+  it("rejects empty entries", () => {
     expect(() =>
       loadComponentNameConfig({ file: configFile({ "a/b/c": {} }) }),
-    ).toThrow(/needs "name" and\/or "title"/);
+    ).toThrow(/needs "name", "title", and\/or "folder"/);
+  });
+
+  it("accepts folder overrides, including folder-only entries", () => {
+    const config = loadComponentNameConfig({
+      file: configFile({
+        "a/b/nav": { folder: "navigationObjects" },
+        "a/b/hero": { name: "hero", folder: "blocks" },
+      }),
+    });
+    expect(config.get("a/b/nav")).toEqual({ folder: "navigationObjects" });
+    expect(config.get("a/b/hero")).toEqual({ name: "hero", folder: "blocks" });
+  });
+
+  it("rejects folders with path separators, dots, or bad leading chars", () => {
+    for (const bad of ["a/b", "../x", "objects.ts", "1x", "-nav", ".hidden"]) {
+      expect(() =>
+        loadComponentNameConfig({ file: configFile({ "a/b/c": { folder: bad } }) }),
+      ).toThrow(/not a valid folder name/);
+    }
   });
 
   it("rejects /apps/-vs-bare duplicate keys", () => {

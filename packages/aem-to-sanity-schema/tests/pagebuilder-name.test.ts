@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emitSchemaFile } from "../src/emitter.ts";
 import { writePageBuilderArtifacts } from "../src/pagebuilder.ts";
+import { createSchemaPathPlanner } from "../src/layout.ts";
 
 /**
  * The page-builder name is operator-configurable (MIGRATION_PAGE_BUILDER_NAME).
@@ -65,5 +66,23 @@ describe("configurable page-builder name", () => {
     const pageSrc = await readFile(result.pageFile, "utf8");
     assert.match(pageSrc, /name: "sections", type: "sections"/);
     assert.doesNotMatch(pageSrc, /pageBuilder/);
+  });
+
+  it("kind layout: pageBuilder folders with objects, page with documents", async () => {
+    const schemasDir = await mkdtemp(join(tmpdir(), "pb-layout-"));
+    dirs.push(schemasDir);
+
+    const result = await writePageBuilderArtifacts({
+      schemasDir,
+      componentMembers: [{ name: "promo", title: "Promo" }],
+      planner: createSchemaPathPlanner({ layout: "kind" }),
+    });
+
+    assert.equal(
+      result.pageBuilderFile,
+      join(schemasDir, "objects", "pageBuilder.ts"),
+    );
+    assert.equal(result.pageFile, join(schemasDir, "documents", "page.ts"));
+    assert.ok(result.pageWritten);
   });
 });

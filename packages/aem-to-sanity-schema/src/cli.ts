@@ -16,6 +16,7 @@ import {
   logStartupBanner,
   resolveConfig,
   resolvePageBuilderName,
+  resolveSchemaLayout,
   startTimer,
   type DialogNode,
   type SanityRuntimeSummary,
@@ -89,6 +90,16 @@ async function main(): Promise<void> {
   if (pageBuilderName !== "pageBuilder") {
     logger.info(
       `Page-builder name: ${pageBuilderName} (MIGRATION_PAGE_BUILDER_NAME)`,
+    );
+  }
+
+  // Layout of the generated schemas dir: flat (default) or kind (documents/
+  // + objects/ subfolders). Safe to switch between runs — only file
+  // locations move; type names and ingested `_type`s are untouched.
+  const schemaLayout = resolveSchemaLayout(process.env);
+  if (schemaLayout !== "flat") {
+    logger.info(
+      `Schema layout: ${schemaLayout} (MIGRATION_SCHEMA_LAYOUT) — generated files grouped under documents/ and objects/.`,
     );
   }
 
@@ -252,6 +263,7 @@ async function main(): Promise<void> {
     docsOutputFile: "./docs/aem-to-sanity-mapping.md",
     continueOnAuth,
     pageBuilderName,
+    schemaLayout,
     typeNaming,
     containers,
     discoveredSlots,

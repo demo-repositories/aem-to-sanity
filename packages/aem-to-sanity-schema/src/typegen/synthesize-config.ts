@@ -1,6 +1,7 @@
-import { readdir, symlink, lstat, unlink, stat } from "node:fs/promises";
+import { symlink, lstat, unlink, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { ensureDir, writeTextFile } from "aem-to-sanity-core";
+import { scanGeneratedSchemaFiles } from "../layout.ts";
 
 export interface SynthesizeConfigOptions {
   /** Root output directory (hosts the `.typegen/` scratch workspace). */
@@ -52,10 +53,12 @@ export async function synthesizeSanityConfig(
     workspaceName = "default",
   } = opts;
   const schemasDir = opts.schemasDir ?? join(outputDir, "schemas");
-  const schemaFiles = (await readdir(schemasDir))
-    .filter((f) => f.endsWith(".ts"))
-    .map((f) => join(schemasDir, f))
-    .sort();
+  // Recursive: subfolder layouts (documents/, objects/, folder overrides)
+  // are supported. The root barrel index.ts is excluded — every type it
+  // re-exports is imported from its own file anyway.
+  const schemaFiles = (await scanGeneratedSchemaFiles(schemasDir)).map((f) =>
+    join(schemasDir, f.relPath),
+  );
 
   const typegenDir = join(outputDir, ".typegen");
   const configFile = join(typegenDir, "sanity.config.ts");
