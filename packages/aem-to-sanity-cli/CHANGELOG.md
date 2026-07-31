@@ -1,5 +1,13 @@
 # aem-to-sanity-cli
 
+## 2.6.0
+
+### Minor Changes
+
+- [#97](https://github.com/demo-repositories/aem-to-sanity/pull/97) [`5fec675`](https://github.com/demo-repositories/aem-to-sanity/commit/5fec675ddf8bd34145b4cf28bfa1cb0f198d03f1) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Per-component Studio icons via `aem-component-names.json`. Entries can now carry an `icon` — a `@sanity/icons` icon component name (e.g. `"icon": "ControlsIcon"`). The generated schema imports it from the icon's subpath module (`import { ControlsIcon } from "@sanity/icons/Controls"` — the v5 layout; the root module no longer has per-icon exports) and declares `defineType({ icon })`, so the component shows that icon in the page-builder insert menu, array item previews, and structure lists. Icons are safe to add, change, or drop between runs — they never touch type names or ingested content. Malformed values (anything that isn't a PascalCase identifier ending in `Icon`) fail at config load.
+
+  Operators: the consuming Studio needs `@sanity/icons` in its dependencies. Newly scaffolded studios include it; existing tenant studios pick it up with `pnpm -w studio:sync <slug> --fix` (or add `"@sanity/icons": "^5.2.1"` by hand).
+
 ## 2.5.0
 
 ## 2.4.0
