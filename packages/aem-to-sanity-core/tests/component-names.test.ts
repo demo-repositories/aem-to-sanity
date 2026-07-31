@@ -56,7 +56,31 @@ describe("loadComponentNameConfig", () => {
   it("rejects empty entries", () => {
     expect(() =>
       loadComponentNameConfig({ file: configFile({ "a/b/c": {} }) }),
-    ).toThrow(/needs "name", "title", "folder", and\/or "file"/);
+    ).toThrow(/needs "name", "title", "folder", "file", and\/or "icon"/);
+  });
+
+  it("accepts icon overrides, including icon-only entries", () => {
+    const config = loadComponentNameConfig({
+      file: configFile({
+        "a/b/tabs": { icon: "ControlsIcon" },
+        "a/b/hero": { name: "hero", icon: "BlockElementIcon" },
+      }),
+    });
+    expect(config.get("a/b/tabs")).toEqual({ icon: "ControlsIcon" });
+    expect(config.get("a/b/hero")).toEqual({
+      name: "hero",
+      icon: "BlockElementIcon",
+    });
+  });
+
+  it("rejects icons that are not PascalCase *Icon component names", () => {
+    // "Controls" (missing suffix) is rejected too — the emitter derives the
+    // v5 subpath module from the suffix, so it must be present.
+    for (const bad of ["controls-icon", "controlsIcon", "1Icon", "Controls Icon", "Controls.Icon", "Controls"]) {
+      expect(() =>
+        loadComponentNameConfig({ file: configFile({ "a/b/c": { icon: bad } }) }),
+      ).toThrow(/not a valid @sanity\/icons icon name/);
+    }
   });
 
   it("accepts file overrides, including file-only entries", () => {
