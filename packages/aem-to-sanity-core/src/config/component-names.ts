@@ -35,11 +35,12 @@ import { readFileSync } from "node:fs";
  * name, title, folder, AND file independently. Like `folder`, safe to
  * change between runs — a file rename never touches the type name.
  *
- * Entries may also carry an `icon` — the name of a `@sanity/icons` export
- * (e.g. `"icon": "ControlsIcon"`). The generated schema imports it and sets
- * `defineType({ icon })`, so the component shows that icon in the Studio's
- * insert menus, array item previews, and structure lists. Safe to change
- * between runs — icons never touch type names or ingested content.
+ * Entries may also carry an `icon` — a `@sanity/icons` icon component name
+ * (e.g. `"icon": "ControlsIcon"`). The generated schema imports it from the
+ * icon's subpath module and sets `defineType({ icon })`, so the component
+ * shows that icon in the Studio's insert menus, array item previews, and
+ * structure lists. Safe to change between runs — icons never touch type
+ * names or ingested content.
  *
  * Override the file path via the `AEM_COMPONENT_NAMES_FILE` env var
  * (default `./aem-component-names.json`).
@@ -57,8 +58,10 @@ export interface ComponentNameOverride {
    */
   file?: string;
   /**
-   * `@sanity/icons` export name (e.g. `ControlsIcon`) set as the emitted
-   * type's `defineType({ icon })`. Must be a PascalCase identifier.
+   * `@sanity/icons` icon component name (e.g. `ControlsIcon`) set as the
+   * emitted type's `defineType({ icon })`. Must be PascalCase ending in
+   * `Icon` — the emitter imports it from the icon's subpath module
+   * (`@sanity/icons/Controls`).
    */
   icon?: string;
 }
@@ -75,13 +78,16 @@ const VALID_TYPE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 const VALID_FOLDER = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 /**
- * `@sanity/icons` exports are PascalCase identifiers (`ControlsIcon`,
- * `BlockElementIcon`, …). The value lands verbatim in a generated `import`
- * statement, so a kebab-case or dotted value must fail at config load —
- * a nonexistent-but-valid identifier is caught later by the Studio's
- * typecheck ("has no exported member").
+ * `@sanity/icons` icon components are PascalCase identifiers ending in
+ * `Icon` (`ControlsIcon`, `BlockElementIcon`, …). Since v5 each icon lives
+ * in its own subpath module named after the icon minus the suffix
+ * (`@sanity/icons/Controls` exports `ControlsIcon`), so the suffix is
+ * required — the emitter derives the subpath from it. The value lands
+ * verbatim in a generated `import` statement, so a kebab-case or dotted
+ * value must fail at config load — a nonexistent-but-well-formed name is
+ * caught later by the Studio's typecheck (unresolvable module).
  */
-const VALID_ICON_NAME = /^[A-Z][A-Za-z0-9]*$/;
+const VALID_ICON_NAME = /^[A-Z][A-Za-z0-9]*Icon$/;
 
 export interface LoadComponentNameConfigOptions {
   /** Absolute or relative path. Missing file → empty config. */
@@ -235,7 +241,7 @@ export function loadComponentNameConfig(
     }
     if (override.icon !== undefined && !VALID_ICON_NAME.test(override.icon)) {
       throw new Error(
-        `component-name config: "${override.icon}" (icon for "${rawKey}") is not a valid @sanity/icons export name — use the PascalCase named export, e.g. "ControlsIcon" (see https://icons.sanity.io)`,
+        `component-name config: "${override.icon}" (icon for "${rawKey}") is not a valid @sanity/icons icon name — use the PascalCase component name ending in "Icon", e.g. "ControlsIcon" (see https://icons.sanity.io)`,
       );
     }
 

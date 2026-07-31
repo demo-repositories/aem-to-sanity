@@ -28,9 +28,10 @@ export interface EmitInput {
    */
   schemaTitle?: string;
   /**
-   * `@sanity/icons` export name (e.g. `ControlsIcon`) from
-   * `aem-component-names.json`. Emitted as an import plus
-   * `defineType({ icon })`; omitted → no icon property.
+   * `@sanity/icons` icon component name (e.g. `ControlsIcon`) from
+   * `aem-component-names.json`. Emitted as a subpath import
+   * (`@sanity/icons/Controls`) plus `defineType({ icon })`; omitted → no
+   * icon property.
    */
   icon?: string;
   /** Command the header comment tells readers to run to regenerate. */
@@ -72,10 +73,14 @@ export async function emitSchemaFile(input: EmitInput): Promise<string> {
       ? `  fieldsets: ${stringifyFieldsets(fieldsets)},\n`
       : "";
   const previewBlock = renderPreviewBlock(fields, title);
-  // Config-validated PascalCase identifier (`VALID_ICON_NAME` in
-  // component-names.ts), so it lands verbatim in the import specifier.
+  // Config-validated PascalCase `*Icon` identifier (`VALID_ICON_NAME` in
+  // component-names.ts), so it lands verbatim in the import. Since
+  // @sanity/icons v5, per-icon components live only in subpath modules
+  // named after the icon minus the `Icon` suffix — the root module exports
+  // just `Icon`/`icons` — so `ControlsIcon` imports from
+  // `@sanity/icons/Controls`.
   const iconImport = input.icon
-    ? `import { ${input.icon} } from "@sanity/icons";\n`
+    ? `import { ${input.icon} } from "@sanity/icons/${input.icon.slice(0, -"Icon".length)}";\n`
     : "";
   const iconLiteral = input.icon ? `  icon: ${input.icon},\n` : "";
 

@@ -16,7 +16,9 @@ describe("emitSchemaFile: icon override", () => {
       groups: [],
       icon: "ControlsIcon",
     });
-    assert.match(out, /import \{ ControlsIcon \} from "@sanity\/icons";/);
+    // v5 subpath import — the root "@sanity/icons" module no longer
+    // provides per-icon named exports.
+    assert.match(out, /import \{ ControlsIcon \} from "@sanity\/icons\/Controls";/);
     assert.match(out, /icon: ControlsIcon,/);
     // The icon identifier must appear as a bare reference, never quoted —
     // defineType expects the component, not a string.
@@ -43,7 +45,7 @@ describe("emitSchemaFile: icon override", () => {
       groups: [{ name: "content", title: "Content" }],
       icon: "BlockElementIcon",
     });
-    assert.match(out, /import \{ BlockElementIcon \} from "@sanity\/icons";/);
+    assert.match(out, /import \{ BlockElementIcon \} from "@sanity\/icons\/BlockElement";/);
     assert.match(out, /export const tabsType = defineType\(/);
     assert.match(out, /icon: BlockElementIcon,/);
     assert.match(out, /groups: \[/);

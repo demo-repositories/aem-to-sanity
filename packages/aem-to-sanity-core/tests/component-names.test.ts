@@ -73,11 +73,13 @@ describe("loadComponentNameConfig", () => {
     });
   });
 
-  it("rejects icons that are not PascalCase export names", () => {
-    for (const bad of ["controls-icon", "controlsIcon", "1Icon", "Controls Icon", "Controls.Icon"]) {
+  it("rejects icons that are not PascalCase *Icon component names", () => {
+    // "Controls" (missing suffix) is rejected too — the emitter derives the
+    // v5 subpath module from the suffix, so it must be present.
+    for (const bad of ["controls-icon", "controlsIcon", "1Icon", "Controls Icon", "Controls.Icon", "Controls"]) {
       expect(() =>
         loadComponentNameConfig({ file: configFile({ "a/b/c": { icon: bad } }) }),
-      ).toThrow(/not a valid @sanity\/icons export name/);
+      ).toThrow(/not a valid @sanity\/icons icon name/);
     }
   });
 
