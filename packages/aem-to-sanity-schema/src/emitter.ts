@@ -11,6 +11,12 @@ import {
 
 export interface EmitInput {
   typeName: string;
+  /**
+   * Identifier for the module's `export const`. Defaults to `typeName`.
+   * The `file` suffix mode passes `{typeName}{suffix}` here (matching the
+   * file basename) while `defineType({ name })` keeps the bare `typeName`.
+   */
+  exportName?: string;
   sourcePath: string;
   fields: SanityField[];
   groups: Array<{ name: string; title: string }>;
@@ -32,6 +38,7 @@ export interface EmitInput {
  */
 export async function emitSchemaFile(input: EmitInput): Promise<string> {
   const { typeName, sourcePath, groups } = input;
+  const exportName = input.exportName ?? typeName;
   const fieldsets = input.fieldsets ?? [];
   // AEM authors sometimes give multiple dialog widgets the same `fieldLabel`
   // (e.g. a page-shell that declares both `./cq:tags` and `./tags` with
@@ -66,7 +73,7 @@ export async function emitSchemaFile(input: EmitInput): Promise<string> {
  * Generated from AEM component: ${sourcePath}
  * DO NOT EDIT BY HAND — regenerate via \`${regenerateCommand}\`.
  */
-export const ${typeName} = defineType({
+export const ${exportName} = defineType({
   name: "${typeName}",
   title: ${titleLiteral},
   type: "object",

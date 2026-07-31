@@ -214,10 +214,12 @@ async function maybeWritePage(
 
 /**
  * Scan a schemas directory (recursively — subfolder layouts included) for
- * emitted type files. Returns the list of exported type names, inferred from
- * filenames (one type per file, matching the emitter convention). The root
- * `index.ts`, the page type, and the page-builder type are excluded from the
- * result.
+ * emitted type files. Returns the list of Sanity type names: the
+ * `defineType({ name })` declared inside each file when readable, falling
+ * back to the file basename (the emitter convention — basename == type name
+ * except in the `file` suffix mode, where `accordionType.ts` declares
+ * `name: "accordion"`). The root `index.ts`, the page type, and the
+ * page-builder type are excluded from the result.
  */
 export async function scanSchemaTypeNames(
   schemasDir: string,
@@ -225,9 +227,21 @@ export async function scanSchemaTypeNames(
 ): Promise<string[]> {
   const files = await scanGeneratedSchemaFiles(schemasDir);
   const excludeSet = new Set(exclude);
-  return files
-    .map((f) => f.typeName)
-    .filter((n) => !excludeSet.has(n));
+  const names = await Promise.all(
+    files.map(async (f) => {
+      try {
+        const contents = await readFile(join(schemasDir, f.relPath), "utf8");
+        const m = contents.match(
+          /defineType\(\{\s*name:\s*"([A-Za-z][A-Za-z0-9_]*)"/,
+        );
+        if (m) return m[1]!;
+      } catch {
+        // unreadable file — the basename is the best remaining guess
+      }
+      return f.typeName;
+    }),
+  );
+  return names.filter((n) => !excludeSet.has(n));
 }
 
 /**

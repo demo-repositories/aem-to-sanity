@@ -28,6 +28,13 @@ import { readFileSync } from "node:fs";
  * `name`, are safe to change between runs: moving a file never renames the
  * type, and the pruner cleans up the old location.
  *
+ * Entries may also carry a `file` — the exact basename (no `.ts`, no path)
+ * for the component's generated schema file, which doubles as the module's
+ * `export const` identifier. Wins over the global
+ * `MIGRATION_TYPE_SUFFIX_MODE=file` decoration, so an entry can pin type
+ * name, title, folder, AND file independently. Like `folder`, safe to
+ * change between runs — a file rename never touches the type name.
+ *
  * Override the file path via the `AEM_COMPONENT_NAMES_FILE` env var
  * (default `./aem-component-names.json`).
  */
@@ -38,6 +45,11 @@ export interface ComponentNameOverride {
   title?: string;
   /** Subfolder of the schemas dir to emit into (single segment, no `/` or `.`). */
   folder?: string;
+  /**
+   * Basename for the generated file (no `.ts`) and its `export const`
+   * identifier. Must be identifier-like and unique across components.
+   */
+  file?: string;
 }
 
 export type ComponentNameConfig = Map<string, ComponentNameOverride>;
@@ -95,6 +107,7 @@ export function loadComponentNameConfig(
 
   const out: ComponentNameConfig = new Map();
   const nameOwners = new Map<string, string>();
+  const fileOwners = new Map<string, string>();
   for (const [rawKey, value] of Object.entries(parsed)) {
     const resourceType = normalizeKey(rawKey);
     if (!resourceType) {
@@ -110,7 +123,7 @@ export function loadComponentNameConfig(
     if (typeof value === "string") {
       override = { name: value };
     } else if (value && typeof value === "object" && !Array.isArray(value)) {
-      const { name, title, folder } = value as Record<string, unknown>;
+      const { name, title, folder, file } = value as Record<string, unknown>;
       if (name !== undefined && typeof name !== "string") {
         throw new Error(
           `component-name config: "name" for "${rawKey}" must be a string`,
@@ -126,19 +139,30 @@ export function loadComponentNameConfig(
           `component-name config: "folder" for "${rawKey}" must be a string`,
         );
       }
-      if (name === undefined && title === undefined && folder === undefined) {
+      if (file !== undefined && typeof file !== "string") {
         throw new Error(
-          `component-name config: entry for "${rawKey}" needs "name", "title", and/or "folder"`,
+          `component-name config: "file" for "${rawKey}" must be a string`,
+        );
+      }
+      if (
+        name === undefined &&
+        title === undefined &&
+        folder === undefined &&
+        file === undefined
+      ) {
+        throw new Error(
+          `component-name config: entry for "${rawKey}" needs "name", "title", "folder", and/or "file"`,
         );
       }
       override = {
         ...(name !== undefined ? { name } : {}),
         ...(title !== undefined ? { title } : {}),
         ...(folder !== undefined ? { folder } : {}),
+        ...(file !== undefined ? { file } : {}),
       };
     } else {
       throw new Error(
-        `component-name config: entry for "${rawKey}" must be a string type name or an object with "name" / "title" / "folder"`,
+        `component-name config: entry for "${rawKey}" must be a string type name or an object with "name" / "title" / "folder" / "file"`,
       );
     }
 
@@ -165,6 +189,22 @@ export function loadComponentNameConfig(
       throw new Error(
         `component-name config: "${override.folder}" (folder for "${rawKey}") is not a valid folder name — use a single segment of letters/digits/underscore/hyphen, starting with a letter`,
       );
+    }
+    if (override.file !== undefined) {
+      // The basename doubles as the module's `export const` identifier, so
+      // it needs the same identifier shape as a type name.
+      if (!VALID_TYPE_NAME.test(override.file)) {
+        throw new Error(
+          `component-name config: "${override.file}" (file for "${rawKey}") is not a valid file basename — use letters/digits/underscore, starting with a letter, no ".ts" extension or path separators`,
+        );
+      }
+      const owner = fileOwners.get(override.file);
+      if (owner) {
+        throw new Error(
+          `component-name config: file "${override.file}" is assigned to both "${owner}" and "${rawKey}" — file basenames must be unique`,
+        );
+      }
+      fileOwners.set(override.file, rawKey);
     }
 
     out.set(resourceType, override);

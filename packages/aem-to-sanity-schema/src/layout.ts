@@ -24,6 +24,15 @@ export interface CreateSchemaPathPlannerOptions {
    * layouts.
    */
   folderByTypeName?: ReadonlyMap<string, string>;
+  /**
+   * Per-type file basename overrides (without `.ts`), keyed by Sanity type
+   * name. Used by the `file` suffix mode (`MIGRATION_TYPE_SUFFIX_MODE`),
+   * where `accordion` emits as `accordionType.ts`. The basename doubles as
+   * the file's `export const` identifier — the barrel, typegen, and the
+   * pruner all rely on that invariant — so entries must be identifier-like
+   * and unique. Types absent from the map keep `{typeName}.ts`.
+   */
+  fileBaseNameByTypeName?: ReadonlyMap<string, string>;
 }
 
 const KIND_FOLDERS: Record<EmittedKind, string> = {
@@ -41,13 +50,14 @@ const KIND_FOLDERS: Record<EmittedKind, string> = {
 export function createSchemaPathPlanner(
   opts: CreateSchemaPathPlannerOptions,
 ): SchemaPathPlanner {
-  const { layout, folderByTypeName } = opts;
+  const { layout, folderByTypeName, fileBaseNameByTypeName } = opts;
   return {
     relPath(typeName, kind) {
+      const base = fileBaseNameByTypeName?.get(typeName) ?? typeName;
       const override = folderByTypeName?.get(typeName);
-      if (override) return `${override}/${typeName}.ts`;
-      if (layout === "kind") return `${KIND_FOLDERS[kind]}/${typeName}.ts`;
-      return `${typeName}.ts`;
+      if (override) return `${override}/${base}.ts`;
+      if (layout === "kind") return `${KIND_FOLDERS[kind]}/${base}.ts`;
+      return `${base}.ts`;
     },
   };
 }

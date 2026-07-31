@@ -32,10 +32,12 @@ import {
 import { emitSchemaFile, resolveSchemaTitle } from "./emitter.ts";
 import {
   RESERVED_SANITY_TYPE_NAMES,
+  VALID_TYPE_SUFFIX,
   resolveSanityTypeNames,
   toCamelCase,
   toTitleCase,
   type TypeNamingStrategy,
+  type TypeSuffixMode,
 } from "./naming.ts";
 import { Report } from "./report.ts";
 import { auditUnmappedTypes } from "./audit.ts";
@@ -109,6 +111,28 @@ export interface MigrateSchemasOptions {
    * has been imported orphans previously ingested `_type` values.
    */
   typeNaming?: TypeNamingStrategy;
+  /**
+   * Global suffix appended verbatim to every strategy-derived type name
+   * (`hero` → `heroBlock` with suffix `Block`) so generated types can match
+   * an existing customer schema's naming vocabulary. Explicit names from
+   * `aem-component-names.json` are exempt — they emit exactly as written.
+   * Letters/digits/underscore only. Same set-once-before-first-import
+   * hazard as {@link typeNaming}: changing the suffix after content has
+   * been imported renames every emitted type and orphans previously
+   * ingested `_type` values — unless {@link typeSuffixMode} is `"file"`.
+   */
+  typeSuffix?: string;
+  /**
+   * What {@link typeSuffix} decorates. `"type"` (default) bakes the suffix
+   * into the Sanity type name itself. `"file"` applies it only to the
+   * generated file basename and its `export const` identifier
+   * (`accordionType.ts` exporting `accordionType`) while
+   * `defineType({ name: "accordion" })`, the registry, `pageBuilder.of[]`,
+   * and ingested `_type` values keep the bare name — the common Studio
+   * convention, and safe to change between runs since it never renames a
+   * type. Ignored when {@link typeSuffix} is unset.
+   */
+  typeSuffixMode?: TypeSuffixMode;
   /**
    * Emit a `content-type-registry.json` alongside the schemas, mapping AEM
    * `sling:resourceType` → Sanity type + field names. Consumed by the content
@@ -220,12 +244,14 @@ export interface MigrateSchemasOptions {
    */
   authoringHints?: AuthoringHintConfig;
   /**
-   * Explicit type-name / Studio-title / folder overrides keyed by
+   * Explicit type-name / Studio-title / folder / file overrides keyed by
    * `sling:resourceType` (from `aem-component-names.json`). Names win over
    * the `typeNaming` strategy; titles replace the component's `jcr:title`;
    * folders place the emitted file in a subfolder of `schemasDir` (in any
-   * `schemaLayout`). Entries matching no listed component path are logged
-   * and ignored.
+   * `schemaLayout`); `file` pins the generated file's basename and export
+   * identifier exactly, winning over the {@link typeSuffixMode} `"file"`
+   * decoration. Entries matching no listed component path are logged and
+   * ignored.
    */
   componentNames?: ComponentNameConfig;
   /**
@@ -352,6 +378,7 @@ export async function migrateSchemas(
   const nameOverrideByPath = new Map<string, string>();
   const titleOverrideByPath = new Map<string, string>();
   const folderOverrideByPath = new Map<string, string>();
+  const fileOverrideByPath = new Map<string, string>();
   if (componentNames.size > 0) {
     const pathByResourceType = new Map<string, string>();
     for (const p of componentPaths) {
@@ -368,6 +395,7 @@ export async function migrateSchemas(
       if (override.name) nameOverrideByPath.set(p, override.name);
       if (override.title) titleOverrideByPath.set(p, override.title);
       if (override.folder) folderOverrideByPath.set(p, override.folder);
+      if (override.file) fileOverrideByPath.set(p, override.file);
     }
   }
 
@@ -378,13 +406,52 @@ export async function migrateSchemas(
   // `sanitizeSchemaTypes` to rename reserved names at import time — is what
   // prevents ingested data from showing up as "Untitled" with an unknown-type
   // warning because its `_type` no longer matches the live schema.
+  // In "file" suffix mode the suffix never touches the type names — it
+  // decorates only the emitted file basenames and export identifiers, so
+  // the resolver runs suffix-free and the map below carries the decoration.
+  const typeSuffixMode: TypeSuffixMode = opts.typeSuffixMode ?? "type";
+  if (opts.typeSuffix && typeSuffixMode === "file" && !VALID_TYPE_SUFFIX.test(opts.typeSuffix)) {
+    throw new Error(
+      `type-name suffix "${opts.typeSuffix}" is invalid — use letters/digits/underscore only (it must keep export identifiers valid).`,
+    );
+  }
   const typeNameByPath = resolveSanityTypeNames(componentPaths, {
     strategy: typeNaming,
     titleByPath,
+    suffix: typeSuffixMode === "type" ? opts.typeSuffix : undefined,
     overrides: nameOverrideByPath,
     onFallback: (path, reason, finalName) =>
       logger?.info(`type-naming: ${path} → "${finalName}" (${reason})`),
   });
+
+  // Per-component file basename (which doubles as the module's `export
+  // const` — the barrel/typegen infer the identifier from the basename).
+  // Precedence: explicit `file` from aem-component-names.json > the global
+  // `file`-mode suffix (`{typeName}{suffix}`; explicit *name* overrides are
+  // decorated too — the name contract covers the type name, not the on-disk
+  // convention) > bare `{typeName}`. Toolkit-owned files (page, pageBuilder,
+  // table types, contentFragment) keep their bare names in every mode.
+  const fileBaseNameByTypeName = new Map<string, string>();
+  {
+    const suffixing = Boolean(opts.typeSuffix) && typeSuffixMode === "file";
+    const basenameOwners = new Map<string, string>();
+    for (const [p, name] of typeNameByPath) {
+      const base =
+        fileOverrideByPath.get(p) ??
+        (suffixing ? name + opts.typeSuffix : name);
+      if (base !== name) fileBaseNameByTypeName.set(name, base);
+      // Basenames must be globally unique — `scanGeneratedSchemaFiles`
+      // hard-errors on duplicates, and the barrel would import the same
+      // identifier twice. Fail here with the offending paths instead.
+      const owner = basenameOwners.get(base);
+      if (owner) {
+        throw new Error(
+          `generated file basename "${base}.ts" is claimed by both ${owner} and ${p} — pick a different "file" override in aem-component-names.json.`,
+        );
+      }
+      basenameOwners.set(base, p);
+    }
+  }
 
   // Layout planner: single source of truth for where each generated file
   // lands inside schemasDir. Folder overrides are keyed by resolved type
@@ -398,6 +465,7 @@ export async function migrateSchemas(
   const planner = createSchemaPathPlanner({
     layout: schemaLayout,
     folderByTypeName,
+    fileBaseNameByTypeName,
   });
   if (schemaLayout !== "flat") {
     logger?.info(
@@ -473,6 +541,7 @@ export async function migrateSchemas(
         writeAemSnapshot,
         regenerateCommand,
         typeName: typeNameByPath.get(p)!,
+        exportName: fileBaseNameByTypeName.get(typeNameByPath.get(p)!),
         titleOverride: titleOverrideByPath.get(p),
         pageBuilderName,
         prefetchedComponentNode: prefetchedNodes.get(p),
@@ -713,6 +782,11 @@ interface ProcessOneDeps {
   regenerateCommand?: string;
   /** Final Sanity type name resolved by `resolveSanityTypeNames` for this path. */
   typeName: string;
+  /**
+   * `export const` identifier for the emitted file when it differs from
+   * `typeName` (the `file` suffix mode). Matches the planner's file basename.
+   */
+  exportName?: string;
   /** Studio title override from `aem-component-names.json`; wins over `jcr:title`. */
   titleOverride?: string;
   /** Page-builder array type name container drop-zones reference. */
@@ -1053,6 +1127,7 @@ async function processOne(
   try {
     contents = await emitSchemaFile({
       typeName,
+      exportName: deps.exportName,
       sourcePath: componentPath,
       fields: mapped.fields,
       groups: mapped.groups,
@@ -1144,17 +1219,22 @@ async function pruneGeneratedSchemaFiles(
     for (const name of CONTENT_FRAGMENT_TYPE_NAMES) keep.add(name);
   }
 
+  // Kept types survive only at the exact path the current run plans for
+  // them — anything else generated is stale (previous layout, folder
+  // override, or file-suffix mode). The planner owns basename decoration
+  // (`accordion` may live at `accordionType.ts`), so match on planned rel
+  // paths rather than inferring type names from basenames.
+  const expectedRelPaths = new Set<string>();
+  for (const name of keep) {
+    const kind: EmittedKind = opts.documentTypeNames.has(name)
+      ? "document"
+      : "object";
+    expectedRelPaths.add(opts.planner.relPath(name, kind));
+  }
+
   for (const rel of files) {
     if (rel === "index.ts") continue; // the barrel, rewritten after pruning
-    const name = rel.split("/").pop()!.slice(0, -3);
-    if (keep.has(name)) {
-      // Kept type, but only at the path the current layout plans for it —
-      // a copy left behind by a previous layout / folder override is stale.
-      const kind: EmittedKind = opts.documentTypeNames.has(name)
-        ? "document"
-        : "object";
-      if (rel === opts.planner.relPath(name, kind)) continue;
-    }
+    if (expectedRelPaths.has(rel)) continue;
     const full = join(schemasDir, rel);
     let contents = "";
     try {
@@ -1215,17 +1295,23 @@ async function writeSchemasBarrel(
       n === "page" || n === "contentFragment" ? "document" : "object";
     return opts.planner.relPath(n, kind);
   };
+  // The export identifier is always the file basename (the `file` suffix
+  // mode decorates both together), so derive it from the planned path.
+  const entries = allNames.map((n) => {
+    const rel = relPathFor(n);
+    return { rel, exportName: rel.split("/").pop()!.slice(0, -3) };
+  });
 
-  const imports = allNames
-    .map((n) => `import { ${n} } from "./${relPathFor(n)}";`)
+  const imports = entries
+    .map((e) => `import { ${e.exportName} } from "./${e.rel}";`)
     .join("\n");
-  const list = allNames.join(", ");
+  const list = entries.map((e) => e.exportName).join(", ");
 
   const src = `// GENERATED by aem-to-sanity-schema. Do not edit by hand.
 ${imports}
 
 export const allSchemaTypes = [${list}];
-${allNames.map((n) => `export { ${n} };`).join("\n")}
+${entries.map((e) => `export { ${e.exportName} };`).join("\n")}
 `;
 
   const file = join(schemasDir, "index.ts");

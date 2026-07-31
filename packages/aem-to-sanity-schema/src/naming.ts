@@ -135,6 +135,20 @@ export function displayTitleFromAemComponentJcrTitle(raw: string): string {
  */
 export type TypeNamingStrategy = "path" | "title";
 
+/**
+ * What a global type-name suffix (`MIGRATION_TYPE_SUFFIX`) decorates.
+ *
+ * - `"type"` (default): the suffix is part of the Sanity type name itself —
+ *   file name, `export const`, `defineType({ name })`, registry
+ *   `sanityType`, and ingested `_type` all carry it. Set-once hazard.
+ * - `"file"`: the suffix decorates only the generated file basename and its
+ *   `export const` identifier (`accordionType.ts` exporting `accordionType`);
+ *   `defineType({ name: "accordion" })` and every downstream artifact keep
+ *   the bare type name. Purely cosmetic — safe to add, change, or drop
+ *   between runs, since ingested `_type` values never move.
+ */
+export type TypeSuffixMode = "type" | "file";
+
 export interface ResolveSanityTypeNamesOptions {
   strategy?: TypeNamingStrategy;
   /**
@@ -159,7 +173,27 @@ export interface ResolveSanityTypeNamesOptions {
    * choice that can't be honored must fail loudly, not silently rename.
    */
   overrides?: ReadonlyMap<string, string>;
+  /**
+   * Global suffix appended **verbatim** to every strategy-derived name
+   * (`hero` + `Block` → `heroBlock`) so generated types can match an
+   * existing customer schema's vocabulary. Casing is the caller's choice —
+   * `block` yields `heroblock`. Applied at the end of every derived
+   * candidate (base, `aem`-prefixed, collision-disambiguated), so the
+   * suffix always lands last; only a last-resort numeric tiebreaker can
+   * follow it. Explicit `overrides` names are used as-is — an explicit
+   * choice already IS the final name. Letters/digits/underscore only
+   * (throws otherwise). Same set-once-before-first-import hazard as the
+   * strategy itself: changing it renames every emitted type and orphans
+   * ingested `_type` values.
+   */
+  suffix?: string;
 }
+
+/**
+ * A suffix must keep the final name identifier-like (`VALID_TYPE_NAME` in
+ * core allows letters/digits/underscore after the leading letter).
+ */
+export const VALID_TYPE_SUFFIX = /^[A-Za-z0-9_]+$/;
 
 function aemPrefix(name: string): string {
   return "aem" + name.charAt(0).toUpperCase() + name.slice(1);
@@ -197,6 +231,12 @@ function aemPrefix(name: string): string {
  *   4. Still taken (identical title AND identical path tail) → numeric
  *      suffix, as a last resort.
  *
+ * With `opts.suffix`, every derived candidate above gets the suffix appended
+ * as its last segment (`hero` → `heroBlock`, `aemImage` → `aemImageBlock`,
+ * `imageProxyContentImage` → `imageProxyContentImageBlock`); reserved-name
+ * and collision checks run against the suffixed names. Explicit `overrides`
+ * are exempt — they emit exactly as written.
+ *
  * Iteration order is the input order — earlier paths win ties, which gives
  * deterministic output for a given `aem-component-paths` list.
  */
@@ -204,7 +244,13 @@ export function resolveSanityTypeNames(
   componentPaths: readonly string[],
   opts: ResolveSanityTypeNamesOptions = {},
 ): Map<string, string> {
-  const { strategy = "path", titleByPath, onFallback, overrides } = opts;
+  const { strategy = "path", titleByPath, onFallback, overrides, suffix = "" } = opts;
+  if (suffix && !VALID_TYPE_SUFFIX.test(suffix)) {
+    throw new Error(
+      `type-name suffix "${suffix}" is invalid — use letters/digits/underscore only (it must keep type names identifier-like).`,
+    );
+  }
+  const withSuffix = (name: string): string => name + suffix;
   const assigned = new Map<string, string>();
   const taken = new Set<string>();
 
@@ -250,21 +296,22 @@ export function resolveSanityTypeNames(
       }
     }
 
-    let name = base;
+    let name = withSuffix(base);
     if (strategy === "path") {
       if (RESERVED_SANITY_TYPE_NAMES.has(name) || taken.has(name)) {
-        name = aemPrefix(base);
+        name = withSuffix(aemPrefix(base));
       }
     } else {
       if (RESERVED_SANITY_TYPE_NAMES.has(name)) {
-        name = aemPrefix(base);
-        fallbackReason ??= `"${base}" is a built-in Sanity type — prefixed with "aem"`;
+        name = withSuffix(aemPrefix(base));
+        fallbackReason ??= `"${withSuffix(base)}" is a built-in Sanity type — prefixed with "aem"`;
       }
       if (taken.has(name)) {
-        name =
+        name = withSuffix(
           base !== pathBase
             ? base + pathBase.charAt(0).toUpperCase() + pathBase.slice(1)
-            : aemPrefix(base);
+            : aemPrefix(base),
+        );
         fallbackReason = `title-derived name already taken by an earlier component — disambiguated with the path-derived suffix`;
       }
     }

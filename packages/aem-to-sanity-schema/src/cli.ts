@@ -22,6 +22,7 @@ import {
   type SanityRuntimeSummary,
 } from "aem-to-sanity-core";
 import { migrateSchemas } from "./api.ts";
+import { VALID_TYPE_SUFFIX } from "./naming.ts";
 import { scanSlotGraphFromExtractCache } from "./slots.ts";
 import {
   mergeDiscoveredTemplates,
@@ -80,6 +81,45 @@ async function main(): Promise<void> {
   if (typeNaming === "title") {
     logger.info(
       `Type naming: title (MIGRATION_TYPE_NAMING) — component jcr:titles name the Sanity types; collisions fall back to path-derived suffixes.`,
+    );
+  }
+
+  // Global suffix appended verbatim to every strategy-derived type name so
+  // generated types can match an existing customer schema (`hero` →
+  // `heroBlock`). Explicit names in aem-component-names.json are exempt.
+  // Same set-once-before-first-import hazard as the strategy: changing the
+  // suffix renames every emitted type and orphans ingested `_type` values.
+  const typeSuffix = process.env.MIGRATION_TYPE_SUFFIX?.trim() || undefined;
+  if (typeSuffix && !VALID_TYPE_SUFFIX.test(typeSuffix)) {
+    logger.error(
+      `MIGRATION_TYPE_SUFFIX="${typeSuffix}" is invalid — use letters/digits/underscore only (it must keep type names identifier-like).`,
+    );
+    process.exit(1);
+  }
+
+  // What the suffix decorates. "type" (default) bakes it into the Sanity
+  // type name (ingested `_type` included — set-once hazard). "file" applies
+  // it only to the generated file basename and its `export const`
+  // (`accordionType.ts` exporting `accordionType`, `name: "accordion"`) —
+  // the common Studio convention, safe to change between runs.
+  const typeSuffixModeRaw = process.env.MIGRATION_TYPE_SUFFIX_MODE?.trim();
+  if (typeSuffixModeRaw && typeSuffixModeRaw !== "type" && typeSuffixModeRaw !== "file") {
+    logger.error(
+      `MIGRATION_TYPE_SUFFIX_MODE="${typeSuffixModeRaw}" is invalid — use "type" (default; suffix is part of the Sanity type name) or "file" (suffix only on file names and export consts).`,
+    );
+    process.exit(1);
+  }
+  const typeSuffixMode = (typeSuffixModeRaw as "type" | "file" | undefined) ?? "type";
+  if (typeSuffixModeRaw && !typeSuffix) {
+    logger.warn(
+      `MIGRATION_TYPE_SUFFIX_MODE is set but MIGRATION_TYPE_SUFFIX is not — no suffix will be applied.`,
+    );
+  }
+  if (typeSuffix) {
+    logger.info(
+      typeSuffixMode === "file"
+        ? `Type-name suffix: "${typeSuffix}" in file mode (MIGRATION_TYPE_SUFFIX_MODE=file) — file names and export consts get the suffix; defineType names and ingested _type values stay bare.`
+        : `Type-name suffix: "${typeSuffix}" (MIGRATION_TYPE_SUFFIX) — appended to every derived type name; explicit names from aem-component-names.json are used as-is.`,
     );
   }
 
@@ -265,6 +305,8 @@ async function main(): Promise<void> {
     pageBuilderName,
     schemaLayout,
     typeNaming,
+    typeSuffix,
+    typeSuffixMode,
     containers,
     discoveredSlots,
     slotPageBodyTypes: slotScan.pageBodyTypes,
