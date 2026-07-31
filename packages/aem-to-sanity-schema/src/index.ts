@@ -24,11 +24,17 @@ export {
   RESERVED_SANITY_TYPE_NAMES,
   SANITY_BUILTIN_TYPE_NAMES,
   PORTABLE_TEXT_TABLE_TYPE_NAMES,
+  VALID_TYPE_SUFFIX,
   componentPathToTypeName,
   displayTitleFromAemComponentJcrTitle,
   resolveSanityTypeNames,
   toCamelCase,
   toTitleCase,
+} from "./naming.ts";
+export type {
+  ResolveSanityTypeNamesOptions,
+  TypeNamingStrategy,
+  TypeSuffixMode,
 } from "./naming.ts";
 export {
   FLAT_PLANNER,

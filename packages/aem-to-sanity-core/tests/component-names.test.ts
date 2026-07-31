@@ -56,7 +56,40 @@ describe("loadComponentNameConfig", () => {
   it("rejects empty entries", () => {
     expect(() =>
       loadComponentNameConfig({ file: configFile({ "a/b/c": {} }) }),
-    ).toThrow(/needs "name", "title", and\/or "folder"/);
+    ).toThrow(/needs "name", "title", "folder", and\/or "file"/);
+  });
+
+  it("accepts file overrides, including file-only entries", () => {
+    const config = loadComponentNameConfig({
+      file: configFile({
+        "a/b/table": { name: "tableData", file: "tableDataSchema" },
+        "a/b/hero": { file: "heroSchema" },
+      }),
+    });
+    expect(config.get("a/b/table")).toEqual({
+      name: "tableData",
+      file: "tableDataSchema",
+    });
+    expect(config.get("a/b/hero")).toEqual({ file: "heroSchema" });
+  });
+
+  it("rejects invalid file basenames", () => {
+    for (const bad of ["a/b", "hero.ts", "1hero", "-hero", "hero-schema"]) {
+      expect(() =>
+        loadComponentNameConfig({ file: configFile({ "a/b/c": { file: bad } }) }),
+      ).toThrow(/not a valid file basename/);
+    }
+  });
+
+  it("rejects duplicate file basenames across entries", () => {
+    expect(() =>
+      loadComponentNameConfig({
+        file: configFile({
+          "a/b/c": { file: "shared" },
+          "a/b/d": { file: "shared" },
+        }),
+      }),
+    ).toThrow(/file basenames must be unique/);
   });
 
   it("accepts folder overrides, including folder-only entries", () => {
