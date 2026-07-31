@@ -368,7 +368,8 @@ export async function migrateSchemas(
     if (typeof t === "string" && t.trim()) titleByPath.set(p, t.trim());
   }
 
-  // Explicit name / title / folder overrides from `aem-component-names.json`.
+  // Explicit name / title / folder / file / icon overrides from
+  // `aem-component-names.json`.
   // Names are re-keyed from resource type to component path for the resolver;
   // titles are consumed per-component in processOne; folders feed the path
   // planner once names are resolved. Config entries that match no listed path
@@ -379,6 +380,7 @@ export async function migrateSchemas(
   const titleOverrideByPath = new Map<string, string>();
   const folderOverrideByPath = new Map<string, string>();
   const fileOverrideByPath = new Map<string, string>();
+  const iconOverrideByPath = new Map<string, string>();
   if (componentNames.size > 0) {
     const pathByResourceType = new Map<string, string>();
     for (const p of componentPaths) {
@@ -396,6 +398,7 @@ export async function migrateSchemas(
       if (override.title) titleOverrideByPath.set(p, override.title);
       if (override.folder) folderOverrideByPath.set(p, override.folder);
       if (override.file) fileOverrideByPath.set(p, override.file);
+      if (override.icon) iconOverrideByPath.set(p, override.icon);
     }
   }
 
@@ -543,6 +546,7 @@ export async function migrateSchemas(
         typeName: typeNameByPath.get(p)!,
         exportName: fileBaseNameByTypeName.get(typeNameByPath.get(p)!),
         titleOverride: titleOverrideByPath.get(p),
+        icon: iconOverrideByPath.get(p),
         pageBuilderName,
         prefetchedComponentNode: prefetchedNodes.get(p),
         containerEntry: containers.get(rt),
@@ -789,6 +793,8 @@ interface ProcessOneDeps {
   exportName?: string;
   /** Studio title override from `aem-component-names.json`; wins over `jcr:title`. */
   titleOverride?: string;
+  /** `@sanity/icons` export name from `aem-component-names.json` → `defineType({ icon })`. */
+  icon?: string;
   /** Page-builder array type name container drop-zones reference. */
   pageBuilderName: string;
   /**
@@ -1133,6 +1139,7 @@ async function processOne(
       groups: mapped.groups,
       fieldsets: mapped.fieldsets,
       schemaTitle,
+      icon: deps.icon,
       regenerateCommand,
     });
   } catch (err) {

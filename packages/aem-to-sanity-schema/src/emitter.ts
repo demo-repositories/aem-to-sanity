@@ -27,6 +27,12 @@ export interface EmitInput {
    * When omitted, derived from `typeName` via {@link toTitleCase}.
    */
   schemaTitle?: string;
+  /**
+   * `@sanity/icons` export name (e.g. `ControlsIcon`) from
+   * `aem-component-names.json`. Emitted as an import plus
+   * `defineType({ icon })`; omitted → no icon property.
+   */
+  icon?: string;
   /** Command the header comment tells readers to run to regenerate. */
   regenerateCommand?: string;
 }
@@ -66,9 +72,15 @@ export async function emitSchemaFile(input: EmitInput): Promise<string> {
       ? `  fieldsets: ${stringifyFieldsets(fieldsets)},\n`
       : "";
   const previewBlock = renderPreviewBlock(fields, title);
+  // Config-validated PascalCase identifier (`VALID_ICON_NAME` in
+  // component-names.ts), so it lands verbatim in the import specifier.
+  const iconImport = input.icon
+    ? `import { ${input.icon} } from "@sanity/icons";\n`
+    : "";
+  const iconLiteral = input.icon ? `  icon: ${input.icon},\n` : "";
 
   const src = `import { defineField, defineType } from "sanity";
-
+${iconImport}
 /**
  * Generated from AEM component: ${sourcePath}
  * DO NOT EDIT BY HAND — regenerate via \`${regenerateCommand}\`.
@@ -77,7 +89,7 @@ export const ${exportName} = defineType({
   name: "${typeName}",
   title: ${titleLiteral},
   type: "object",
-${groupsLiteral}${fieldsetsLiteral}${previewBlock}  fields: [
+${iconLiteral}${groupsLiteral}${fieldsetsLiteral}${previewBlock}  fields: [
 ${fields.map((f) => renderField(f, 2)).join(",\n")}
   ],
 });

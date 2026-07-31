@@ -35,6 +35,12 @@ import { readFileSync } from "node:fs";
  * name, title, folder, AND file independently. Like `folder`, safe to
  * change between runs — a file rename never touches the type name.
  *
+ * Entries may also carry an `icon` — the name of a `@sanity/icons` export
+ * (e.g. `"icon": "ControlsIcon"`). The generated schema imports it and sets
+ * `defineType({ icon })`, so the component shows that icon in the Studio's
+ * insert menus, array item previews, and structure lists. Safe to change
+ * between runs — icons never touch type names or ingested content.
+ *
  * Override the file path via the `AEM_COMPONENT_NAMES_FILE` env var
  * (default `./aem-component-names.json`).
  */
@@ -50,6 +56,11 @@ export interface ComponentNameOverride {
    * identifier. Must be identifier-like and unique across components.
    */
   file?: string;
+  /**
+   * `@sanity/icons` export name (e.g. `ControlsIcon`) set as the emitted
+   * type's `defineType({ icon })`. Must be a PascalCase identifier.
+   */
+  icon?: string;
 }
 
 export type ComponentNameConfig = Map<string, ComponentNameOverride>;
@@ -62,6 +73,15 @@ const VALID_TYPE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
  * value can never escape or nest below the schemas dir.
  */
 const VALID_FOLDER = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+/**
+ * `@sanity/icons` exports are PascalCase identifiers (`ControlsIcon`,
+ * `BlockElementIcon`, …). The value lands verbatim in a generated `import`
+ * statement, so a kebab-case or dotted value must fail at config load —
+ * a nonexistent-but-valid identifier is caught later by the Studio's
+ * typecheck ("has no exported member").
+ */
+const VALID_ICON_NAME = /^[A-Z][A-Za-z0-9]*$/;
 
 export interface LoadComponentNameConfigOptions {
   /** Absolute or relative path. Missing file → empty config. */
@@ -123,7 +143,7 @@ export function loadComponentNameConfig(
     if (typeof value === "string") {
       override = { name: value };
     } else if (value && typeof value === "object" && !Array.isArray(value)) {
-      const { name, title, folder, file } = value as Record<string, unknown>;
+      const { name, title, folder, file, icon } = value as Record<string, unknown>;
       if (name !== undefined && typeof name !== "string") {
         throw new Error(
           `component-name config: "name" for "${rawKey}" must be a string`,
@@ -144,14 +164,20 @@ export function loadComponentNameConfig(
           `component-name config: "file" for "${rawKey}" must be a string`,
         );
       }
+      if (icon !== undefined && typeof icon !== "string") {
+        throw new Error(
+          `component-name config: "icon" for "${rawKey}" must be a string`,
+        );
+      }
       if (
         name === undefined &&
         title === undefined &&
         folder === undefined &&
-        file === undefined
+        file === undefined &&
+        icon === undefined
       ) {
         throw new Error(
-          `component-name config: entry for "${rawKey}" needs "name", "title", "folder", and/or "file"`,
+          `component-name config: entry for "${rawKey}" needs "name", "title", "folder", "file", and/or "icon"`,
         );
       }
       override = {
@@ -159,10 +185,11 @@ export function loadComponentNameConfig(
         ...(title !== undefined ? { title } : {}),
         ...(folder !== undefined ? { folder } : {}),
         ...(file !== undefined ? { file } : {}),
+        ...(icon !== undefined ? { icon } : {}),
       };
     } else {
       throw new Error(
-        `component-name config: entry for "${rawKey}" must be a string type name or an object with "name" / "title" / "folder" / "file"`,
+        `component-name config: entry for "${rawKey}" must be a string type name or an object with "name" / "title" / "folder" / "file" / "icon"`,
       );
     }
 
@@ -205,6 +232,11 @@ export function loadComponentNameConfig(
         );
       }
       fileOwners.set(override.file, rawKey);
+    }
+    if (override.icon !== undefined && !VALID_ICON_NAME.test(override.icon)) {
+      throw new Error(
+        `component-name config: "${override.icon}" (icon for "${rawKey}") is not a valid @sanity/icons export name — use the PascalCase named export, e.g. "ControlsIcon" (see https://icons.sanity.io)`,
+      );
     }
 
     out.set(resourceType, override);
