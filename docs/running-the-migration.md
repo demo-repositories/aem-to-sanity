@@ -447,7 +447,7 @@ pnpm eject-dialogs --all --out-dir ./my-dialogs              # custom output fol
 
 For each component the utility runs the exact resolution `migrate:schema` uses (embedded `cq:dialog` / supertype walk / `supplementaryTabs` splicing), **bakes resolvable datasource options in as literal `items`** (ACS generic lists fetched, core policy datasources → their h1–h6 defaults; unresolvable datasources keep their `datasource` node so the report still flags them), writes the result to `./dialog-overrides/<resourceType>.json`, and rewrites the component's `aem-dialog-overrides.json` entry to `{ "dialogFile": … }` (a baked `supplementaryTabs` entry is dropped — keeping it would double-splice).
 
-From then on the file is the component's dialog source of truth: hand-add fields, prune tabs, pin select options, re-run `migrate:schema`. Two things to keep in mind:
+From then on the file is the component's dialog source of truth: hand-add fields, prune tabs, pin select options, re-run `migrate:schema`. **[`docs/authoring-dialog-files.md`](./authoring-dialog-files.md) is the recipe book** — copy-paste JSON for text fields, dropdowns, checkboxes, image uploads, multifields, new tabs, and more. Two things to keep in mind:
 
 - **Ejected dialogs are frozen.** AEM-side dialog changes stop flowing for ejected components until you re-eject with `--force` — which overwrites the file and discards hand edits (diff before re-ejecting). Without `--force`, existing files are always skipped.
 - The `dialog-overrides/` folder is operator-owned (commit it alongside your other tenant config if your tenant folder is tracked).

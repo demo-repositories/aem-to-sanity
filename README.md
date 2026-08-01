@@ -142,6 +142,7 @@ aem-to-sanity/
 │   ├── overview.md                    Architecture + repo layout (single page)
 │   ├── running-the-migration.md       Canonical operator's runbook
 │   ├── updating.md                    Pull a newer toolkit into a scaffolded project (toolkit:update walkthrough)
+│   ├── authoring-dialog-files.md      Cookbook — hand-edit ejected dialog files (add text fields, dropdowns, tabs, …)
 │   ├── aem-to-sanity-mapping.md       (auto-generated) AEM ↔ Sanity field-level mapping
 │   └── …                              (refactor plans, mapping reviews — historical context)
 │

@@ -129,6 +129,7 @@ async function main(): Promise<void> {
     logger.info(
       "The ejected files are now each component's dialog source of truth. " +
         "Hand-edit them to add/remove fields or pin select options, then re-run migrate:schema. " +
+        "Field recipes: docs/authoring-dialog-files.md in the toolkit repo. " +
         "Re-eject with --force to refresh from AEM (discards hand edits).",
     );
   }

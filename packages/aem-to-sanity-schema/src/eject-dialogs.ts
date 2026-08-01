@@ -148,7 +148,8 @@ export async function ejectDialogs(
       "//":
         `Ejected from ${componentPath} by aem-eject-dialogs. This file is now the ` +
         `component's dialog source of truth — hand edits are preserved; re-eject ` +
-        `with --force to refresh from AEM (discards hand edits).`,
+        `with --force to refresh from AEM (discards hand edits). Field recipes: ` +
+        `docs/authoring-dialog-files.md in the toolkit repo.`,
       ...materialized,
     } as DialogNode;
 
