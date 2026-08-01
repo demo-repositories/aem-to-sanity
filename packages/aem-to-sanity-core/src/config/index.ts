@@ -34,6 +34,13 @@ export type {
   SlotVisibleWhen,
   LoadSlotConfigOptions,
 } from "./slots.ts";
+export { loadDialogOverrideConfig } from "./dialog-overrides.ts";
+export type {
+  DialogOverrideConfig,
+  DialogOverrideEntry,
+  SupplementaryTab,
+  LoadDialogOverrideConfigOptions,
+} from "./dialog-overrides.ts";
 export { loadPageComponentConfig } from "./page-components.ts";
 export type {
   PageComponentConfig,

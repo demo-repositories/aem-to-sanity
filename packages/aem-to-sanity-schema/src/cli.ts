@@ -11,6 +11,7 @@ import {
   loadAuthoringHintConfig,
   loadComponentNameConfig,
   loadContainerConfig,
+  loadDialogOverrideConfig,
   loadPageComponentConfig,
   loadSlotConfig,
   logStartupBanner,
@@ -204,6 +205,20 @@ async function main(): Promise<void> {
     );
   }
 
+  // Dialog overrides — supplementary tabs merged in by AEM's Sling
+  // Resource Merger that first-hit supertype resolution can't see, and/or
+  // full local-dialog replacements. Optional file; missing file → dialogs
+  // resolve from AEM as usual.
+  const dialogOverridesFile = resolve(
+    process.env.AEM_DIALOG_OVERRIDES_FILE ?? "./aem-dialog-overrides.json",
+  );
+  const dialogOverrides = loadDialogOverrideConfig({ file: dialogOverridesFile });
+  if (dialogOverrides.size > 0) {
+    logger.info(
+      `Applied dialog override(s) for ${dialogOverrides.size} component(s) from ${dialogOverridesFile}`,
+    );
+  }
+
   // AEM page-shell components (the components used as `sling:resourceType`
   // on `jcr:content`) paired with the `cq:template` paths each is authored
   // under. For every (resourceType, template) pair the schema emitter
@@ -313,6 +328,7 @@ async function main(): Promise<void> {
     slotVisibility,
     authoringHints,
     componentNames,
+    dialogOverrides,
     pageComponents,
   });
 

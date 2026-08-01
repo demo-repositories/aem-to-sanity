@@ -1,8 +1,9 @@
 import { join } from "node:path";
 import {
-  resolveDialogViaSuperType,
+  resolveEffectiveDialog,
   writeJson,
   type DialogNode,
+  type DialogOverrideEntry,
   type Logger,
 } from "aem-to-sanity-core";
 import type { Report } from "./report.ts";
@@ -28,6 +29,12 @@ export interface AuditOptions {
   dialogFetcher: NodeFetcher;
   outputDir: string;
   logger?: Logger;
+  /**
+   * Dialog overrides keyed by component path (already re-keyed from
+   * resource type by the caller), so audit examples come from the same
+   * effective dialog the migrator mapped.
+   */
+  dialogOverrideByPath?: Map<string, DialogOverrideEntry>;
 }
 
 /**
@@ -40,7 +47,7 @@ export interface AuditOptions {
 export async function auditUnmappedTypes(
   opts: AuditOptions,
 ): Promise<AuditResult> {
-  const { report, dialogFetcher, outputDir, logger } = opts;
+  const { report, dialogFetcher, outputDir, logger, dialogOverrideByPath } = opts;
 
   // Group successful components by each unmapped resource type they contain,
   // but only keep `unknown-type` entries — those are the placeholders.
@@ -65,9 +72,12 @@ export async function auditUnmappedTypes(
     for (const componentPath of comps) {
       let dialog: DialogNode;
       try {
-        // Use the same supertype-aware resolution the main migrator uses, so
-        // proxy components don't silently miss audit examples.
-        const resolution = await resolveDialogViaSuperType(componentPath, dialogFetcher);
+        // Use the same supertype-aware, override-aware resolution the main
+        // migrator uses, so proxy components don't silently miss audit
+        // examples and overridden dialogs audit as what was actually mapped.
+        const resolution = await resolveEffectiveDialog(componentPath, dialogFetcher, {
+          override: dialogOverrideByPath?.get(componentPath),
+        });
         dialog = resolution.dialog;
       } catch (err) {
         logger?.debug(

@@ -32,6 +32,18 @@ export type Outcome =
        * found. Omitted (or single-entry) for direct dialog hits.
        */
       supertypeChain?: string[];
+      /**
+       * Set when a `dialogFile` entry in `aem-dialog-overrides.json`
+       * replaced dialog resolution for this component. `file` is the path
+       * as written in the config.
+       */
+      dialogOverride?: { file: string };
+      /**
+       * Supplementary tabs spliced into the dialog via
+       * `aem-dialog-overrides.json`, in application order. `position` is
+       * `"append"`, `"after:<tab>"`, or `"before:<tab>"`.
+       */
+      supplementaryTabs?: Array<{ path: string; key: string; position: string }>;
     }
   | {
       status: "failure";
