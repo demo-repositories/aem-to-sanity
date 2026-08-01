@@ -68,17 +68,18 @@ export const MAPPING: Record<string, MappingEntry> = {
   },
   "granite/ui/components/coral/foundation/form/select": {
     kind: "select",
-    description: "Dropdown → Sanity string with options.list",
+    description:
+      "Dropdown → Sanity string with options.list. Datasource-driven items resolve when the datasource is an ACS Commons generic list (options fetched from the list page's JCR) or a core policy datasource (allowedheadingelements / title allowedtypes → the no-policy h1–h6 default); other datasources fall back to a plain string (reported as `datasource-unresolved`).",
   },
   "granite/ui/components/coral/foundation/form/radiogroup": {
     kind: "radio",
     description:
-      "Radio group → Sanity string with options.list and layout:'radio'",
+      "Radio group → Sanity string with options.list and layout:'radio'. Same datasource resolution/fallback as select.",
   },
   "granite/ui/components/coral/foundation/form/buttongroup": {
     kind: "buttongroup",
     description:
-      "Button group → single mode: Sanity string with options.list rendered as a toggle-button group in the Studio (options.aemWidget:'buttonGroup'); multiple mode: array of strings with options.list. Datasource-driven items (no literal `items` node) fall back to a plain field without options.",
+      "Button group → single mode: Sanity string with options.list rendered as a toggle-button group in the Studio (options.aemWidget:'buttonGroup'); multiple mode: array of strings with options.list. Same datasource resolution/fallback as select (no literal `items` node → ACS generic lists and core policy datasources resolve; the rest fall back to a plain field without options).",
   },
   "granite/ui/components/coral/foundation/form/datepicker": {
     kind: "date",

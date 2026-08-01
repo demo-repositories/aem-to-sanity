@@ -1,11 +1,20 @@
 import { childNodes, isTruthyAttr, type DialogNode } from "aem-to-sanity-core";
 import { lookup, type SanityKind } from "./mapping-table.ts";
+import {
+  resolveDatasourceOptions,
+  type DatasourceCache,
+} from "./datasources.ts";
 import { toCamelCase } from "./naming.ts";
 
 export interface UnmappedField {
   name: string;
   resourceType: string;
-  reason: "unknown-type" | "missing-name" | "hidden" | "include-failed";
+  reason:
+    | "unknown-type"
+    | "missing-name"
+    | "hidden"
+    | "include-failed"
+    | "datasource-unresolved";
   detail?: string;
 }
 
@@ -24,6 +33,8 @@ interface MappingContext {
   renamed: RenamedField[];
   fetcher: NodeFetcher;
   visitedIncludes: Set<string>;
+  /** Per-run memo of resolved ACS generic lists, keyed by list path. */
+  datasourceCache: DatasourceCache;
 }
 
 /**
@@ -394,6 +405,7 @@ export async function mapDialog(
     renamed: [],
     fetcher,
     visitedIncludes: new Set(),
+    datasourceCache: new Map(),
   };
   const fields: SanityField[] = [];
   await walk(root, ctx, fields, {});
@@ -833,22 +845,25 @@ async function buildField(
       return {
         ...common,
         type: "string",
-        options: { list: extractSelectItems(node) },
+        options: { list: await selectionOptions(nodeKey, node, ctx) },
       };
     case "radio":
       return {
         ...common,
         type: "string",
-        options: { list: extractSelectItems(node), layout: "radio" },
+        options: {
+          list: await selectionOptions(nodeKey, node, ctx),
+          layout: "radio",
+        },
       };
     case "buttongroup": {
       // Coral buttongroup persists like a select: one string in `single`
-      // mode, a multi-value string property in `multiple` mode. Items may
-      // come from a literal `items` node (extractable) or a `datasource`
-      // resolved server-side at dialog render time — the latter is opaque
-      // over `.infinity.json`, so those fields keep the value but get no
-      // options list (same fallback the select widget has today).
-      const list = extractSelectItems(node);
+      // mode, a multi-value string property in `multiple` mode. Items come
+      // from a literal `items` node or a `datasource`; resolvable
+      // datasources (ACS generic lists, core policy defaults) become an
+      // options list, the rest fall back to a plain field (value still
+      // migrates) — see `datasources.ts`.
+      const list = await selectionOptions(nodeKey, node, ctx);
       if (stringAttr(node.selectionMode) === "multiple") {
         return {
           ...common,
@@ -960,6 +975,37 @@ function buildPlaceholder(
       ? { showHideTargets: placement.showHide }
       : {}),
   };
+}
+
+/**
+ * Options for a selection widget (select / radiogroup / buttongroup):
+ * literal `items` win; otherwise try datasource resolution (ACS generic
+ * lists fetched from JCR, core policy datasources → their no-policy
+ * defaults — see `datasources.ts`). Unresolvable datasources are recorded
+ * under `unmapped` with reason `datasource-unresolved` and the field falls
+ * back to a plain input (the authored value still migrates).
+ */
+async function selectionOptions(
+  nodeKey: string,
+  node: DialogNode,
+  ctx: MappingContext,
+): Promise<Array<{ title: string; value: string }>> {
+  const literal = extractSelectItems(node);
+  if (literal.length > 0) return literal;
+  const resolution = await resolveDatasourceOptions(
+    node,
+    ctx.fetcher,
+    ctx.datasourceCache,
+  );
+  if (resolution.unresolved) {
+    ctx.unmapped.push({
+      name: nodeKey,
+      resourceType: resolution.unresolved.datasourceResourceType,
+      reason: "datasource-unresolved",
+      detail: resolution.unresolved.detail,
+    });
+  }
+  return resolution.options ?? [];
 }
 
 function extractSelectItems(

@@ -13,9 +13,9 @@ Each AEM Granite UI `sling:resourceType` is mapped to a Sanity field kind. Unkno
 | `granite/ui/components/coral/foundation/form/numberfield` | `number` | Number → Sanity number (min/max → validation) |
 | `granite/ui/components/coral/foundation/form/checkbox` | `boolean` | Checkbox → Sanity boolean. `initialValue` from the `checked` attribute (the default state), not `value` (the constant persisted when checked); omitted when `checked` is absent or a Granite EL expression (`${...}`, unresolvable offline). Custom persisted constants (`value` / `uncheckedValue` other than `"true"` / `"false"`, e.g. a link-target checkbox storing `_blank` / `_self`) are recorded in the content registry so `aem-transform` coerces them to `true` / `false`. |
 | `granite/ui/components/coral/foundation/form/switch` | `boolean` | Switch → Sanity boolean (rendered as a toggle in Studio v3+). Same `checked`-based default handling as checkbox. |
-| `granite/ui/components/coral/foundation/form/select` | `select` | Dropdown → Sanity string with options.list |
-| `granite/ui/components/coral/foundation/form/radiogroup` | `radio` | Radio group → Sanity string with options.list and layout:'radio' |
-| `granite/ui/components/coral/foundation/form/buttongroup` | `buttongroup` | Button group → single mode: Sanity string with options.list rendered as a toggle-button group in the Studio (options.aemWidget:'buttonGroup'); multiple mode: array of strings with options.list. Datasource-driven items (no literal `items` node) fall back to a plain field without options. |
+| `granite/ui/components/coral/foundation/form/select` | `select` | Dropdown → Sanity string with options.list. Datasource-driven items resolve when the datasource is an ACS Commons generic list (options fetched from the list page's JCR) or a core policy datasource (allowedheadingelements / title allowedtypes → the no-policy h1–h6 default); other datasources fall back to a plain string (reported as `datasource-unresolved`). |
+| `granite/ui/components/coral/foundation/form/radiogroup` | `radio` | Radio group → Sanity string with options.list and layout:'radio'. Same datasource resolution/fallback as select. |
+| `granite/ui/components/coral/foundation/form/buttongroup` | `buttongroup` | Button group → single mode: Sanity string with options.list rendered as a toggle-button group in the Studio (options.aemWidget:'buttonGroup'); multiple mode: array of strings with options.list. Same datasource resolution/fallback as select (no literal `items` node → ACS generic lists and core policy datasources resolve; the rest fall back to a plain field without options). |
 | `granite/ui/components/coral/foundation/form/datepicker` | `date` | Date picker → Sanity date or datetime based on `type`. The dialog's `valueFormat` (the pattern of the string AEM persists, e.g. `MMM DD, yyyy` → `"May 23, 2024"`) is recorded in the content registry so `aem-transform` can parse authored values back into Sanity's `YYYY-MM-DD` / UTC-ISO shapes. |
 | `granite/ui/components/coral/foundation/form/pathfield` | `pathfield` | AEM pathfield → Sanity string (reference migration is future work) |
 | `granite/ui/components/coral/foundation/form/pathbrowser` | `pathbrowser` | Coral pathbrowser → Sanity image when rootPath is under /content/dam or field name matches /image/i, else string (same as pathfield) |
@@ -62,6 +62,31 @@ Resolution rules:
 The resolved chain is recorded on each successful component's `supertypeChain` in `output/cache/migration-report.json` (omitted for direct hits). The registry key (the AEM resource type used at content-ingest time) remains the **original proxy path's resource type** — authored content with `sling:resourceType: <proxy>` keeps matching its emitted Sanity type even though the dialog fields came from an ancestor. Two proxies sharing one supertype produce two distinct Sanity types with identical fields.
 
 A standalone probe (`scripts/aem-probe.ts`) uses the same resolver, useful for inspecting a single component's resolution before kicking off a full schema run.
+
+### Dialog overrides (`aem-dialog-overrides.json`)
+
+The walk above is **first-hit**: it stops at the first `cq:dialog` in the chain. AEM's runtime goes further — the **Sling Resource Merger** merges dialogs across the whole chain, so a proxy component with its own dialog still inherits tabs from ancestor dialogs (a proxy accordion defining `content` + `theme` tabs also shows the Core Component's `properties` tab at author time). The migration deliberately doesn't reimplement merger semantics (`sling:hideResource`, `sling:orderBefore`, key-level deep merge per hop); the optional per-tenant file `aem-dialog-overrides.json` (override via `AEM_DIALOG_OVERRIDES_FILE`) is the escape hatch — name the merged-in pieces explicitly, keyed by `sling:resourceType` (a leading `/apps/` is accepted and stripped):
+
+```json
+{
+  "uxp/components/proxy/content/accordion": {
+    "supplementaryTabs": [
+      {
+        "path": "/libs/core/wcm/components/accordion/v1/accordion/cq:dialog/content/items/tabs/items/properties",
+        "insertAfter": "theme"
+      }
+    ]
+  },
+  "uxp/components/proxy/content/hero": {
+    "dialogFile": "./dialog-overrides/hero.json"
+  }
+}
+```
+
+- **`supplementaryTabs`** — each entry names an absolute JCR path of a tab node; the migrator fetches `{path}.infinity.json` and splices the node into the resolved dialog's tabs container. `insertAfter` / `insertBefore` (mutually exclusive) position it next to an existing tab's node name; omitted → appended. `key` overrides the spliced node name (default: last path segment). Entries apply in array order. A missing anchor warns and appends; a key that already exists in the dialog is a hard error (per-tab merging isn't supported — use `dialogFile`), as is a dialog with no tabs container at all. The tabs container is found by `sling:resourceType` (`granite/ui/components/coral/foundation/tabs`) with a fallback on the node name `tabs` — proxy dialogs routinely omit the resourceType because the merger supplies it at runtime.
+- **`dialogFile`** — a local JSON file (resolved against the config file's directory, then the working directory) holding the complete `cq:dialog` node, same shape as `_cq_dialog.infinity.json` (grab one with `scripts/aem-probe.ts --save`). Replaces dialog resolution entirely — no supertype walk, no `supertypeChain`. When both capabilities are set on one entry, the file is the base and the tabs splice on top.
+
+Provenance lands in `migration-report.json` — `results[].dialogOverride` (`{file}`) and `results[].supplementaryTabs` (`[{path, key, position}]`) — and the dialog snapshot under `output/cache/aem/apps/…` records the **merged** dialog, not the raw AEM response, so the audit trail matches what was actually mapped (worth remembering when comparing the cache against CRXDE). Config or splice failures (bad tab path, duplicate key, no tabs container) report as `mappingError`, not `network`. Missing file → dialogs resolve from AEM as usual; malformed JSON or invalid entries are a hard error so a typo doesn't silently leave a dialog un-overridden. The probe applies the same overrides, so what it prints stays exactly what the migrator sees.
 
 ## Composite multifields (dialog + authored JCR)
 
@@ -328,7 +353,15 @@ Missing / empty file → no per-template documents; every page uses the generic 
 
 AEM's buttongroup renders a row of toggle buttons; it persists like a select — one string in `selectionMode="single"`, a multi-value string property in `selectionMode="multiple"`.
 
-**Schema** — single mode emits a Sanity `string` with `options.list` built from the literal `items` children (item `text` → title, `value` → value; an item flagged `selected` becomes the field's `initialValue`), plus a non-standard `options.aemWidget: "buttonGroup"` marker (the `defineField` call carries `{ strict: false }` so the extra option typechecks). Multiple mode emits `array` of `string` with the same `options.list`, which the Studio renders as its built-in checkbox list. Dialogs whose items come from a `datasource` (e.g. ACS Commons generic lists) are resolved server-side at dialog render time and are opaque over `.infinity.json` — those fields fall back to a plain `string` (or plain array) without options; authored values still migrate.
+**Schema** — single mode emits a Sanity `string` with `options.list` built from the literal `items` children (item `text` → title, `value` → value; an item flagged `selected` becomes the field's `initialValue`), plus a non-standard `options.aemWidget: "buttonGroup"` marker (the `defineField` call carries `{ strict: false }` so the extra option typechecks). Multiple mode emits `array` of `string` with the same `options.list`, which the Studio renders as its built-in checkbox list. Dialogs whose items come from a `datasource` follow the datasource resolution described below.
+
+### Datasource-driven options (selects, radiogroups, buttongroups)
+
+Widgets whose options come from a `datasource` child instead of literal `items` run a server-side servlet at dialog render time — opaque over `.infinity.json`. The mapper resolves the two families it can and reports the rest:
+
+- **ACS Commons generic lists** (`acs-commons/components/utilities/genericlist/datasource`) — the datasource node names the list page's JCR path; options are fetched from `{path}/jcr:content/list` (children with `jcr:title` + `value`), using the same transport/auth as dialog fetches. Lists are fetched once per component run and shared across fields. A missing or empty list falls back to a plain field.
+- **Core policy datasources** — `core/wcm/components/commons/datasources/allowedheadingelements/v1` and the title component's `allowedtypes` (v1/v2) emit the servlet's **no-policy default** (`h1`–`h6`). The real option set lives in the template's content policy (per-instance, while the migration is per-type), so the emitted list may be broader than a restrictive policy allowed; the authored value round-trips either way.
+- **Everything else** (project-custom datasource servlets, Scene7 image presets, language lists) falls back to a plain `string` (or plain array) without options — authored values still migrate. Each fallback is recorded in `migration-report.json → results[].unmapped` with reason `datasource-unresolved` and a detail naming the datasource. To restore a dropdown for those, supply the dialog via `aem-dialog-overrides.json`'s `dialogFile` with literal `items`.
 
 **Studio** — the example Studio (`apps/studio`) routes fields carrying the `aemWidget: "buttonGroup"` marker to a toggle-button-group input (`components/inputs/StringToggleGroupInput.tsx`, wired through `form.components.input` in `sanity.config.ts`) so authors get the same one-click row of buttons they had in AEM. Studios without that resolver fall back to Sanity's default dropdown — the marker is additive and the persisted value shape is unaffected.
 
