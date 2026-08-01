@@ -1008,7 +1008,8 @@ async function selectionOptions(
   return resolution.options ?? [];
 }
 
-function extractSelectItems(
+/** Exported for `eject-dialogs.ts` (detects literal option items). */
+export function extractSelectItems(
   node: DialogNode,
 ): Array<{ title: string; value: string }> {
   const items = node["items"];

@@ -886,8 +886,9 @@ function resourceTypeFromPath(componentPath: string, jcrPrefix: string): string 
 /**
  * AEM `.infinity.json` for a `cq:Component` usually nests the authoring dialog
  * under `cq:dialog`. When present, we avoid a second request to `/_cq_dialog`.
+ * Exported for `eject-dialogs.ts`, which mirrors processOne's resolution.
  */
-function embeddedCqDialog(node: DialogNode): DialogNode | undefined {
+export function embeddedCqDialog(node: DialogNode): DialogNode | undefined {
   const embedded = node["cq:dialog"];
   if (
     embedded &&

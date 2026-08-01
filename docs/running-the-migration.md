@@ -433,6 +433,25 @@ Behavior notes:
 
 Override the path via `AEM_DIALOG_OVERRIDES_FILE`.
 
+#### Ejecting dialogs — `pnpm eject-dialogs`
+
+When you'd rather stop thinking about resolution entirely — supertype walks, merged tabs, datasource servlets — **eject** the effective dialog into a static local file and edit that:
+
+```bash
+cd tenants/<your-tenant>
+pnpm eject-dialogs /apps/<site>/components/proxy/accordion   # one or more components
+pnpm eject-dialogs --all                                     # everything in aem-component-paths
+pnpm eject-dialogs --all --force                             # refresh from AEM (discards hand edits!)
+pnpm eject-dialogs --all --out-dir ./my-dialogs              # custom output folder
+```
+
+For each component the utility runs the exact resolution `migrate:schema` uses (embedded `cq:dialog` / supertype walk / `supplementaryTabs` splicing), **bakes resolvable datasource options in as literal `items`** (ACS generic lists fetched, core policy datasources → their h1–h6 defaults; unresolvable datasources keep their `datasource` node so the report still flags them), writes the result to `./dialog-overrides/<resourceType>.json`, and rewrites the component's `aem-dialog-overrides.json` entry to `{ "dialogFile": … }` (a baked `supplementaryTabs` entry is dropped — keeping it would double-splice).
+
+From then on the file is the component's dialog source of truth: hand-add fields, prune tabs, pin select options, re-run `migrate:schema`. Two things to keep in mind:
+
+- **Ejected dialogs are frozen.** AEM-side dialog changes stop flowing for ejected components until you re-eject with `--force` — which overwrites the file and discards hand edits (diff before re-ejecting). Without `--force`, existing files are always skipped.
+- The `dialog-overrides/` folder is operator-owned (commit it alongside your other tenant config if your tenant folder is tracked).
+
 ### 1d. Resource-type registry — `output/cache/content-type-registry.json`
 
 **Generated** by `migrate:schema`; you don't hand-author it. Maps AEM `sling:resourceType` values to the Sanity type names that stage 1 emitted, plus each field's name + Sanity type (used by the drift auditor and by `aem-transform` for type-aware coercion — e.g. HTML → Portable Text on `array-of-blocks` fields):

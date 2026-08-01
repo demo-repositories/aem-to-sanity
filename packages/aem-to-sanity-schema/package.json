@@ -40,7 +40,8 @@
   "bin": {
     "aem-to-sanity-schema": "./dist/cli.js",
     "aem-to-sanity-typegen": "./dist/typegen-cli.js",
-    "aem-to-sanity-pagebuilder": "./dist/pagebuilder-cli.js"
+    "aem-to-sanity-pagebuilder": "./dist/pagebuilder-cli.js",
+    "aem-eject-dialogs": "./dist/eject-dialogs-cli.js"
   },
   "dependencies": {
     "aem-to-sanity-core": "workspace:*",
