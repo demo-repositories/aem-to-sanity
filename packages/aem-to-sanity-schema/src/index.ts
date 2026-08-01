@@ -110,3 +110,10 @@ export {
   mergeDiscoveredTemplates,
 } from "./template-discovery.ts";
 export type { DiscoveredTemplates } from "./template-discovery.ts";
+export { ejectDialogs } from "./eject-dialogs.ts";
+export type {
+  EjectDialogsOptions,
+  EjectDialogsResult,
+  EjectedDialog,
+  EjectSkip,
+} from "./eject-dialogs.ts";

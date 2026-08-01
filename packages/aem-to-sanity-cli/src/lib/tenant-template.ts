@@ -43,6 +43,7 @@ export const OPERATOR_FILES = [
   "aem-component-hints.json",
   "aem-component-names.json",
   "aem-component-slots.json",
+  "aem-dialog-overrides.json",
   "aem-component-exceptions",
   "aem-page-components.json",
   "aem-tag-roots",

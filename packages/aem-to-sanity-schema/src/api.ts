@@ -3,15 +3,19 @@ import { readFile, readdir, rmdir, unlink } from "node:fs/promises";
 import {
   AEM_AUTHORING_HINTS,
   AemFetchError,
+  DialogOverrideError,
   aemCacheAppsFile,
   normalizeSlotBase,
-  resolveDialogViaSuperType,
+  resolveEffectiveDialog,
   writeJson,
   writeTextFile,
+  type AppliedSupplementaryTab,
   type AuthoringHintConfig,
   type ComponentNameConfig,
   type ContainerConfig,
   type DialogNode,
+  type DialogOverrideConfig,
+  type DialogOverrideEntry,
   type Logger,
   type PageComponentConfig,
   type SchemaLayout,
@@ -255,6 +259,19 @@ export interface MigrateSchemasOptions {
    */
   componentNames?: ComponentNameConfig;
   /**
+   * Per-component dialog overrides keyed by `sling:resourceType` (from
+   * `aem-dialog-overrides.json`). Two capabilities, combinable per entry:
+   * `supplementaryTabs` fetches named tab nodes from AEM and splices them
+   * into the resolved dialog at a stated position — the escape hatch for
+   * Sling-Resource-Merger-inherited tabs the first-hit supertype walk
+   * can't see; `dialogFile` replaces dialog resolution with a local JSON
+   * file entirely. Entries matching no listed component path are logged
+   * and ignored.
+   *
+   * Empty / omitted → no-op.
+   */
+  dialogOverrides?: DialogOverrideConfig;
+  /**
    * Per-tenant declaration of "page-shell" components — AEM components used as
    * the `sling:resourceType` of `jcr:content` rather than as page-body
    * blocks — paired with the `cq:template` paths each one is authored under.
@@ -399,6 +416,30 @@ export async function migrateSchemas(
       if (override.folder) folderOverrideByPath.set(p, override.folder);
       if (override.file) fileOverrideByPath.set(p, override.file);
       if (override.icon) iconOverrideByPath.set(p, override.icon);
+    }
+  }
+
+  // Dialog overrides from `aem-dialog-overrides.json`, re-keyed from
+  // resource type to component path so processOne (and the audit step) can
+  // look them up alongside the other per-component deps. Entries matching
+  // no listed path are logged and dropped, same contract as
+  // component-names above.
+  const dialogOverrides = opts.dialogOverrides ?? new Map<string, DialogOverrideEntry>();
+  const dialogOverrideByPath = new Map<string, DialogOverrideEntry>();
+  if (dialogOverrides.size > 0) {
+    const pathByResourceType = new Map<string, string>();
+    for (const p of componentPaths) {
+      pathByResourceType.set(resourceTypeFromPath(p, effectiveJcrPrefix), p);
+    }
+    for (const [rt, entry] of dialogOverrides) {
+      const p = pathByResourceType.get(rt);
+      if (!p) {
+        logger?.warn(
+          `dialog-overrides: "${rt}" matches no listed component path — entry ignored. Add ${effectiveJcrPrefix}${rt} to aem-component-paths or remove the entry.`,
+        );
+        continue;
+      }
+      dialogOverrideByPath.set(p, entry);
     }
   }
 
@@ -547,6 +588,7 @@ export async function migrateSchemas(
         exportName: fileBaseNameByTypeName.get(typeNameByPath.get(p)!),
         titleOverride: titleOverrideByPath.get(p),
         icon: iconOverrideByPath.get(p),
+        dialogOverride: dialogOverrideByPath.get(p),
         pageBuilderName,
         prefetchedComponentNode: prefetchedNodes.get(p),
         containerEntry: containers.get(rt),
@@ -745,6 +787,7 @@ export async function migrateSchemas(
       dialogFetcher: fetcher,
       outputDir,
       logger,
+      dialogOverrideByPath,
     });
     auditPath = auditResult.examplesPath;
   }
@@ -795,6 +838,11 @@ interface ProcessOneDeps {
   titleOverride?: string;
   /** `@sanity/icons` export name from `aem-component-names.json` → `defineType({ icon })`. */
   icon?: string;
+  /**
+   * Dialog override from `aem-dialog-overrides.json` for this component —
+   * a full local-dialog replacement and/or supplementary tabs to splice in.
+   */
+  dialogOverride?: DialogOverrideEntry;
   /** Page-builder array type name container drop-zones reference. */
   pageBuilderName: string;
   /**
@@ -838,8 +886,9 @@ function resourceTypeFromPath(componentPath: string, jcrPrefix: string): string 
 /**
  * AEM `.infinity.json` for a `cq:Component` usually nests the authoring dialog
  * under `cq:dialog`. When present, we avoid a second request to `/_cq_dialog`.
+ * Exported for `eject-dialogs.ts`, which mirrors processOne's resolution.
  */
-function embeddedCqDialog(node: DialogNode): DialogNode | undefined {
+export function embeddedCqDialog(node: DialogNode): DialogNode | undefined {
   const embedded = node["cq:dialog"];
   if (
     embedded &&
@@ -873,6 +922,10 @@ async function processOne(
   // see inheritance in the schema report (and so audit reasons like "field
   // came from supertype X" remain inspectable later).
   let supertypeChain: string[] | undefined;
+  // Dialog-override provenance for the report: which local file replaced
+  // resolution, and which supplementary tabs were spliced in where.
+  let dialogFileApplied: string | undefined;
+  let appliedTabs: AppliedSupplementaryTab[] | undefined;
   try {
     const componentNode =
       deps.prefetchedComponentNode ?? (await fetcher(componentPath));
@@ -880,25 +933,50 @@ async function processOne(
     if (!schemaTitle && typeof rawTitle === "string" && rawTitle.trim()) {
       schemaTitle = rawTitle.trim();
     }
-    const embeddedDialog = embeddedCqDialog(componentNode);
-    if (embeddedDialog) {
-      dialog = embeddedDialog;
-    } else {
-      // Try direct, then walk `sling:resourceSuperType` across /apps + /libs.
-      // Mirrors AEM's runtime dialog-resolution so proxy components
-      // (`/apps/<site>/components/foo` extending Adobe Core or a versioned
-      // base) migrate without operators having to flatten the inheritance
-      // by hand.
-      const resolution = await resolveDialogViaSuperType(componentPath, fetcher);
-      dialog = resolution.dialog;
-      if (resolution.chain.length > 1) {
-        supertypeChain = resolution.chain;
-        deps.logger?.info(
-          `${componentPath}: dialog inherited via supertype — chain ${resolution.chain.join(" → ")}`,
-        );
-      }
+    // Base dialog = `dialogFile` override ?? embedded `cq:dialog` ?? the
+    // `sling:resourceSuperType` walk (mirrors AEM's runtime resolution so
+    // proxy components migrate without operators flattening inheritance by
+    // hand); then config-declared supplementary tabs splice on top — the
+    // escape hatch for Sling-Resource-Merger-inherited tabs the first-hit
+    // walk can't see.
+    const resolved = await resolveEffectiveDialog(componentPath, fetcher, {
+      override: deps.dialogOverride,
+      embeddedDialog: embeddedCqDialog(componentNode),
+      warn: (m) => deps.logger?.warn(`${componentPath}: ${m}`),
+    });
+    dialog = resolved.dialog;
+    if (resolved.chain && resolved.chain.length > 1) {
+      supertypeChain = resolved.chain;
+      deps.logger?.info(
+        `${componentPath}: dialog inherited via supertype — chain ${resolved.chain.join(" → ")}`,
+      );
+    }
+    if (resolved.dialogFileApplied) {
+      dialogFileApplied = resolved.dialogFileApplied;
+      deps.logger?.info(
+        `${componentPath}: dialog replaced by local override file ${resolved.dialogFileApplied}`,
+      );
+    }
+    if (resolved.appliedTabs && resolved.appliedTabs.length > 0) {
+      appliedTabs = resolved.appliedTabs;
+      deps.logger?.info(
+        `${componentPath}: spliced ${resolved.appliedTabs.length} supplementary tab(s) — ${resolved.appliedTabs
+          .map((t) => `${t.key} (${t.position})`)
+          .join(", ")}`,
+      );
     }
   } catch (err) {
+    if (err instanceof DialogOverrideError) {
+      // Operator config problem (bad tab path, duplicate key, no tabs
+      // container), not a transport failure.
+      report.add({
+        status: "failure",
+        path: componentPath,
+        kind: "mappingError",
+        message: err.message,
+      });
+      return { authFailure: false, success: false };
+    }
     if (err instanceof AemFetchError) {
       report.add({
         status: "failure",
@@ -1176,6 +1254,8 @@ async function processOne(
     unmapped: mapped.unmapped,
     renamed: mapped.renamed,
     supertypeChain,
+    ...(dialogFileApplied ? { dialogOverride: { file: dialogFileApplied } } : {}),
+    ...(appliedTabs ? { supplementaryTabs: appliedTabs } : {}),
   });
   return { authFailure: false, success: true };
 }

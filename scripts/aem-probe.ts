@@ -43,9 +43,10 @@ import {
   AemFetchError,
   createLogger,
   fetchInfinityJson,
+  loadDialogOverrideConfig,
   logStartupBanner,
   resolveConfig,
-  resolveDialogViaSuperType,
+  resolveEffectiveDialog,
   type DialogNode,
 } from "aem-to-sanity-core";
 
@@ -179,11 +180,13 @@ async function main(): Promise<void> {
 }
 
 /**
- * Probe a component's dialog using the shared core resolver, which walks the
- * `sling:resourceSuperType` chain across `/apps` + `/libs` until a dialog is
- * found (or the chain ends). This is the exact same resolution
- * `aem-to-sanity-schema` uses in `migrate:schema`, so what the probe shows
- * here is what the migrator will see at runtime.
+ * Probe a component's dialog using the shared core resolver
+ * (`resolveEffectiveDialog`): the `sling:resourceSuperType` chain is walked
+ * across `/apps` + `/libs` until a dialog is found (or the chain ends), then
+ * any `aem-dialog-overrides.json` entry for the component applies — a local
+ * `dialogFile` replacement and/or supplementary tabs spliced in. This is the
+ * exact same resolution `aem-to-sanity-schema` uses in `migrate:schema`, so
+ * what the probe shows here is what the migrator will see at runtime.
  */
 async function probeDialogWithChain(
   config: Awaited<ReturnType<typeof resolveConfig>>,
@@ -196,24 +199,48 @@ async function probeDialogWithChain(
     `── Resolving dialog (with supertype chain): ${config.baseUrl}${componentPath} ──`,
   );
 
+  // Same tenant config the schema CLI loads (the probe runs with the tenant
+  // folder as cwd, so the relative default matches). Keyed by resource type
+  // — the loader strips the `/apps/` prefix the same way.
+  const dialogOverridesFile = resolve(
+    process.env.AEM_DIALOG_OVERRIDES_FILE ?? "./aem-dialog-overrides.json",
+  );
+  const dialogOverrides = loadDialogOverrideConfig({ file: dialogOverridesFile });
+  const resourceType = componentPath.replace(/^\/(apps\/)?/, "");
+  const override = dialogOverrides.get(resourceType);
+  if (override) {
+    console.error(`  dialog override:   entry for "${resourceType}" in ${dialogOverridesFile}`);
+  }
+
   // Adapter from the probe's transport (raw fetchInfinityJson) to the
   // (path) => Promise<DialogNode> shape the resolver expects.
   const fetcher = (jcrPath: string): Promise<DialogNode> =>
     fetchInfinityJson({ config, logger }, jcrPath) as Promise<DialogNode>;
 
   try {
-    const { dialog, resolvedPath, chain } = await resolveDialogViaSuperType(
-      componentPath,
-      fetcher,
-    );
+    const { dialog, chain, dialogFileApplied, appliedTabs } =
+      await resolveEffectiveDialog(componentPath, fetcher, {
+        override,
+        warn: (m) => console.error(`  ⚠ ${m}`),
+      });
+    const resolvedPath = chain?.at(-1) ?? componentPath;
     const elapsedMs = Date.now() - opts.start;
     const serialized = JSON.stringify(dialog, null, 2);
     console.error(`✓ Dialog resolved in ${elapsedMs}ms — ${formatBytes(serialized.length)}`);
-    console.error(`  resolved at:       ${resolvedPath}`);
-    if (chain.length > 1) {
+    if (dialogFileApplied) {
+      console.error(`  dialog file:       ${dialogFileApplied} (replaces AEM resolution)`);
+    } else {
+      console.error(`  resolved at:       ${resolvedPath}`);
+    }
+    if (chain && chain.length > 1) {
       console.error(`  supertype chain:   ${chain.join(" → ")}`);
       console.error(
         `  (this is how AEM's runtime resolves dialogs — the schema migrator does the same.)`,
+      );
+    }
+    if (appliedTabs && appliedTabs.length > 0) {
+      console.error(
+        `  supplementary tabs: ${appliedTabs.map((t) => `${t.key} (${t.position})`).join(", ")}`,
       );
     }
     summarizeDialog(dialog as Record<string, unknown>);

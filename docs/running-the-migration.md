@@ -95,6 +95,7 @@ cp tenants/<your-tenant>/.env.example tenants/<your-tenant>/.env
 | `AEM_COMPONENT_HINTS_FILE` | optional | JSON file mapping `sling:resourceType` → `["cq:hintKey", …]`, opting individual components into AEM authoring-hint lifting (e.g. `cq:panelTitle` on accordion children). Default: `./aem-component-hints.json`. Missing file → no hint behavior. See § 1c-quinquies. |
 | `AEM_COMPONENT_NAMES_FILE` | optional | `migrate:schema` only. JSON file mapping `sling:resourceType` → explicit Sanity type name (string) or `{ "name", "title", "folder", "file", "icon" }`, overriding the `MIGRATION_TYPE_NAMING` strategy per component (`name`/`title`), the file's subfolder inside the generated schemas dir (`folder`), its exact basename + export const (`file`, wins over `MIGRATION_TYPE_SUFFIX_MODE=file`), and the Studio icon (`icon`, a `@sanity/icons` export name). Default: `./aem-component-names.json`. Missing file → strategy naming only. Set-once-before-first-import hazard for `name` (not for `folder`/`file`/`icon`, which never change type names), same as `MIGRATION_TYPE_NAMING`. See § 1c-octies. |
 | `AEM_COMPONENT_SLOTS_FILE` | optional | `migrate:schema` only. JSON file declaring per-slot behavior for auto-discovered named slots — currently `visibleWhen` rules that mirror AEM enable-toggles (e.g. promocard's `enablePrimaryButton`) as conditional `hidden` callbacks on the synthesized slot fields. Default: `./aem-component-slots.json`. Missing file → slots stay always visible. See § 2, "Slot discovery". |
+| `AEM_DIALOG_OVERRIDES_FILE` | optional | `migrate:schema` only. JSON file keyed by `sling:resourceType` declaring dialog overrides: `supplementaryTabs` splices Sling-Resource-Merger-inherited tabs (fetched from the given JCR paths) into the resolved dialog at a stated position, and/or `dialogFile` replaces the dialog with a local JSON file entirely. Default: `./aem-dialog-overrides.json`. Missing file → dialogs resolve from AEM as usual. See § 1c-novies. |
 | `AEM_PAGE_COMPONENTS_FILE` | optional | JSON file declaring page-shell components and the `cq:template` paths each is authored under (either listed explicitly via `"templates": [...]` or auto-discovered from extracted content via `"discover": true`). Each (resourceType, template) pair becomes one Sanity document type; the page-shell dialog becomes the doc's `pageProperties` field. Default: `./aem-page-components.json`. Missing file → no per-template docs (every page falls back to the generic `page` type). See § 1c-septies. |
 | `AEM_MAX_RESPONSE_MB` | optional | Cap per-fetch payload size during extract. Pages exceeding this are recorded as `tooLarge` failures. |
 | `MIGRATION_DOC_ID_PREFIX_STRIP` | optional | `aem-transform` only. Path prefix(es) to strip from JCR paths before deriving Sanity document `_id`s. Typical value is the `@base` from `aem-content-roots` (e.g. `/content/uxp/us/en`). Multiple prefixes allowed comma-separated; longest match wins. Without this, `_id`s carry the full path (`content-uxp-us-en-customer-support-plans-...`). With it, you get the page-relative form (`customer-support-plans-...`). Changing this between runs orphans previously imported docs — set once, leave alone. |
@@ -393,6 +394,64 @@ Only what's listed here is migrated. There is no canonical "always skip" set in 
 
 Missing file → `aem-tags` exits 2 with an instruction to create one. Migrations that don't use AEM taxonomy can skip the `tags` stage entirely (the rest of the pipeline doesn't depend on it; `aem-transform` runs without tag resolution and content with `cq:tags` surfaces as unresolved findings instead).
 
+### 1c-novies. Dialog overrides — `tenants/<your-tenant>/aem-dialog-overrides.json`
+
+Consumed by `migrate:schema` (and `scripts/aem-probe.ts`). AEM's runtime resolves authoring dialogs through the **Sling Resource Merger**: a proxy component with its own `cq:dialog` still inherits tabs from ancestor dialogs in its `sling:resourceSuperType` chain. The migrator's resolution is first-hit (see § 2, "Dialog inheritance") — it stops at the first dialog the chain yields — so merged-in tabs are invisible to it. Symptom: the AEM author dialog shows a tab (with real authored fields behind it) that the emitted Sanity type is missing. Example: a proxy accordion defines `content` + `theme` tabs, but authors also see the Core Component's **Properties** tab merged in from `/libs/core/wcm/components/accordion/v1/accordion`.
+
+Rather than reimplementing merger semantics, name the merged pieces explicitly, keyed by `sling:resourceType` (leading `/apps/` accepted and stripped):
+
+```json
+{
+  "uxp/components/proxy/content/accordion": {
+    "supplementaryTabs": [
+      {
+        "path": "/libs/core/wcm/components/accordion/v1/accordion/cq:dialog/content/items/tabs/items/properties",
+        "insertAfter": "theme"
+      }
+    ]
+  },
+  "uxp/components/proxy/content/hero": {
+    "dialogFile": "./dialog-overrides/hero.json"
+  }
+}
+```
+
+Two capabilities, combinable per entry:
+
+- **`supplementaryTabs`** — array of `{path, insertAfter?, insertBefore?, key?}`. Each `path` is the absolute JCR path of a **tab node** (find it in CRXDE, or via `aem-probe --save` against the ancestor component; typically `…/cq:dialog/content/items/tabs/items/<tab>`). The migrator fetches `{path}.infinity.json` with the same transport/auth as every other dialog fetch and splices the node into the resolved dialog's tabs container. Position with `insertAfter` / `insertBefore` (mutually exclusive; the value is the sibling tab's **node name**, e.g. `"theme"` — not its title); omit both to append at the end. `key` sets the spliced node's name (default: last path segment). Entries apply in array order and may anchor on previously spliced keys.
+- **`dialogFile`** — path to a local JSON file (resolved against this config file's directory first, then the working directory) containing the complete `cq:dialog` node — the same shape `_cq_dialog.infinity.json` returns, which is also what `aem-probe --save` writes. Replaces resolution entirely: no embedded-dialog check, no supertype walk. When both capabilities are set, the file is the base and the tabs splice on top.
+
+Behavior notes:
+
+- **Anchor not found** → warn + append at the end (the run proceeds).
+- **Tab key already exists** in the dialog → hard failure for that component (`mappingError`). Merging *into* an existing tab isn't supported — supply the whole dialog via `dialogFile` instead.
+- **No tabs container** in the resolved dialog → hard failure suggesting `dialogFile`. The container is matched by `sling:resourceType` (`granite/ui/components/coral/foundation/tabs`) with a fallback on the node name `tabs` — proxy dialogs routinely omit the resourceType because the merger supplies it at runtime.
+- **Tab path 404s** → hard failure for that component (config typo); other fetch errors (auth, network) classify as usual.
+- **Provenance** — `migration-report.json` records `results[].dialogOverride` (`{file}`) and `results[].supplementaryTabs` (`[{path, key, position}]`); each run also logs an `info` line per override. The dialog snapshot under `output/cache/aem/apps/…` stores the **merged** dialog, not the raw AEM response — keep that in mind when diffing the cache against CRXDE.
+- Missing file → no-op. Malformed JSON or invalid entries → hard error at startup. Entries matching no listed component path are logged and ignored.
+- Like the rest of the dialog surface, overrides change which fields the emitted Sanity type carries — treat entries as part of the schema definition and keep them in place across runs.
+
+Override the path via `AEM_DIALOG_OVERRIDES_FILE`.
+
+#### Ejecting dialogs — `pnpm eject-dialogs`
+
+When you'd rather stop thinking about resolution entirely — supertype walks, merged tabs, datasource servlets — **eject** the effective dialog into a static local file and edit that:
+
+```bash
+cd tenants/<your-tenant>
+pnpm eject-dialogs /apps/<site>/components/proxy/accordion   # one or more components
+pnpm eject-dialogs --all                                     # everything in aem-component-paths
+pnpm eject-dialogs --all --force                             # refresh from AEM (discards hand edits!)
+pnpm eject-dialogs --all --out-dir ./my-dialogs              # custom output folder
+```
+
+For each component the utility runs the exact resolution `migrate:schema` uses (embedded `cq:dialog` / supertype walk / `supplementaryTabs` splicing), **bakes resolvable datasource options in as literal `items`** (ACS generic lists fetched, core policy datasources → their h1–h6 defaults; unresolvable datasources keep their `datasource` node so the report still flags them), writes the result to `./dialog-overrides/<resourceType>.json`, and rewrites the component's `aem-dialog-overrides.json` entry to `{ "dialogFile": … }` (a baked `supplementaryTabs` entry is dropped — keeping it would double-splice).
+
+From then on the file is the component's dialog source of truth: hand-add fields, prune tabs, pin select options, re-run `migrate:schema`. Two things to keep in mind:
+
+- **Ejected dialogs are frozen.** AEM-side dialog changes stop flowing for ejected components until you re-eject with `--force` — which overwrites the file and discards hand edits (diff before re-ejecting). Without `--force`, existing files are always skipped.
+- The `dialog-overrides/` folder is operator-owned (commit it alongside your other tenant config if your tenant folder is tracked).
+
 ### 1d. Resource-type registry — `output/cache/content-type-registry.json`
 
 **Generated** by `migrate:schema`; you don't hand-author it. Maps AEM `sling:resourceType` values to the Sanity type names that stage 1 emitted, plus each field's name + Sanity type (used by the drift auditor and by `aem-transform` for type-aware coercion — e.g. HTML → Portable Text on `array-of-blocks` fields):
@@ -546,7 +605,9 @@ pnpm exec tsx ../../scripts/aem-probe.ts /apps/<site>/components/proxy/foo
 # → Prints the supertype chain + the dialog's top-level form fields.
 ```
 
-The probe uses the same `resolveDialogViaSuperType` helper from `aem-to-sanity-core` that the migrator does, so the probe's output is exactly what the schema run will see.
+The probe uses the same `resolveEffectiveDialog` helper from `aem-to-sanity-core` that the migrator does — including any `aem-dialog-overrides.json` entries — so the probe's output is exactly what the schema run will see.
+
+Note the walk is **first-hit**: AEM's Sling Resource Merger additionally merges tabs from ancestor dialogs into a proxy's own dialog, which the migrator can't see. When the author dialog shows a tab the emitted schema is missing, declare it in `aem-dialog-overrides.json` (§ 1c-novies).
 
 ### Registering new block types between migrations
 

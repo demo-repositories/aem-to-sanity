@@ -6,6 +6,7 @@ export default defineConfig({
     cli: "src/cli.ts",
     "typegen-cli": "src/typegen-cli.ts",
     "pagebuilder-cli": "src/pagebuilder-cli.ts",
+    "eject-dialogs-cli": "src/eject-dialogs-cli.ts",
     sanitize: "src/sanitize.ts",
   },
   format: ["esm"],

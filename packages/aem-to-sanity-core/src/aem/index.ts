@@ -47,3 +47,13 @@ export type {
   DialogResolution,
   ResolveDialogOptions,
 } from "./dialog-resolution.ts";
+export {
+  DialogOverrideError,
+  resolveEffectiveDialog,
+  spliceSupplementaryTabs,
+} from "./dialog-overrides.ts";
+export type {
+  AppliedSupplementaryTab,
+  EffectiveDialogResult,
+  ResolveEffectiveDialogOptions,
+} from "./dialog-overrides.ts";

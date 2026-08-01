@@ -183,7 +183,10 @@ describe("mapDialog: buttongroup", () => {
     );
   });
 
-  it("falls back to a plain string when items come from a datasource", async () => {
+  it("falls back to a plain string when the datasource's generic list can't be fetched", async () => {
+    // Generic-list datasources ARE resolvable (see datasource-options.test.ts);
+    // here the list fetch fails, so the field falls back to a plain string
+    // and the miss is recorded as `datasource-unresolved`.
     const dialog = dialogWith("mobileColumnAlign", {
       name: "./mobilecolumnAlign",
       fieldLabel: "Column vertical alignment:",
@@ -196,9 +199,13 @@ describe("mapDialog: buttongroup", () => {
           "acs-commons/components/utilities/genericlist/datasource",
       },
     } as unknown as DialogNode);
-    const { fields, unmapped } = await mapDialog(dialog, noFetch);
+    const failingFetch = async (): Promise<DialogNode> => {
+      throw new Error("404 not found");
+    };
+    const { fields, unmapped } = await mapDialog(dialog, failingFetch);
 
-    assert.equal(unmapped.length, 0);
+    assert.equal(unmapped.length, 1);
+    assert.equal(unmapped[0]?.reason, "datasource-unresolved");
     assert.equal(fields.length, 1);
     const f = fields[0];
     assert.equal(f.type, "string");

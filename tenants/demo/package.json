@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "migrate:schema": "aem-to-sanity-schema",
+    "eject-dialogs": "aem-eject-dialogs",
     "typegen": "aem-to-sanity-typegen",
     "pagebuilder:refresh": "aem-to-sanity-pagebuilder",
     "extract": "aem-extract",
