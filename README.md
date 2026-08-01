@@ -134,7 +134,7 @@ aem-to-sanity/
 ├── scripts/                           Repo-wide tooling
 │   ├── migrate-init.ts                Scaffold a new tenant from tenants/template/
 │   ├── toolkit-update.ts              Pull toolkit updates into a clone-mode scaffold (merge upstream ref)
-│   ├── aem-probe.ts                   Resolve a single AEM dialog (supertype chain) without running the full migrator
+│   ├── aem-probe.ts                   Resolve a single AEM dialog (supertype chain + dialog overrides) without running the full migrator
 │   └── ensure-studio-stub.ts          Writes a minimal schemas/generated stub so Studio boots on bare clone
 │
 ├── docs/
@@ -164,6 +164,9 @@ Every migration runs from `tenants/<your-tenant>/`. Only `tenants/template/` (th
 | `aem-component-exceptions` | `sling:resourceType` values to skip |
 | `aem-component-containers.json` | Components with drop-zone children (`cq:isContainer=true`) |
 | `aem-component-hints.json` | Components opting into AEM authoring hints (`cq:panelTitle` etc.) |
+| `aem-component-names.json` | Explicit Sanity type name / title / folder / file / icon overrides per component |
+| `aem-component-slots.json` | Visibility rules for auto-discovered named slots (mirror AEM enable-toggles) |
+| `aem-dialog-overrides.json` | Dialog overrides: splice Sling-Resource-Merger-inherited tabs, or point at static local dialog files (generate them with `pnpm eject-dialogs`) |
 | `aem-page-components.json` | Page-shell components + their `cq:template` paths |
 | `output/cache/…` | Per-stage artifacts — gitignored caches, regenerable. See `docs/running-the-migration.md` § 1e for the full tree (`aem/content/`, `aem/apps/`, `clean/`, `categories/`, `assets/`, reports). |
 
@@ -229,8 +232,11 @@ pnpm --filter tenant-<tenant> assets -- --link-only
 # Discard shadowing drafts in the Studio after re-import
 pnpm --filter tenant-<tenant> import -- --discard-drafts
 
-# Probe a single AEM dialog (resolve the supertype chain without running the migrator)
+# Probe a single AEM dialog (resolve the supertype chain + dialog overrides without running the migrator)
 pnpm exec tsx scripts/aem-probe.ts /apps/<site>/components/proxy/foo
+
+# Eject effective dialogs into static hand-editable files (dialog-overrides/)
+pnpm --filter tenant-<tenant> eject-dialogs -- --all
 
 # Validate emitted schemas
 pnpm --filter studio exec sanity schema validate
