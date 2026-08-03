@@ -231,12 +231,14 @@ async function main(): Promise<void> {
   if (declaredPageComponents.size > 0) {
     let templateCount = 0;
     let discoverCount = 0;
+    let nameOverrideCount = 0;
     for (const v of declaredPageComponents.values()) {
       templateCount += v.templates.length;
       if (v.discover) discoverCount++;
+      nameOverrideCount += Object.keys(v.names ?? {}).length;
     }
     logger.info(
-      `Applied ${declaredPageComponents.size} page-component(s) (${templateCount} explicit template${templateCount === 1 ? "" : "s"}${discoverCount > 0 ? `, ${discoverCount} with auto-discover` : ""}) from ${pageComponentsFile}`,
+      `Applied ${declaredPageComponents.size} page-component(s) (${templateCount} explicit template${templateCount === 1 ? "" : "s"}${discoverCount > 0 ? `, ${discoverCount} with auto-discover` : ""}${nameOverrideCount > 0 ? `, ${nameOverrideCount} name override${nameOverrideCount === 1 ? "" : "s"}` : ""}) from ${pageComponentsFile}`,
     );
   }
 
