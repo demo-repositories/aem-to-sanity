@@ -138,4 +138,41 @@ describe("loadPageComponentConfig", () => {
       ).toThrow(/must not be empty/);
     });
   });
+
+  describe("skipProperties", () => {
+    it("loads, trims, and dedupes property names", () => {
+      const config = loadPageComponentConfig({
+        file: configFile({
+          [RT]: {
+            templates: [TEMPLATE],
+            skipProperties: ["pwaOrientation", " disableCache ", "pwaOrientation"],
+          },
+        }),
+      });
+      expect(config.get(RT)?.skipProperties).toEqual(["pwaOrientation", "disableCache"]);
+    });
+
+    it("omits the field entirely when the list is empty", () => {
+      const config = loadPageComponentConfig({
+        file: configFile({ [RT]: { templates: [TEMPLATE], skipProperties: [] } }),
+      });
+      expect(config.get(RT)?.skipProperties).toBeUndefined();
+    });
+
+    it("rejects a non-array value", () => {
+      expect(() =>
+        loadPageComponentConfig({
+          file: configFile({ [RT]: { templates: [TEMPLATE], skipProperties: "pwaOrientation" } }),
+        }),
+      ).toThrow(/must be an array/);
+    });
+
+    it("rejects non-string / empty entries", () => {
+      expect(() =>
+        loadPageComponentConfig({
+          file: configFile({ [RT]: { templates: [TEMPLATE], skipProperties: ["ok", ""] } }),
+        }),
+      ).toThrow(/non-string \/ empty property name/);
+    });
+  });
 });
