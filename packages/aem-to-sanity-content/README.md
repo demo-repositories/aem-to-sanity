@@ -195,6 +195,8 @@ Or, instead of listing every template by hand, let the schema pass discover them
 
 With `discover: true`, `migrate:schema` walks `output/cache/aem/content/` (populated by `aem-extract`) to enumerate every `cq:template` value on matching `jcr:content` nodes — so the doc-type list grows automatically as new templates appear in your AEM content. Explicit `templates` and `discover: true` can coexist (discovered values append to the explicit list, deduplicated).
 
+An optional `"names"` map on the entry (keyed by `cq:template` path; string type name or `{ "name", "title" }`) pins the emitted document `_type` / Studio title instead of the default template-path-derived `<template>Page` name — e.g. `"/conf/.../templates/universal-page": "universalPage"` avoids the doubled `universalPagePage`. The override lands in the `page-templates.json` manifest, so `aem-transform` stamps the same `_type` with no further config. Set-once-before-first-import: renaming later requires re-import with `--recreate-on-type-change`.
+
 `migrate:schema` emits one Sanity document type per (resourceType, template) pair (`planDetailsPage`, `newsArticlePage`, …) and writes an `output/cache/page-templates.json` manifest. `aem-transform` reads that manifest and, for each raw page whose `jcr:content` matches a declared pair, emits a document with:
 
 - `_type` set to the per-template doc type (e.g. `"planDetailsPage"`).

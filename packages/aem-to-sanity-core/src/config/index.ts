@@ -45,5 +45,6 @@ export { loadPageComponentConfig } from "./page-components.ts";
 export type {
   PageComponentConfig,
   PageComponentConfigEntry,
+  TemplatePageNameOverride,
   LoadPageComponentConfigOptions,
 } from "./page-components.ts";

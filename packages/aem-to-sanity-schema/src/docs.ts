@@ -322,6 +322,22 @@ The page-shell \`sling:resourceType\` must also appear in \`aem-component-paths\
 
 The page-shell object itself is automatically excluded from \`pageBuilder.of[]\` — it belongs on \`jcr:content\`, not in the body, so it never appears in the "+ Add" menu.
 
+**Per-template name/title overrides (\`names\`)** — the derived name doubles up when a template path already ends in "-page" (\`.../templates/universal-page\` → \`universalPagePage\`). An entry's optional \`names\` map, keyed by \`cq:template\` path, pins the emitted document type name and/or Studio title — same string-or-object shape as \`aem-component-names.json\`:
+
+\`\`\`json
+{
+  "uxp/components/structure/page": {
+    "discover": true,
+    "names": {
+      "/conf/uxp/settings/wcm/templates/universal-page": { "name": "universalPage", "title": "Universal Page" },
+      "/conf/uxp/settings/wcm/templates/news-article": "newsArticle"
+    }
+  }
+}
+\`\`\`
+
+Explicit names are used verbatim and claim first — another template whose *derived* name would collide takes the usual fallback (\`aem\` prefix / numeric suffix), while an explicit name that is reserved or collides with an emitted component type is a hard error at \`migrate:schema\` time. Keys must match a declared template unless \`discover: true\` is set (a discovered template can be named before it's ever listed). The override flows through the \`page-templates.json\` manifest, so \`aem-transform\` stamps the same \`_type\` — no extra wiring. Like \`aem-component-names.json\`, this is a **set-once-before-first-import** knob: renaming after content is ingested changes every affected doc's \`_type\`, and the re-import needs \`--recreate-on-type-change\` (destroys publish history + drafts of those docs).
+
 **Manifest** — \`migrate:schema\` writes \`output/cache/page-templates.json\` with one entry per pair (\`{pageComponentResourceType, pageComponentSanityType, cqTemplate, sanityType, sanityTitle}\`). \`aem-transform\` reads this manifest to route each raw page to the right \`_type\`.
 
 **Transform** — \`derivePageProperties\` in \`packages/aem-to-sanity-content/src/transform.ts\` lifts every authored value from \`jcr:content\` into \`pageProperties\`, applying the same camelCase rule as ordinary fields and the same coercion pipeline (\`"true"\` → \`true\`, HTML → Portable Text, etc.). \`derivePageFeaturedImage\` moves \`cq:featuredimage/fileReference\` into \`fileReferenceAemPath\` so \`aem-assets\` rewrites it to a Sanity asset ref the same way it does for fileupload widgets. The \`JCR_CONTENT_BOOKKEEPING_KEYS\` denylist drops replication-per-agent, versioning, and ContextHub plumbing that AEM writes onto \`jcr:content\` but which has no Sanity counterpart.

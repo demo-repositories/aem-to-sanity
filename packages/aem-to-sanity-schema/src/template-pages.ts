@@ -120,6 +120,11 @@ export function templatePathToTitle(templatePath: string): string {
  *     fields: [title, slug, tags, pageProperties, featuredImage, cqTemplate, pageBuilder],
  *   })
  *
+ * The type name derives from the template path (`templatePathToTypeName`)
+ * unless the entry's `names` map pins an explicit name/title for the
+ * template — explicit names claim first and are used verbatim; a reserved
+ * or colliding explicit name is a hard error.
+ *
  * The `pageProperties` field type points at the Sanity object emitted for
  * the page-shell component (resolved through `typeNameByResourceType`),
  * which is the same object the schema emitter produces for every other
@@ -172,6 +177,30 @@ export async function writeTemplatePageArtifacts(
   // exist in `typeNameByResourceType` (taken set seed).
   const taken = new Set<string>(typeNameByResourceType.values());
 
+  // Explicit names from `aem-page-components.json` claim first — same
+  // precedence rule `aem-component-names.json` gets for components. A
+  // reserved built-in or a collision with an emitted component type is a
+  // hard error rather than a silent fallback: the operator asked for that
+  // exact `_type`, so anything else would orphan their content.
+  for (const entry of pageComponentsConfig.values()) {
+    if (!entry.names) continue;
+    for (const [template, override] of Object.entries(entry.names)) {
+      const name = override.name;
+      if (name === undefined) continue;
+      if (RESERVED_SANITY_TYPE_NAMES.has(name)) {
+        throw new Error(
+          `template-pages: explicit name "${name}" (for template "${template}") is a reserved Sanity type name — pick a different name in aem-page-components.json`,
+        );
+      }
+      if (taken.has(name)) {
+        throw new Error(
+          `template-pages: explicit name "${name}" (for template "${template}") collides with an already-emitted type of the same name — pick a different name in aem-page-components.json`,
+        );
+      }
+      taken.add(name);
+    }
+  }
+
   for (const [resourceType, entry] of pageComponentsConfig.entries()) {
     const pageComponentSanityType = typeNameByResourceType.get(resourceType);
     if (!pageComponentSanityType) {
@@ -192,28 +221,34 @@ export async function writeTemplatePageArtifacts(
     excludeFromPageBuilder.add(pageComponentSanityType);
 
     for (const cqTemplate of entry.templates) {
+      const override = entry.names?.[cqTemplate];
       let name: string;
-      try {
-        name = templatePathToTypeName(cqTemplate);
-      } catch (err) {
-        logger?.warn(
-          `template-pages: ${(err as Error).message} — skipping.`,
-        );
-        continue;
+      if (override?.name !== undefined) {
+        // Pre-claimed above — reserved/collision already rejected.
+        name = override.name;
+      } else {
+        try {
+          name = templatePathToTypeName(cqTemplate);
+        } catch (err) {
+          logger?.warn(
+            `template-pages: ${(err as Error).message} — skipping.`,
+          );
+          continue;
+        }
+        if (RESERVED_SANITY_TYPE_NAMES.has(name) || taken.has(name)) {
+          name = "aem" + name.charAt(0).toUpperCase() + name.slice(1);
+        }
+        if (taken.has(name)) {
+          const root = name;
+          let suffix = 2;
+          do {
+            name = `${root}${suffix++}`;
+          } while (taken.has(name));
+        }
+        taken.add(name);
       }
-      if (RESERVED_SANITY_TYPE_NAMES.has(name) || taken.has(name)) {
-        name = "aem" + name.charAt(0).toUpperCase() + name.slice(1);
-      }
-      if (taken.has(name)) {
-        const root = name;
-        let suffix = 2;
-        do {
-          name = `${root}${suffix++}`;
-        } while (taken.has(name));
-      }
-      taken.add(name);
 
-      const title = templatePathToTitle(cqTemplate);
+      const title = override?.title ?? templatePathToTitle(cqTemplate);
       const file = join(schemasDir, planner.relPath(name, "document"));
       const wrote = await maybeWriteTemplatePage({
         file,
