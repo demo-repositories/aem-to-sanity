@@ -1,5 +1,56 @@
 # aem-to-sanity-core
 
+## 2.7.0
+
+### Minor Changes
+
+- [#100](https://github.com/demo-repositories/aem-to-sanity/pull/100) [`b047a4a`](https://github.com/demo-repositories/aem-to-sanity/commit/b047a4aba503639edb2e4b85191ba7023dbdfe3d) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Datasource-driven selects, radiogroups, and buttongroups now resolve their options where possible instead of always falling back to a plain field:
+
+  - **ACS Commons generic lists** (`acs-commons/components/utilities/genericlist/datasource`) — options are fetched from the list page named by the datasource's `path` (`{path}/jcr:content/list` children's `jcr:title` + `value`), using the same transport/auth as dialog fetches, memoized per component run. Missing or empty lists fall back as before.
+  - **Core policy datasources** — `allowedheadingelements/v1` and the title component's `allowedtypes` (v1/v2) emit the servlet's no-policy default list (`h1`–`h6`). The template content policy may allow fewer values than offered (policy resolution is per-instance; the migration is per-type) — authored values round-trip either way.
+  - **All other datasources** (project-custom servlets, Scene7 image presets, language lists) still fall back to a plain field, and each fallback is now visible in `migration-report.json → results[].unmapped` with the new reason `datasource-unresolved` and a detail naming the datasource. Restore those dropdowns with `aem-dialog-overrides.json`'s `dialogFile` and literal `items`.
+
+  Operators: no action needed. Re-running `migrate:schema` upgrades affected fields from plain text inputs to dropdowns / toggle groups; authored content is unaffected.
+
+- [#100](https://github.com/demo-repositories/aem-to-sanity/pull/100) [`618dd9a`](https://github.com/demo-repositories/aem-to-sanity/commit/618dd9ab811a94de2246bb62569a025899b82f0d) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - New optional tenant config `aem-dialog-overrides.json` (path override: `AEM_DIALOG_OVERRIDES_FILE`): per-component dialog overrides for `migrate:schema`, the escape hatch for Sling-Resource-Merger dialog inheritance.
+
+  AEM merges dialogs across the whole `sling:resourceSuperType` chain at author time, so a proxy component with its own `cq:dialog` still inherits tabs from ancestor dialogs — tabs the migrator's first-hit resolution never sees (symptom: the AEM author dialog shows a tab the emitted Sanity type is missing). Keyed by `sling:resourceType`, each entry supports:
+
+  - `supplementaryTabs: [{path, insertAfter?, insertBefore?, key?}]` — fetches each tab node from the given absolute JCR path (`{path}.infinity.json`, same transport/auth as other dialog fetches) and splices it into the resolved dialog's tabs container. Position by sibling tab node name; omitted → append. Missing anchor warns and appends; a duplicate tab key, a dialog without a tabs container, or a 404 on the tab path fail the component as `mappingError` (previously such config problems could only surface as `network`).
+  - `dialogFile: "<path>"` — a local JSON file (resolved against the config file's directory, then cwd) holding the complete `cq:dialog` node; replaces dialog resolution entirely. Combinable: the file is the base, tabs splice on top.
+
+  Applied overrides are recorded in `migration-report.json` (`results[].dialogOverride`, `results[].supplementaryTabs`), and the `output/cache/aem/apps/…` snapshot now stores the **merged** dialog rather than the raw AEM response. `scripts/aem-probe.ts` and the audit step apply the same overrides via the new shared `resolveEffectiveDialog` helper in `aem-to-sanity-core`, so probe output stays exactly what the migrator maps.
+
+  Operators: nothing to do unless you need it — missing file is a no-op. To adopt, copy the empty stub from `tenants/template/aem-dialog-overrides.json` (new tenants get it from `migrate:init`; `migrate:doctor` classifies it as operator-owned).
+
+- [#100](https://github.com/demo-repositories/aem-to-sanity/pull/100) [`c8c3bc3`](https://github.com/demo-repositories/aem-to-sanity/commit/c8c3bc31eed723c6fe3fbbae7bd9524ec16d05f9) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - New `aem-eject-dialogs` CLI (tenant script `pnpm eject-dialogs <paths…|--all> [--force] [--out-dir <dir>]`): materializes each component's **effective** dialog into a static, hand-editable file.
+
+  For every requested component it runs the exact resolution `migrate:schema` uses — embedded `cq:dialog`, the `sling:resourceSuperType` walk, and `aem-dialog-overrides.json` `supplementaryTabs` splicing — bakes resolvable datasource options in as literal `items` (ACS generic lists fetched from JCR, core policy datasources → their `h1`–`h6` defaults; unresolvable datasources keep their `datasource` node so the report still flags them), writes the result to `./dialog-overrides/<resourceType>.json`, and rewrites the component's `aem-dialog-overrides.json` entry to `{ "dialogFile": … }` (a baked `supplementaryTabs` entry is dropped to prevent double-splicing; unrelated entries pass through untouched).
+
+  The ejected file becomes the component's dialog source of truth: hand-add fields, prune tabs, pin select options, then re-run `migrate:schema` — no more thinking about resolution order, merger inheritance, or datasource servlets. Trade-off: ejected dialogs are frozen snapshots — AEM-side dialog changes stop flowing until re-ejected with `--force`, which overwrites the file and discards hand edits. Without `--force`, existing files are never touched.
+
+  Operators: opt-in only; nothing changes unless you run it. The tenant template gains the `eject-dialogs` script (`migrate:doctor --fix` propagates it to existing tenants).
+
+- [#102](https://github.com/demo-repositories/aem-to-sanity/pull/102) [`c75cace`](https://github.com/demo-repositories/aem-to-sanity/commit/c75cacee60f738a2211dbcd0af618a98bc2a8b0b) Thanks [@shehjad-noqtaai](https://github.com/shehjad-noqtaai)! - Per-template document type names can now be pinned in `aem-page-components.json` via a new `names` map on each page-shell entry, keyed by `cq:template` path. Values are a type name string or `{ "name", "title" }` — the same shape as `aem-component-names.json`:
+
+  ```json
+  {
+    "uxp/components/structure/page": {
+      "discover": true,
+      "names": {
+        "/conf/uxp/settings/wcm/templates/universal-page": {
+          "name": "universalPage",
+          "title": "Universal Page"
+        }
+      }
+    }
+  }
+  ```
+
+  Without an override the type name still derives from the template path with a `Page` suffix, which doubles up when the template name already ends in "-page" (`universal-page` → `universalPagePage`). Explicit names are used verbatim and claim first; a reserved or colliding explicit name fails `migrate:schema` with a clear error. The override flows through the `page-templates.json` manifest so `aem-transform` stamps the same `_type` automatically.
+
+  Operators: no action needed — existing configs keep their derived names. If you rename a type on an already-imported tenant, re-run `migrate:schema` → `transform` → `import --recreate-on-type-change` (destroys publish history and drafts of the affected page docs).
+
 ## 2.6.0
 
 ### Minor Changes
