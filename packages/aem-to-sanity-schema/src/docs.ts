@@ -338,6 +338,19 @@ The page-shell object itself is automatically excluded from \`pageBuilder.of[]\`
 
 Explicit names are used verbatim and claim first — another template whose *derived* name would collide takes the usual fallback (\`aem\` prefix / numeric suffix), while an explicit name that is reserved or collides with an emitted component type is a hard error at \`migrate:schema\` time. Keys must match a declared template unless \`discover: true\` is set (a discovered template can be named before it's ever listed). The override flows through the \`page-templates.json\` manifest, so \`aem-transform\` stamps the same \`_type\` — no extra wiring. Like \`aem-component-names.json\`, this is a **set-once-before-first-import** knob: renaming after content is ingested changes every affected doc's \`_type\`, and the re-import needs \`--recreate-on-type-change\` (destroys publish history + drafts of those docs).
 
+**Skipping page properties (\`skipProperties\`)** — an entry's optional \`skipProperties\` array names \`jcr:content\` properties the migration should leave behind (tenant bookkeeping, legacy toggles, AEM-only rendering hints). Each listed property is dropped end-to-end:
+
+\`\`\`json
+{
+  "uxp/components/structure/page": {
+    "discover": true,
+    "skipProperties": ["disableCache", "pwaOrientation"]
+  }
+}
+\`\`\`
+
+The schema emitter omits the matching fields from the page-shell's object type (matched after the same camelCase rule dialog \`name\`s get, so \`cq:designPath\` matches the emitted \`cqDesignPath\`), and \`aem-transform\` skips lifting the authored value into \`pageProperties\` (matched on the raw \`jcr:content\` property name, via the manifest). The doc-level carve-outs (\`cq:tags\` → \`tags\`, \`cq:featuredimage\` → \`featuredImage\`, \`cq:template\`) are separate fields and unaffected. Unlike \`names\`, this knob is safe to change between runs — re-running \`migrate:schema\` + \`transform\` + \`import\` adds or removes the fields without renaming any type (values already imported stay on existing docs until re-imported).
+
 **Manifest** — \`migrate:schema\` writes \`output/cache/page-templates.json\` with one entry per pair (\`{pageComponentResourceType, pageComponentSanityType, cqTemplate, sanityType, sanityTitle}\`). \`aem-transform\` reads this manifest to route each raw page to the right \`_type\`.
 
 **Transform** — \`derivePageProperties\` in \`packages/aem-to-sanity-content/src/transform.ts\` lifts every authored value from \`jcr:content\` into \`pageProperties\`, applying the same camelCase rule as ordinary fields and the same coercion pipeline (\`"true"\` → \`true\`, HTML → Portable Text, etc.). \`derivePageFeaturedImage\` moves \`cq:featuredimage/fileReference\` into \`fileReferenceAemPath\` so \`aem-assets\` rewrites it to a Sanity asset ref the same way it does for fileupload widgets. The \`JCR_CONTENT_BOOKKEEPING_KEYS\` denylist drops replication-per-agent, versioning, and ContextHub plumbing that AEM writes onto \`jcr:content\` but which has no Sanity counterpart.

@@ -82,6 +82,24 @@ export interface PageComponentConfigEntry {
    * `--recreate-on-type-change`.
    */
   names?: Readonly<Record<string, TemplatePageNameOverride>>;
+  /**
+   * `jcr:content` property names to leave out of `pageProperties` — for
+   * dialog fields or authored values the migration should not carry over
+   * (tenant bookkeeping, legacy toggles, AEM-only rendering hints).
+   *
+   * Each listed property is dropped end-to-end: the matching field is
+   * omitted from the emitted page-shell object schema (matched after the
+   * same camelCase rule dialog `name`s get), and `aem-transform` skips
+   * lifting the authored value (matched against the raw `jcr:content`
+   * property name). The doc-level carve-outs (`cq:tags` → `tags`,
+   * `cq:featuredimage` → `featuredImage`, `cq:template`) are separate
+   * fields and unaffected.
+   *
+   * Safe to change between runs — re-running `migrate:schema` +
+   * `transform` + `import` adds/removes the fields without renaming any
+   * type. Values already imported stay on existing docs until re-imported.
+   */
+  skipProperties?: ReadonlyArray<string>;
 }
 
 export type PageComponentConfig = Map<string, PageComponentConfigEntry>;
@@ -240,10 +258,33 @@ export function loadPageComponentConfig(
       }
     }
 
+    let skipProperties: string[] | undefined;
+    if (v.skipProperties !== undefined) {
+      if (!Array.isArray(v.skipProperties)) {
+        throw new Error(
+          `page-components config: "skipProperties" for "${resourceType}" must be an array of jcr:content property names`,
+        );
+      }
+      const skipSeen = new Set<string>();
+      skipProperties = [];
+      for (const p of v.skipProperties as unknown[]) {
+        if (typeof p !== "string" || p.trim().length === 0) {
+          throw new Error(
+            `page-components config: "skipProperties" for "${resourceType}" has a non-string / empty property name`,
+          );
+        }
+        const trimmed = p.trim();
+        if (skipSeen.has(trimmed)) continue;
+        skipSeen.add(trimmed);
+        skipProperties.push(trimmed);
+      }
+    }
+
     out.set(resourceType, {
       templates: list,
       ...(discover ? { discover: true } : {}),
       ...(names && Object.keys(names).length > 0 ? { names } : {}),
+      ...(skipProperties && skipProperties.length > 0 ? { skipProperties } : {}),
     });
   }
   return out;

@@ -26,6 +26,12 @@ export interface TemplatePageManifestEntry {
   sanityType: string;
   /** Studio-facing title for the document type. */
   sanityTitle: string;
+  /**
+   * Raw `jcr:content` property names `aem-transform` must NOT lift into
+   * `pageProperties` (operator-declared via `aem-page-components.json`
+   * `skipProperties`). Omitted when the entry declares none.
+   */
+  skipProperties?: string[];
 }
 
 export interface TemplatePageManifest {
@@ -266,6 +272,9 @@ export async function writeTemplatePageArtifacts(
         cqTemplate,
         sanityType: name,
         sanityTitle: title,
+        ...(entry.skipProperties && entry.skipProperties.length > 0
+          ? { skipProperties: [...entry.skipProperties] }
+          : {}),
       });
     }
   }

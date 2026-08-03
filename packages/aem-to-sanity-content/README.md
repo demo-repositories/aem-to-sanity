@@ -197,6 +197,8 @@ With `discover: true`, `migrate:schema` walks `output/cache/aem/content/` (popul
 
 An optional `"names"` map on the entry (keyed by `cq:template` path; string type name or `{ "name", "title" }`) pins the emitted document `_type` / Studio title instead of the default template-path-derived `<template>Page` name — e.g. `"/conf/.../templates/universal-page": "universalPage"` avoids the doubled `universalPagePage`. The override lands in the `page-templates.json` manifest, so `aem-transform` stamps the same `_type` with no further config. Set-once-before-first-import: renaming later requires re-import with `--recreate-on-type-change`.
 
+An optional `"skipProperties"` array on the entry names raw `jcr:content` properties to leave behind: `aem-transform` never lifts them into `pageProperties` (the list rides the manifest), and the schema side omits the matching fields from the page-shell object, so the ingested doc and the Studio form stay in agreement. The doc-level carve-outs (`cq:tags` → `tags`, `cq:featuredimage` → `featuredImage`, `cq:template`) are unaffected. Safe to change between runs.
+
 `migrate:schema` emits one Sanity document type per (resourceType, template) pair (`planDetailsPage`, `newsArticlePage`, …) and writes an `output/cache/page-templates.json` manifest. `aem-transform` reads that manifest and, for each raw page whose `jcr:content` matches a declared pair, emits a document with:
 
 - `_type` set to the per-template doc type (e.g. `"planDetailsPage"`).

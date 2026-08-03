@@ -571,6 +571,24 @@ export async function migrateSchemas(
   // shell" says nothing about whether the type belongs in the page builder.
   const synthesizedSlotChildTypes = new Set<string>();
 
+  // Page-shell `skipProperties` → emitted field names. The transform matches
+  // raw `jcr:content` property names; the schema side matches the mapper's
+  // camelCased dialog field names, so both spellings of the same property
+  // resolve to the same skip.
+  const skipFieldNamesByResourceType = new Map<string, ReadonlySet<string>>();
+  if (pageComponents) {
+    for (const [rt, entry] of pageComponents.entries()) {
+      if (!entry.skipProperties || entry.skipProperties.length === 0) continue;
+      const fieldNames = new Set<string>();
+      for (const prop of entry.skipProperties) {
+        fieldNames.add(prop);
+        const camel = toCamelCase(prop);
+        if (camel) fieldNames.add(camel);
+      }
+      skipFieldNamesByResourceType.set(rt, fieldNames);
+    }
+  }
+
   await runWithConcurrency(
     componentPaths,
     (p) => {
@@ -592,6 +610,7 @@ export async function migrateSchemas(
         pageBuilderName,
         prefetchedComponentNode: prefetchedNodes.get(p),
         containerEntry: containers.get(rt),
+        skipFieldNames: skipFieldNamesByResourceType.get(rt),
         slotMap: discoveredSlots.get(rt),
         slotVisibility: slotVisibility.get(rt),
         slotChildTypeSink: pageComponents?.has(rt)
@@ -852,6 +871,12 @@ interface ProcessOneDeps {
   prefetchedComponentNode?: DialogNode;
   /** Container behavior opted in for this component (via `containers` config). */
   containerEntry?: { childrenField: string };
+  /**
+   * Emitted field names to drop from this component's schema — page-shell
+   * `skipProperties` from `aem-page-components.json`, camelCased to match
+   * the mapper's field naming. Only set for page-shell components.
+   */
+  skipFieldNames?: ReadonlySet<string>;
   /** Discovered named-slot keys for this resource type → set of child resource types. */
   slotMap?: Map<string, { childTypes: Map<string, unknown> }>;
   /** Per-slot config (visibility rules) for this resource type, keyed by emitted field name. */
@@ -1011,6 +1036,21 @@ async function processOne(
       message: (err as Error).message,
     });
     return { authFailure: false, success: false };
+  }
+
+  // Page-shell `skipProperties`: drop operator-skipped fields before any
+  // downstream consumer sees them (schema file, content registry, typegen)
+  // so the Studio form and the ingested `pageProperties` stay in agreement.
+  if (deps.skipFieldNames && deps.skipFieldNames.size > 0) {
+    const dropped = mapped.fields.filter((f) => deps.skipFieldNames!.has(f.name));
+    if (dropped.length > 0) {
+      mapped.fields = mapped.fields.filter((f) => !deps.skipFieldNames!.has(f.name));
+      deps.logger?.info(
+        `${componentPath}: skipping ${dropped.length} page-property field(s) per aem-page-components.json skipProperties — ${dropped
+          .map((f) => f.name)
+          .join(", ")}`,
+      );
+    }
   }
 
   if (deps.containerEntry) {

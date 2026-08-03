@@ -146,6 +146,13 @@ interface PageTemplateManifestEntry {
   cqTemplate: string;
   sanityType: string;
   sanityTitle: string;
+  /**
+   * Raw `jcr:content` property names the operator excluded via
+   * `aem-page-components.json` `skipProperties` — never lifted into
+   * `pageProperties`. The schema side omits the matching fields, so
+   * skipping here keeps the ingested doc aligned with the Studio form.
+   */
+  skipProperties?: string[];
 }
 
 const JCR_METADATA = new Set<string>([
@@ -1908,9 +1915,16 @@ function derivePageProperties(
   pageComponentResourceType: string,
   ctx: TransformContext,
   jcrPath: string,
+  skipProperties?: readonly string[],
 ): Record<string, unknown> | undefined {
+  const skip = skipProperties && skipProperties.length > 0 ? new Set(skipProperties) : undefined;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(content)) {
+    // Operator-declared skips (`aem-page-components.json` skipProperties) —
+    // matched on the raw jcr:content property name, before every other rule,
+    // so the value is dropped silently rather than surfacing as an unknown
+    // field in the Studio.
+    if (skip?.has(key)) continue;
     if (JCR_METADATA.has(key) || AEM_DIALOG_RUNTIME_KEYS.has(key)) continue;
     if (JCR_CONTENT_BOOKKEEPING_KEYS.has(key)) continue;
     // Carve-outs: `root` is the page body (handled separately), and these
@@ -1989,6 +2003,15 @@ function loadPageTemplatesManifest(
       typeof e.sanityType !== "string"
     ) {
       continue;
+    }
+    // Defensive: the manifest is regenerable but also greppable/hand-editable;
+    // a malformed skip list should degrade to "skip nothing", not crash.
+    if (
+      e.skipProperties !== undefined &&
+      (!Array.isArray(e.skipProperties) ||
+        e.skipProperties.some((p) => typeof p !== "string"))
+    ) {
+      delete e.skipProperties;
     }
     let inner = out.get(e.pageComponentResourceType);
     if (!inner) {
@@ -2204,6 +2227,7 @@ function main(): void {
         templateMatch.pageComponentResourceType,
         ctx,
         jcrPath,
+        templateMatch.skipProperties,
       );
       if (pageProperties) pageDoc.pageProperties = pageProperties;
       const featuredImage = derivePageFeaturedImage(contentNode);
