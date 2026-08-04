@@ -3,6 +3,7 @@ import { readFile, readdir, rmdir, unlink } from "node:fs/promises";
 import {
   AEM_AUTHORING_HINTS,
   AemFetchError,
+  DIALOG_OVERRIDE_WILDCARD,
   DialogOverrideError,
   aemCacheAppsFile,
   normalizeSlotBase,
@@ -16,8 +17,10 @@ import {
   type DialogNode,
   type DialogOverrideConfig,
   type DialogOverrideEntry,
+  type FieldOverride,
   type Logger,
   type PageComponentConfig,
+  type PreviewOverride,
   type SchemaLayout,
   type SlotConfig,
   type SlotConfigEntry,
@@ -398,6 +401,7 @@ export async function migrateSchemas(
   const folderOverrideByPath = new Map<string, string>();
   const fileOverrideByPath = new Map<string, string>();
   const iconOverrideByPath = new Map<string, string>();
+  const previewOverrideByPath = new Map<string, PreviewOverride>();
   if (componentNames.size > 0) {
     const pathByResourceType = new Map<string, string>();
     for (const p of componentPaths) {
@@ -416,6 +420,7 @@ export async function migrateSchemas(
       if (override.folder) folderOverrideByPath.set(p, override.folder);
       if (override.file) fileOverrideByPath.set(p, override.file);
       if (override.icon) iconOverrideByPath.set(p, override.icon);
+      if (override.preview) previewOverrideByPath.set(p, override.preview);
     }
   }
 
@@ -426,12 +431,19 @@ export async function migrateSchemas(
   // component-names above.
   const dialogOverrides = opts.dialogOverrides ?? new Map<string, DialogOverrideEntry>();
   const dialogOverrideByPath = new Map<string, DialogOverrideEntry>();
+  // The "*" entry's fieldOverrides apply to every listed component —
+  // per-component entries win per field name. Useful for shared tabs (e.g.
+  // a permissions tab spliced onto many components) whose fields all need
+  // the same Studio tweaks.
+  const wildcardFieldOverrides =
+    dialogOverrides.get(DIALOG_OVERRIDE_WILDCARD)?.fieldOverrides;
   if (dialogOverrides.size > 0) {
     const pathByResourceType = new Map<string, string>();
     for (const p of componentPaths) {
       pathByResourceType.set(resourceTypeFromPath(p, effectiveJcrPrefix), p);
     }
     for (const [rt, entry] of dialogOverrides) {
+      if (rt === DIALOG_OVERRIDE_WILDCARD) continue;
       const p = pathByResourceType.get(rt);
       if (!p) {
         logger?.warn(
@@ -442,6 +454,11 @@ export async function migrateSchemas(
       dialogOverrideByPath.set(p, entry);
     }
   }
+  const effectiveFieldOverrides = (p: string): Record<string, FieldOverride> | undefined => {
+    const own = dialogOverrideByPath.get(p)?.fieldOverrides;
+    if (!wildcardFieldOverrides) return own;
+    return { ...wildcardFieldOverrides, ...own };
+  };
 
   // Resolve every component path to its final Sanity type name up front. This
   // is the single source of truth for naming across every downstream artifact
@@ -589,6 +606,8 @@ export async function migrateSchemas(
         titleOverride: titleOverrideByPath.get(p),
         icon: iconOverrideByPath.get(p),
         dialogOverride: dialogOverrideByPath.get(p),
+        fieldOverrides: effectiveFieldOverrides(p),
+        previewOverride: previewOverrideByPath.get(p),
         pageBuilderName,
         prefetchedComponentNode: prefetchedNodes.get(p),
         containerEntry: containers.get(rt),
@@ -843,6 +862,14 @@ interface ProcessOneDeps {
    * a full local-dialog replacement and/or supplementary tabs to splice in.
    */
   dialogOverride?: DialogOverrideEntry;
+  /**
+   * Per-field Studio tweaks (`fieldOverrides` from
+   * `aem-dialog-overrides.json`), already merged with the `"*"` wildcard
+   * entry — applied to the mapped fields after dialog mapping.
+   */
+  fieldOverrides?: Readonly<Record<string, FieldOverride>>;
+  /** Studio preview overrides from `aem-component-names.json` for this component. */
+  previewOverride?: PreviewOverride;
   /** Page-builder array type name container drop-zones reference. */
   pageBuilderName: string;
   /**
@@ -1011,6 +1038,32 @@ async function processOne(
       message: (err as Error).message,
     });
     return { authFailure: false, success: false };
+  }
+
+  // `fieldOverrides` from aem-dialog-overrides.json (wildcard already
+  // merged in): per-field Studio tweaks the AEM dialog can't express.
+  // Applied before container/slot synthesis so the overrides only ever
+  // target dialog-mapped fields. A name that matches nothing is silently
+  // fine for the wildcard (most components won't carry every shared
+  // field) — only worth a debug-level trace, not a warning.
+  if (deps.fieldOverrides) {
+    const applied: string[] = [];
+    for (const [fieldName, ov] of Object.entries(deps.fieldOverrides)) {
+      const field = mapped.fields.find((f) => f.name === fieldName);
+      if (!field) continue;
+      if (ov.readOnly !== undefined) field.readOnly = ov.readOnly;
+      if (ov.initialValue === "uuid") {
+        field.initialValueUuid = true;
+      } else if (ov.initialValue !== undefined) {
+        (field as { initialValue?: unknown }).initialValue = ov.initialValue;
+      }
+      applied.push(fieldName);
+    }
+    if (applied.length > 0) {
+      deps.logger?.info(
+        `${componentPath}: applied fieldOverrides to ${applied.join(", ")}`,
+      );
+    }
   }
 
   if (deps.containerEntry) {
@@ -1218,6 +1271,7 @@ async function processOne(
       fieldsets: mapped.fieldsets,
       schemaTitle,
       icon: deps.icon,
+      previewOverride: deps.previewOverride,
       regenerateCommand,
     });
   } catch (err) {

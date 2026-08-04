@@ -84,7 +84,7 @@ describe("loadDialogOverrideConfig", () => {
   it("rejects an entry with neither capability", () => {
     const file = configFile({ "uxp/components/foo": {} });
     expect(() => loadDialogOverrideConfig({ file })).toThrow(
-      /needs "dialogFile" and\/or "supplementaryTabs"/,
+      /needs "dialogFile", "supplementaryTabs", and\/or "fieldOverrides"/,
     );
   });
 
@@ -194,5 +194,93 @@ describe("loadDialogOverrideConfig", () => {
     const entry = config.get("uxp/components/hero");
     expect(entry?.dialog).toEqual({ content: {} });
     expect(entry?.supplementaryTabs).toHaveLength(1);
+  });
+
+  describe("fieldOverrides", () => {
+    it("accepts readOnly + the uuid initialValue sentinel", () => {
+      const config = loadDialogOverrideConfig({
+        file: configFile({
+          "uxp/components/accordion": {
+            fieldOverrides: {
+              componentId: { readOnly: true, initialValue: "uuid" },
+            },
+          },
+        }),
+      });
+      expect(config.get("uxp/components/accordion")?.fieldOverrides).toEqual({
+        componentId: { readOnly: true, initialValue: "uuid" },
+      });
+    });
+
+    it("accepts JSON-literal initialValues", () => {
+      const config = loadDialogOverrideConfig({
+        file: configFile({
+          "uxp/components/accordion": {
+            fieldOverrides: { headingElement: { initialValue: "h3" } },
+          },
+        }),
+      });
+      expect(
+        config.get("uxp/components/accordion")?.fieldOverrides?.headingElement,
+      ).toEqual({ initialValue: "h3" });
+    });
+
+    it("accepts a '*' wildcard entry carrying only fieldOverrides", () => {
+      const config = loadDialogOverrideConfig({
+        file: configFile({
+          "*": { fieldOverrides: { componentId: { readOnly: true } } },
+        }),
+      });
+      expect(config.get("*")?.fieldOverrides).toEqual({
+        componentId: { readOnly: true },
+      });
+    });
+
+    it("rejects a '*' entry with dialogFile or supplementaryTabs", () => {
+      expect(() =>
+        loadDialogOverrideConfig({
+          file: configFile({
+            "*": {
+              fieldOverrides: { componentId: { readOnly: true } },
+              supplementaryTabs: [{ path: TAB_PATH }],
+            },
+          }),
+        }),
+      ).toThrow(/may only carry "fieldOverrides"/);
+    });
+
+    it("rejects a non-boolean readOnly", () => {
+      expect(() =>
+        loadDialogOverrideConfig({
+          file: configFile({
+            "uxp/components/accordion": {
+              fieldOverrides: { componentId: { readOnly: "yes" } },
+            },
+          }),
+        }),
+      ).toThrow(/"readOnly" for field "componentId".*must be a boolean/);
+    });
+
+    it("rejects an empty override object", () => {
+      expect(() =>
+        loadDialogOverrideConfig({
+          file: configFile({
+            "uxp/components/accordion": { fieldOverrides: { componentId: {} } },
+          }),
+        }),
+      ).toThrow(/needs "readOnly" and\/or "initialValue"/);
+    });
+
+    it("rejects a non-identifier field name key", () => {
+      expect(() =>
+        loadDialogOverrideConfig({
+          file: configFile({
+            "uxp/components/accordion": {
+              fieldOverrides: { "./componentId": { readOnly: true } },
+            },
+          }),
+        }),
+      ).toThrow(/not a valid field name/);
+    });
   });
 });

@@ -42,9 +42,32 @@ import { readFileSync } from "node:fs";
  * structure lists. Safe to change between runs — icons never touch type
  * names or ingested content.
  *
+ * Entries may also carry a `preview` — overrides for the generated type's
+ * Studio preview (`{ "title", "subtitle", "media", "count" }`, all
+ * optional). `title` / `subtitle` / `media` are Sanity preview select
+ * paths (dot notation allowed, e.g. `"items.0.title"`); `count` names a
+ * top-level array field whose length is appended to the row title
+ * (`"Accordion (3 items)"`). Unset slots keep the emitter's defaults
+ * (static component title, subtitle/media heuristics). Safe to change
+ * between runs — previews never touch type names or ingested content.
+ *
  * Override the file path via the `AEM_COMPONENT_NAMES_FILE` env var
  * (default `./aem-component-names.json`).
  */
+export interface PreviewOverride {
+  /** Preview select path for the row title; falls back to the static component title when the value is empty. */
+  title?: string;
+  /** Preview select path for the row subtitle; replaces the heuristic pick. */
+  subtitle?: string;
+  /** Preview select path for the row media; replaces the heuristic pick. */
+  media?: string;
+  /**
+   * Top-level array field whose length is appended to the row title, e.g.
+   * `"count": "items"` → `"Accordion (3 items)"`. Plain field name, no dots.
+   */
+  count?: string;
+}
+
 export interface ComponentNameOverride {
   /** Sanity type name to emit (letters/digits/underscore, must start with a letter). */
   name?: string;
@@ -64,6 +87,8 @@ export interface ComponentNameOverride {
    * (`@sanity/icons/Controls`).
    */
   icon?: string;
+  /** Studio preview overrides for the generated type (title/subtitle/media select paths + item count). */
+  preview?: PreviewOverride;
 }
 
 export type ComponentNameConfig = Map<string, ComponentNameOverride>;
@@ -89,9 +114,52 @@ const VALID_FOLDER = /^[A-Za-z][A-Za-z0-9_-]*$/;
  */
 const VALID_ICON_NAME = /^[A-Z][A-Za-z0-9]*Icon$/;
 
+/**
+ * Sanity preview `select` paths — dot-separated segments so nested picks
+ * like `items.0.title` work. Lands verbatim in the generated `select`
+ * block, so shape is enforced at load.
+ */
+const VALID_SELECT_PATH = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$/;
+
 export interface LoadComponentNameConfigOptions {
   /** Absolute or relative path. Missing file → empty config. */
   file: string;
+}
+
+function validatePreviewOverride(value: unknown, rawKey: string): PreviewOverride {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(
+      `component-name config: "preview" for "${rawKey}" must be an object with "title" / "subtitle" / "media" / "count"`,
+    );
+  }
+  const { title, subtitle, media, count } = value as Record<string, unknown>;
+  for (const [prop, v] of [
+    ["title", title],
+    ["subtitle", subtitle],
+    ["media", media],
+  ] as const) {
+    if (v !== undefined && (typeof v !== "string" || !VALID_SELECT_PATH.test(v))) {
+      throw new Error(
+        `component-name config: preview "${prop}" for "${rawKey}" must be a Sanity select path (dot-separated identifiers, e.g. "items.0.title")`,
+      );
+    }
+  }
+  if (count !== undefined && (typeof count !== "string" || !VALID_TYPE_NAME.test(count))) {
+    throw new Error(
+      `component-name config: preview "count" for "${rawKey}" must be a plain top-level array field name (no dots)`,
+    );
+  }
+  if (title === undefined && subtitle === undefined && media === undefined && count === undefined) {
+    throw new Error(
+      `component-name config: "preview" for "${rawKey}" needs at least one of "title" / "subtitle" / "media" / "count"`,
+    );
+  }
+  return {
+    ...(title !== undefined ? { title: title as string } : {}),
+    ...(subtitle !== undefined ? { subtitle: subtitle as string } : {}),
+    ...(media !== undefined ? { media: media as string } : {}),
+    ...(count !== undefined ? { count: count as string } : {}),
+  };
 }
 
 function normalizeKey(key: string): string {
@@ -149,7 +217,7 @@ export function loadComponentNameConfig(
     if (typeof value === "string") {
       override = { name: value };
     } else if (value && typeof value === "object" && !Array.isArray(value)) {
-      const { name, title, folder, file, icon } = value as Record<string, unknown>;
+      const { name, title, folder, file, icon, preview } = value as Record<string, unknown>;
       if (name !== undefined && typeof name !== "string") {
         throw new Error(
           `component-name config: "name" for "${rawKey}" must be a string`,
@@ -180,22 +248,26 @@ export function loadComponentNameConfig(
         title === undefined &&
         folder === undefined &&
         file === undefined &&
-        icon === undefined
+        icon === undefined &&
+        preview === undefined
       ) {
         throw new Error(
-          `component-name config: entry for "${rawKey}" needs "name", "title", "folder", "file", and/or "icon"`,
+          `component-name config: entry for "${rawKey}" needs "name", "title", "folder", "file", "icon", and/or "preview"`,
         );
       }
+      const parsedPreview =
+        preview !== undefined ? validatePreviewOverride(preview, rawKey) : undefined;
       override = {
         ...(name !== undefined ? { name } : {}),
         ...(title !== undefined ? { title } : {}),
         ...(folder !== undefined ? { folder } : {}),
         ...(file !== undefined ? { file } : {}),
         ...(icon !== undefined ? { icon } : {}),
+        ...(parsedPreview !== undefined ? { preview: parsedPreview } : {}),
       };
     } else {
       throw new Error(
-        `component-name config: entry for "${rawKey}" must be a string type name or an object with "name" / "title" / "folder" / "file" / "icon"`,
+        `component-name config: entry for "${rawKey}" must be a string type name or an object with "name" / "title" / "folder" / "file" / "icon" / "preview"`,
       );
     }
 

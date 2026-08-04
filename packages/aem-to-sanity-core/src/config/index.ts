@@ -16,6 +16,7 @@ export { loadComponentNameConfig } from "./component-names.ts";
 export type {
   ComponentNameConfig,
   ComponentNameOverride,
+  PreviewOverride,
   LoadComponentNameConfigOptions,
 } from "./component-names.ts";
 export {
@@ -34,10 +35,11 @@ export type {
   SlotVisibleWhen,
   LoadSlotConfigOptions,
 } from "./slots.ts";
-export { loadDialogOverrideConfig } from "./dialog-overrides.ts";
+export { loadDialogOverrideConfig, DIALOG_OVERRIDE_WILDCARD } from "./dialog-overrides.ts";
 export type {
   DialogOverrideConfig,
   DialogOverrideEntry,
+  FieldOverride,
   SupplementaryTab,
   LoadDialogOverrideConfigOptions,
 } from "./dialog-overrides.ts";
