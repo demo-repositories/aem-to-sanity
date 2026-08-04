@@ -214,6 +214,7 @@ The `npm create` scaffolder. Default: a thin standalone project (config + Studio
 | [`docs/running-the-migration.md`](docs/running-the-migration.md) | Operator's runbook — every env var, every flag, per-stage outputs, troubleshooting. |
 | [`docs/aem-to-sanity-mapping.md`](docs/aem-to-sanity-mapping.md) | Auto-generated field-level mapping (AEM Granite UI ↔ Sanity types). |
 | [`docs/releasing.md`](docs/releasing.md) | Versioning & releases — how to pin a release, how to ship one. |
+| [`docs/developer-onboarding.md`](docs/developer-onboarding.md) | Maintainer onboarding — repo mental model + the AEM domain knowledge encoded in the code. |
 | Per-package READMEs | API contracts, flag tables, output shapes for each runtime package. |
 | [`CLAUDE.md`](CLAUDE.md) | Project conventions for AI assistants (and a useful map for new contributors). |
 

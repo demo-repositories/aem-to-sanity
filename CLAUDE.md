@@ -2,6 +2,19 @@
 
 Project-level guidance for AI assistants (Claude Code, and any compatible tool) working in this repo. Auto-loaded into context for every session.
 
+## Scoped rules in `.claude/rules/`
+
+Deep-dive rules live in `.claude/rules/*.md`. `migration-principles.md` always loads; the rest carry `paths:` frontmatter and load automatically when the matching files are read (Claude Code ≥ 2.1.198). Tools without rules support should read the matching rule file before modifying that area:
+
+- `.claude/rules/tenant-config-files.md` — `tenants/**`, config loaders (all the `aem-*.json` operator knobs)
+- `.claude/rules/containers-and-fragments.md` — container flatten/document modes, depth budget
+- `.claude/rules/dialog-resolution-and-overrides.md` — supertype walk, `aem-dialog-overrides.json`, `aem-eject-dialogs`
+- `.claude/rules/type-naming-and-emission.md` — naming strategies, suffix modes, icons, previews
+- `.claude/rules/transform-and-import.md` — coercion, doc ids, drop-lists, import invariants
+- `.claude/rules/schema-pipeline-internals.md` — mapping table, slots, audit, report, generated-file lifecycle
+
+Keep a rule in sync when you change the behavior it describes — stale rules steer future sessions wrong.
+
 ## Keep docs refreshed as we go
 
 Every user-facing change must update its documentation in the same commit. Drifting docs hide real changes from operators and break the "read the docs, run the pipeline" flow.
@@ -12,6 +25,7 @@ Every user-facing change must update its documentation in the same commit. Drift
 - `docs/running-the-migration.md` — canonical operator's guide (env vars table, per-stage flag tables, troubleshooting).
 - `docs/updating.md` — the update walkthrough for scaffolded projects; keep in sync when `toolkit:update`, `studio:sync`, `migrate:doctor`, or the scaffolder's git behavior changes.
 - `docs/overview.md` — architecture + layout.
+- `docs/developer-onboarding.md` — maintainer onboarding (repo mental model + hardcoded AEM domain knowledge); update when pipeline stages, dialog resolution, container modes, or the config surface change shape.
 - `docs/aem-to-sanity-mapping.md` — **auto-generated** by `packages/aem-to-sanity-schema/src/docs.ts`. Do not edit by hand; regenerate.
 - `tenants/template/.env.example` — must list every env var a CLI reads. `tenants/template/` is the **committed template**; operator working copies live at `tenants/<their-tenant>/` and are gitignored.
 
@@ -97,7 +111,7 @@ AEM's JCR is schemaless on dialog inputs — `.infinity.json` serializes every a
 **Dialog-runtime metadata.** AEM writes bookkeeping sidecars next to authored fields (e.g. `textIsRich: "true"` beside richtext values). These have no Sanity counterpart and would surface as "Unknown field found" warnings if not dropped. Maintained as a narrow allowlist (`AEM_DIALOG_RUNTIME_KEYS` in `transform.ts`) — add new leaks there as they appear; never substitute a blanket heuristic.
 
 **When adding a new coerced type:**
-1. Extend `coerceScalarFields` (or `coerceRichTextFields` if shape-heavy) in `packages/aem-to-sanity-content/src/transform.ts`.
+1. Extend `coerceFieldTypes` in `packages/aem-to-sanity-content/src/transform.ts` (HTML/shape-heavy conversions live in `portable-text.ts`).
 2. Keep the **keep-original-on-failure** contract. Unrecognized values should surface as Studio validation errors, not silent data loss.
 3. Document it in the generated mapping doc — add prose under the "Type-aware coercion at transform" section in `packages/aem-to-sanity-schema/src/docs.ts`, then regenerate `docs/aem-to-sanity-mapping.md`.
 4. Update the mirror blurbs in `packages/aem-to-sanity-content/README.md` and `docs/running-the-migration.md` § 4b.
