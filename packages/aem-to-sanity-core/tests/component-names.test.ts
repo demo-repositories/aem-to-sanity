@@ -56,7 +56,7 @@ describe("loadComponentNameConfig", () => {
   it("rejects empty entries", () => {
     expect(() =>
       loadComponentNameConfig({ file: configFile({ "a/b/c": {} }) }),
-    ).toThrow(/needs "name", "title", "folder", "file", and\/or "icon"/);
+    ).toThrow(/needs "name", "title", "folder", "file", "icon", and\/or "preview"/);
   });
 
   it("accepts icon overrides, including icon-only entries", () => {
@@ -141,5 +141,53 @@ describe("loadComponentNameConfig", () => {
         file: configFile({ "/apps/a/b/c": "x", "a/b/c": "y" }),
       }),
     ).toThrow(/duplicates an earlier entry/);
+  });
+
+  describe("preview overrides", () => {
+    it("accepts select paths and a count field", () => {
+      const config = loadComponentNameConfig({
+        file: configFile({
+          "a/b/accordion": {
+            preview: { title: "heading", subtitle: "items.0.title", count: "items" },
+          },
+        }),
+      });
+      expect(config.get("a/b/accordion")?.preview).toEqual({
+        title: "heading",
+        subtitle: "items.0.title",
+        count: "items",
+      });
+    });
+
+    it("accepts a preview-only entry", () => {
+      const config = loadComponentNameConfig({
+        file: configFile({ "a/b/c": { preview: { count: "items" } } }),
+      });
+      expect(config.get("a/b/c")?.preview).toEqual({ count: "items" });
+    });
+
+    it("rejects an invalid select path", () => {
+      for (const bad of ["items..title", ".title", "items[0].title", "a b"]) {
+        expect(() =>
+          loadComponentNameConfig({
+            file: configFile({ "a/b/c": { preview: { subtitle: bad } } }),
+          }),
+        ).toThrow(/must be a Sanity select path/);
+      }
+    });
+
+    it("rejects a dotted count", () => {
+      expect(() =>
+        loadComponentNameConfig({
+          file: configFile({ "a/b/c": { preview: { count: "items.0" } } }),
+        }),
+      ).toThrow(/plain top-level array field name/);
+    });
+
+    it("rejects an empty preview object", () => {
+      expect(() =>
+        loadComponentNameConfig({ file: configFile({ "a/b/c": { preview: {} } }) }),
+      ).toThrow(/needs at least one of/);
+    });
   });
 });

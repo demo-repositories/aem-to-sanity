@@ -153,6 +153,19 @@ export interface CommonFieldProps {
   required?: boolean;
   group?: string;
   fieldset?: string;
+  /**
+   * Lock the field's Studio input. Set by the mapper for migration
+   * bookkeeping fields (e.g. `*AemPath` traces) and by
+   * `aem-dialog-overrides.json` `fieldOverrides`.
+   */
+  readOnly?: boolean;
+  /**
+   * Emit `initialValue: () => crypto.randomUUID()` — Studio-created
+   * instances get a fresh UUID (migrated content keeps authored values).
+   * Set only via `fieldOverrides` (`"initialValue": "uuid"`); wins over any
+   * dialog-declared default.
+   */
+  initialValueUuid?: boolean;
   /** Resolved ACS show/hide visibility conditions (ANDed) → emitted `hidden` callback. */
   hiddenConditions?: ShowHideCondition[];
   /**
@@ -174,8 +187,6 @@ export interface CommonFieldProps {
 interface StringField {
   type: "string";
   initialValue?: string;
-  /** Read-only string (e.g. migrated AEM DAM path alongside an asset field). */
-  readOnly?: boolean;
   options?: {
     list?: Array<{ title: string; value: string }>;
     layout?: "radio";

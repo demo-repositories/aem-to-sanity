@@ -30,7 +30,7 @@ import type { DialogNode } from "../aem/dialog-types.ts";
  * }
  * ```
  *
- * Two capabilities, combinable per entry:
+ * Three capabilities, combinable per entry:
  *
  * - `supplementaryTabs` — tab nodes to fetch from AEM (each `path` is an
  *   absolute JCR path, fetched as `${path}.infinity.json`) and splice into
@@ -39,6 +39,27 @@ import type { DialogNode } from "../aem/dialog-types.ts";
  *   (same shape as `_cq_dialog.infinity.json`). Replaces dialog resolution
  *   entirely. When both are set, the file is the base and the tabs splice
  *   on top.
+ * - `fieldOverrides` — per-field tweaks applied to the mapped Sanity fields
+ *   (keyed by emitted field name), for Studio behaviors the AEM dialog
+ *   can't express. `readOnly` locks the input; `initialValue` seeds
+ *   Studio-created instances (a JSON literal, or the sentinel `"uuid"`
+ *   which emits `initialValue: () => crypto.randomUUID()`):
+ *
+ *   ```json
+ *   {
+ *     "*": {
+ *       "fieldOverrides": {
+ *         "componentId": { "readOnly": true, "initialValue": "uuid" }
+ *       }
+ *     }
+ *   }
+ *   ```
+ *
+ *   The special `"*"` key applies its `fieldOverrides` to every listed
+ *   component (per-component entries win per field) — useful for shared
+ *   tabs like a permissions tab that appears on many components. `"*"` may
+ *   carry only `fieldOverrides`. `initialValue` only affects content
+ *   created in the Studio; migrated content keeps its authored values.
  *
  * Overriding a dialog changes which fields the component's Sanity type
  * carries — like the mapping table itself, treat entries as
@@ -68,6 +89,18 @@ export interface SupplementaryTab {
   key?: string;
 }
 
+export interface FieldOverride {
+  /** Lock the field's input in the Studio (`readOnly: true`). */
+  readOnly?: boolean;
+  /**
+   * Initial value for Studio-created instances. A JSON literal is emitted
+   * verbatim; the sentinel string `"uuid"` emits
+   * `initialValue: () => crypto.randomUUID()`. Migrated content keeps its
+   * authored values — this only affects content created in the Studio.
+   */
+  initialValue?: unknown;
+}
+
 export interface DialogOverrideEntry {
   /**
    * The `dialogFile` value as written in the config — kept for logging and
@@ -77,9 +110,21 @@ export interface DialogOverrideEntry {
   /** Parsed contents of `dialogFile`, loaded eagerly at config-load time. */
   dialog?: DialogNode;
   supplementaryTabs?: SupplementaryTab[];
+  /** Per-field Studio tweaks keyed by emitted (camelCase) field name. */
+  fieldOverrides?: Readonly<Record<string, FieldOverride>>;
 }
 
 export type DialogOverrideConfig = Map<string, DialogOverrideEntry>;
+
+/**
+ * Config key whose `fieldOverrides` apply to every listed component
+ * (per-component entries win per field name). May carry only
+ * `fieldOverrides` — a wildcard dialog replacement makes no sense.
+ */
+export const DIALOG_OVERRIDE_WILDCARD = "*";
+
+/** Emitted field names are camelCase identifiers. */
+const VALID_FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export interface LoadDialogOverrideConfigOptions {
   /** Absolute or relative path. Missing file → empty config. */
@@ -139,11 +184,11 @@ export function loadDialogOverrideConfig(
     }
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new Error(
-        `dialog-overrides config: entry for "${rawKey}" must be an object with "dialogFile" and/or "supplementaryTabs"`,
+        `dialog-overrides config: entry for "${rawKey}" must be an object with "dialogFile", "supplementaryTabs", and/or "fieldOverrides"`,
       );
     }
 
-    const { dialogFile, supplementaryTabs } = value as Record<string, unknown>;
+    const { dialogFile, supplementaryTabs, fieldOverrides } = value as Record<string, unknown>;
     if (dialogFile !== undefined && typeof dialogFile !== "string") {
       throw new Error(
         `dialog-overrides config: "dialogFile" for "${rawKey}" must be a string path`,
@@ -157,9 +202,17 @@ export function loadDialogOverrideConfig(
         `dialog-overrides config: "supplementaryTabs" for "${rawKey}" must be a non-empty array`,
       );
     }
-    if (dialogFile === undefined && supplementaryTabs === undefined) {
+    if (dialogFile === undefined && supplementaryTabs === undefined && fieldOverrides === undefined) {
       throw new Error(
-        `dialog-overrides config: entry for "${rawKey}" needs "dialogFile" and/or "supplementaryTabs"`,
+        `dialog-overrides config: entry for "${rawKey}" needs "dialogFile", "supplementaryTabs", and/or "fieldOverrides"`,
+      );
+    }
+    if (
+      resourceType === DIALOG_OVERRIDE_WILDCARD &&
+      (dialogFile !== undefined || supplementaryTabs !== undefined)
+    ) {
+      throw new Error(
+        `dialog-overrides config: the "${DIALOG_OVERRIDE_WILDCARD}" entry may only carry "fieldOverrides" — a wildcard dialog replacement is not supported`,
       );
     }
 
@@ -173,7 +226,50 @@ export function loadDialogOverrideConfig(
         validateSupplementaryTab(tab, rawKey, i),
       );
     }
+    if (fieldOverrides !== undefined) {
+      entry.fieldOverrides = validateFieldOverrides(fieldOverrides, rawKey);
+    }
     out.set(resourceType, entry);
+  }
+  return out;
+}
+
+function validateFieldOverrides(
+  value: unknown,
+  rawKey: string,
+): Record<string, FieldOverride> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(
+      `dialog-overrides config: "fieldOverrides" for "${rawKey}" must be an object keyed by emitted field name`,
+    );
+  }
+  const out: Record<string, FieldOverride> = {};
+  for (const [fieldName, raw] of Object.entries(value)) {
+    if (!VALID_FIELD_NAME.test(fieldName)) {
+      throw new Error(
+        `dialog-overrides config: fieldOverrides key "${fieldName}" (for "${rawKey}") is not a valid field name — use the emitted camelCase name, e.g. "componentId"`,
+      );
+    }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error(
+        `dialog-overrides config: fieldOverrides."${fieldName}" (for "${rawKey}") must be an object with "readOnly" and/or "initialValue"`,
+      );
+    }
+    const { readOnly, initialValue } = raw as Record<string, unknown>;
+    if (readOnly !== undefined && typeof readOnly !== "boolean") {
+      throw new Error(
+        `dialog-overrides config: "readOnly" for field "${fieldName}" (in "${rawKey}") must be a boolean`,
+      );
+    }
+    if (readOnly === undefined && initialValue === undefined) {
+      throw new Error(
+        `dialog-overrides config: fieldOverrides."${fieldName}" (for "${rawKey}") needs "readOnly" and/or "initialValue"`,
+      );
+    }
+    out[fieldName] = {
+      ...(readOnly !== undefined ? { readOnly } : {}),
+      ...(initialValue !== undefined ? { initialValue } : {}),
+    };
   }
   return out;
 }

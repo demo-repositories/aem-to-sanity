@@ -1,4 +1,5 @@
 import prettier from "prettier";
+import type { PreviewOverride } from "aem-to-sanity-core";
 import type {
   SanityField,
   SanityFieldset,
@@ -34,6 +35,13 @@ export interface EmitInput {
    * icon property.
    */
   icon?: string;
+  /**
+   * Studio preview overrides from `aem-component-names.json` — select paths
+   * for title/subtitle/media plus an item-count array field. Unset slots
+   * keep the emitter's defaults (static component title, subtitle/media
+   * heuristics).
+   */
+  previewOverride?: PreviewOverride;
   /** Command the header comment tells readers to run to regenerate. */
   regenerateCommand?: string;
 }
@@ -72,7 +80,7 @@ export async function emitSchemaFile(input: EmitInput): Promise<string> {
     fieldsets.length > 0
       ? `  fieldsets: ${stringifyFieldsets(fieldsets)},\n`
       : "";
-  const previewBlock = renderPreviewBlock(fields, title);
+  const previewBlock = renderPreviewBlock(fields, title, input.previewOverride);
   // Config-validated PascalCase `*Icon` identifier (`VALID_ICON_NAME` in
   // component-names.ts), so it lands verbatim in the import. Since
   // @sanity/icons v5, per-icon components live only in subpath modules
@@ -256,21 +264,48 @@ function pickMediaSelectPath(fields: SanityField[]): string | undefined {
 }
 
 /**
+ * Preview `select` cannot fetch a whole array — the Studio's field observer
+ * resolves leaf paths only, so a bare array select yields `undefined`
+ * (Sanity docs: "Previewing from array values" recommends selecting an
+ * indexed subset). Counts therefore probe `{field}.{i}._key` for the first
+ * N indexes and count the defined ones; every migrated array item carries a
+ * `_key`. Displays "10+" when all probes hit.
+ */
+const COUNT_PROBES = 10;
+
+/**
  * Studio list / array picker preview (`select` + `prepare`).
- * Row title is always the AEM component `jcr:title` (see `displayTitleFromAemComponentJcrTitle`);
- * subtitle / media still come from mapped fields when useful.
+ * Row title is the AEM component `jcr:title` by default (see
+ * `displayTitleFromAemComponentJcrTitle`); subtitle / media come from
+ * mapped-field heuristics. An `aem-component-names.json` `preview` override
+ * replaces individual slots: `title` selects an authored field (falling
+ * back to the static title when empty), `subtitle` / `media` replace the
+ * heuristic picks, and `count` appends an item count to the title
+ * (`"Accordion (3 items)"`).
  */
 function renderPreviewBlock(
   fields: SanityField[],
   staticTitle: string,
+  override?: PreviewOverride,
 ): string {
-  const subtitleField = pickSubtitleFieldName(fields, undefined);
-  const mediaPath = pickMediaSelectPath(fields);
+  const titlePath = override?.title;
+  const subtitlePath = override?.subtitle ?? pickSubtitleFieldName(fields, undefined);
+  const mediaPath = override?.media ?? pickMediaSelectPath(fields);
+  const countPath = override?.count;
   const staticLit = JSON.stringify(staticTitle);
 
   const select: Record<string, string> = {};
-  if (subtitleField) select.prSubtitle = subtitleField;
+  if (titlePath) select.prTitle = titlePath;
+  if (subtitlePath) select.prSubtitle = subtitlePath;
   if (mediaPath) select.prMedia = mediaPath;
+  const countProbeKeys: string[] = [];
+  if (countPath) {
+    for (let i = 0; i < COUNT_PROBES; i++) {
+      const key = `prCount${i}`;
+      countProbeKeys.push(key);
+      select[key] = `${countPath}.${i}._key`;
+    }
+  }
 
   const keys = Object.keys(select);
   if (keys.length === 0) {
@@ -287,8 +322,25 @@ function renderPreviewBlock(
     .join(",\n");
   const destruct = keys.join(", ");
 
-  const titleLine = `      title: ${staticLit},`;
-  const subtitleLine = subtitleField
+  const baseTitleExpr = titlePath
+    ? `typeof prTitle === "string" && prTitle.trim() ? prTitle.trim() : ${staticLit}`
+    : staticLit;
+  let preLines = "";
+  let titleLine: string;
+  if (countPath) {
+    preLines =
+      `      const prBase = ${baseTitleExpr};\n` +
+      `      const prCountN = [${countProbeKeys.join(", ")}].filter((k) => k != null).length;\n`;
+    titleLine =
+      '      title: `${prBase} (${prCountN === ' +
+      String(COUNT_PROBES) +
+      ' ? "' +
+      String(COUNT_PROBES) +
+      '+" : prCountN} item${prCountN === 1 ? "" : "s"})`,';
+  } else {
+    titleLine = `      title: ${baseTitleExpr},`;
+  }
+  const subtitleLine = subtitlePath
     ? `      subtitle:\n        typeof prSubtitle === "string" && prSubtitle.trim()\n          ? prSubtitle.trim()\n          : undefined,`
     : "";
   const mediaLine = mediaPath ? `      media: prMedia,` : "";
@@ -302,7 +354,7 @@ function renderPreviewBlock(
 ${selectInner}
     },
     prepare({ ${destruct} }) {
-      return {
+${preLines}      return {
 ${returnBody}
       };
     },
@@ -335,11 +387,11 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
   if (field.description) props.description = JSON.stringify(field.description);
   if (field.group) props.group = JSON.stringify(field.group);
   if (field.fieldset) props.fieldset = JSON.stringify(field.fieldset);
+  if (field.readOnly) props.readOnly = "true";
 
   switch (field.type) {
     case "string": {
       props.type = '"string"';
-      if (field.readOnly) props.readOnly = "true";
       if (field.initialValue !== undefined)
         props.initialValue = JSON.stringify(field.initialValue);
       if (field.options?.list && field.options.list.length > 0) {
@@ -507,6 +559,10 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
       `            : "Required unless the alternative text is inherited or the image is decorative";\n` +
       `        })`;
   }
+
+  // `fieldOverrides` uuid sentinel — wins over any dialog-declared default,
+  // so an operator can turn a plain id textfield into an auto-generated one.
+  if (field.initialValueUuid) props.initialValue = "() => crypto.randomUUID()";
 
   // Don't double-apply validation if it was already set for number min/max.
   if (
