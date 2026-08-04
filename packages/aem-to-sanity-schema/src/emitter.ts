@@ -264,6 +264,16 @@ function pickMediaSelectPath(fields: SanityField[]): string | undefined {
 }
 
 /**
+ * Preview `select` cannot fetch a whole array — the Studio's field observer
+ * resolves leaf paths only, so a bare array select yields `undefined`
+ * (Sanity docs: "Previewing from array values" recommends selecting an
+ * indexed subset). Counts therefore probe `{field}.{i}._key` for the first
+ * N indexes and count the defined ones; every migrated array item carries a
+ * `_key`. Displays "10+" when all probes hit.
+ */
+const COUNT_PROBES = 10;
+
+/**
  * Studio list / array picker preview (`select` + `prepare`).
  * Row title is the AEM component `jcr:title` by default (see
  * `displayTitleFromAemComponentJcrTitle`); subtitle / media come from
@@ -288,7 +298,14 @@ function renderPreviewBlock(
   if (titlePath) select.prTitle = titlePath;
   if (subtitlePath) select.prSubtitle = subtitlePath;
   if (mediaPath) select.prMedia = mediaPath;
-  if (countPath) select.prCount = countPath;
+  const countProbeKeys: string[] = [];
+  if (countPath) {
+    for (let i = 0; i < COUNT_PROBES; i++) {
+      const key = `prCount${i}`;
+      countProbeKeys.push(key);
+      select[key] = `${countPath}.${i}._key`;
+    }
+  }
 
   const keys = Object.keys(select);
   if (keys.length === 0) {
@@ -313,9 +330,13 @@ function renderPreviewBlock(
   if (countPath) {
     preLines =
       `      const prBase = ${baseTitleExpr};\n` +
-      `      const prCountN = Array.isArray(prCount) ? prCount.length : 0;\n`;
+      `      const prCountN = [${countProbeKeys.join(", ")}].filter((k) => k != null).length;\n`;
     titleLine =
-      "      title: `${prBase} (${prCountN} item${prCountN === 1 ? \"\" : \"s\"})`,";
+      '      title: `${prBase} (${prCountN === ' +
+      String(COUNT_PROBES) +
+      ' ? "' +
+      String(COUNT_PROBES) +
+      '+" : prCountN} item${prCountN === 1 ? "" : "s"})`,';
   } else {
     titleLine = `      title: ${baseTitleExpr},`;
   }

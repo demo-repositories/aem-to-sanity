@@ -46,10 +46,11 @@ import { readFileSync } from "node:fs";
  * Studio preview (`{ "title", "subtitle", "media", "count" }`, all
  * optional). `title` / `subtitle` / `media` are Sanity preview select
  * paths (dot notation allowed, e.g. `"items.0.title"`); `count` names a
- * top-level array field whose length is appended to the row title
- * (`"Accordion (3 items)"`). Unset slots keep the emitter's defaults
- * (static component title, subtitle/media heuristics). Safe to change
- * between runs — previews never touch type names or ingested content.
+ * top-level array field whose item count is appended to the row title
+ * (`"Accordion (3 items)"`, probed via indexed `_key`s, `"10+"` cap).
+ * Unset slots keep the emitter's defaults (static component title,
+ * subtitle/media heuristics). Safe to change between runs — previews never
+ * touch type names or ingested content.
  *
  * Override the file path via the `AEM_COMPONENT_NAMES_FILE` env var
  * (default `./aem-component-names.json`).
@@ -62,8 +63,11 @@ export interface PreviewOverride {
   /** Preview select path for the row media; replaces the heuristic pick. */
   media?: string;
   /**
-   * Top-level array field whose length is appended to the row title, e.g.
-   * `"count": "items"` → `"Accordion (3 items)"`. Plain field name, no dots.
+   * Top-level array field whose item count is appended to the row title,
+   * e.g. `"count": "items"` → `"Accordion (3 items)"`. Plain field name, no
+   * dots. The Studio can't select whole arrays in previews, so the emitter
+   * probes the first 10 indexes' `_key`s (arrays of objects only — every
+   * migrated item carries one) and shows `"10+"` beyond that.
    */
   count?: string;
 }

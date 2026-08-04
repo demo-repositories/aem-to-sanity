@@ -104,11 +104,16 @@ describe("fieldOverrides + preview overrides", () => {
     assert.match(accordion, /name: "headingElement",[\s\S]*?initialValue: "h3"/);
     assert.doesNotMatch(hero, /headingElement/);
 
-    // Preview override: select paths + count-based prepare.
+    // Preview override: select paths + count-based prepare. Counts probe
+    // indexed `_key`s — the Studio can't select whole arrays (Sanity docs,
+    // "Previewing from array values").
     assert.match(accordion, /prTitle: "heading"/);
     assert.match(accordion, /prSubtitle: "items\.0\.title"/);
-    assert.match(accordion, /prCount: "items"/);
-    assert.match(accordion, /Array\.isArray\(prCount\) \? prCount\.length : 0/);
+    assert.match(accordion, /prCount0: "items\.0\._key"/);
+    assert.match(accordion, /prCount9: "items\.9\._key"/);
+    assert.doesNotMatch(accordion, /prCount: "items"/);
+    assert.match(accordion, /filter\(\(k\) => k != null\)\.length/);
+    assert.match(accordion, /prCountN === 10 \? "10\+" : prCountN/);
     assert.match(accordion, /item\$\{prCountN === 1 \? "" : "s"\}/);
     // Hero keeps the default static preview.
     assert.match(hero, /title: "Hero"/);

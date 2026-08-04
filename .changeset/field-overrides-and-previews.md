@@ -20,7 +20,7 @@ Two new per-component Studio polish knobs:
 }
 ```
 
-**`preview` in `aem-component-names.json`** — overrides the generated type's Studio preview. `title` / `subtitle` / `media` are select paths (dot notation allowed, e.g. `"items.0.title"`); `count` names a top-level array field whose length is appended to the row title (`"Accordion (3 items)"`). Unset slots keep the emitter's defaults (static component title, subtitle/media heuristics):
+**`preview` in `aem-component-names.json`** — overrides the generated type's Studio preview. `title` / `subtitle` / `media` are select paths (dot notation allowed, e.g. `"items.0.title"`); `count` names a top-level array field whose item count is appended to the row title (`"Accordion (3 items)"`); Studio previews can't select whole arrays, so the count probes the first 10 indexes' `_key`s (arrays of objects only) and shows `"10+"` beyond that. Unset slots keep the emitter's defaults (static component title, subtitle/media heuristics):
 
 ```json
 {
