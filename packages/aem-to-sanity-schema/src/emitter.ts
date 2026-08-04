@@ -298,17 +298,9 @@ function renderPreviewBlock(
   if (titlePath) select.prTitle = titlePath;
   if (subtitlePath) select.prSubtitle = subtitlePath;
   if (mediaPath) select.prMedia = mediaPath;
-  const countProbeKeys: string[] = [];
-  if (countPath) {
-    for (let i = 0; i < COUNT_PROBES; i++) {
-      const key = `prCount${i}`;
-      countProbeKeys.push(key);
-      select[key] = `${countPath}.${i}._key`;
-    }
-  }
 
   const keys = Object.keys(select);
-  if (keys.length === 0) {
+  if (keys.length === 0 && !countPath) {
     return `  preview: {
     prepare() {
       return { title: ${staticLit} };
@@ -317,20 +309,38 @@ function renderPreviewBlock(
 `;
   }
 
-  const selectInner = keys
-    .map((k) => `    ${k}: ${JSON.stringify(select[k])}`)
-    .join(",\n");
-  const destruct = keys.join(", ");
+  // Count probes are generated (`prCount0…prCount{N-1}` → `{field}.{i}._key`)
+  // rather than enumerated, so the emitted file stays readable.
+  const probeSpread = countPath
+    ? `    ...Object.fromEntries(
+      Array.from({ length: ${COUNT_PROBES} }, (_, i) => [
+        \`prCount\${i}\`,
+        \`${countPath}.\${i}._key\`,
+      ]),
+    ),\n`
+    : "";
+  const selectInner =
+    keys.map((k) => `    ${k}: ${JSON.stringify(select[k])},\n`).join("") +
+    probeSpread;
+  const prepareArg = countPath
+    ? "sel: Record<string, any>"
+    : `{ ${keys.join(", ")} }`;
 
-  const baseTitleExpr = titlePath
-    ? `typeof prTitle === "string" && prTitle.trim() ? prTitle.trim() : ${staticLit}`
-    : staticLit;
+  const baseTitleExpr = (ref: string): string =>
+    titlePath
+      ? `typeof ${ref} === "string" && ${ref}.trim() ? ${ref}.trim() : ${staticLit}`
+      : staticLit;
   let preLines = "";
   let titleLine: string;
+  let subtitleRef = "prSubtitle";
+  let mediaRef = "prMedia";
   if (countPath) {
+    subtitleRef = "sel.prSubtitle";
+    mediaRef = "sel.prMedia";
     preLines =
-      `      const prBase = ${baseTitleExpr};\n` +
-      `      const prCountN = [${countProbeKeys.join(", ")}].filter((k) => k != null).length;\n`;
+      `      const prBase = ${baseTitleExpr("sel.prTitle")};\n` +
+      `      const prCountN = Array.from({ length: ${COUNT_PROBES} }, (_, i) => sel[\`prCount\${i}\`])\n` +
+      `        .filter((k) => k != null).length;\n`;
     titleLine =
       '      title: `${prBase} (${prCountN === ' +
       String(COUNT_PROBES) +
@@ -338,12 +348,12 @@ function renderPreviewBlock(
       String(COUNT_PROBES) +
       '+" : prCountN} item${prCountN === 1 ? "" : "s"})`,';
   } else {
-    titleLine = `      title: ${baseTitleExpr},`;
+    titleLine = `      title: ${baseTitleExpr("prTitle")},`;
   }
   const subtitleLine = subtitlePath
-    ? `      subtitle:\n        typeof prSubtitle === "string" && prSubtitle.trim()\n          ? prSubtitle.trim()\n          : undefined,`
+    ? `      subtitle:\n        typeof ${subtitleRef} === "string" && ${subtitleRef}.trim()\n          ? ${subtitleRef}.trim()\n          : undefined,`
     : "";
-  const mediaLine = mediaPath ? `      media: prMedia,` : "";
+  const mediaLine = mediaPath ? `      media: ${mediaRef},` : "";
 
   const returnBody = [titleLine, subtitleLine, mediaLine]
     .filter(Boolean)
@@ -351,9 +361,8 @@ function renderPreviewBlock(
 
   return `  preview: {
     select: {
-${selectInner}
-    },
-    prepare({ ${destruct} }) {
+${selectInner}    },
+    prepare(${prepareArg}) {
 ${preLines}      return {
 ${returnBody}
       };
