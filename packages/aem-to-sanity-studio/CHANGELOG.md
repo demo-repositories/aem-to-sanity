@@ -1,5 +1,7 @@
 # aem-to-sanity-studio
 
+## 2.9.0
+
 ## 2.8.0
 
 ### Minor Changes

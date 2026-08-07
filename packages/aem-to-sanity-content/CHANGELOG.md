@@ -1,5 +1,12 @@
 # aem-to-sanity-content
 
+## 2.9.0
+
+### Patch Changes
+
+- Updated dependencies [[`e838fc4`](https://github.com/demo-repositories/aem-to-sanity/commit/e838fc42e2503099c38285885a45cf63b03bf03a)]:
+  - aem-to-sanity-core@2.9.0
+
 ## 2.8.0
 
 ### Minor Changes
