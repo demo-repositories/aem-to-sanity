@@ -51,6 +51,7 @@ import { auditUnmappedTypes } from "./audit.ts";
 import {
   rewriteBarrelFromDisk,
   writePageBuilderArtifacts,
+  type PageBuilderMember,
 } from "./pagebuilder.ts";
 import {
   PT_TABLE_TYPE_NAMES,
@@ -285,6 +286,14 @@ export interface MigrateSchemasOptions {
    * already emitted for the page-shell dialog. The page-shell object type
    * is automatically added to `pageBuilderExclude` so it doesn't appear as
    * a block in `pageBuilder.of[]`.
+   *
+   * Entries may also carry a `components` map (`cq:template` path →
+   * component resource types) restricting those components to that
+   * template: they leave the shared `pageBuilder.of[]` and join a dedicated
+   * `{docType}Builder` array emitted for the template's document type.
+   * Resource types matching no emitted component — or templates unknown to
+   * the entry — are logged and ignored (the component stays in the shared
+   * array).
    *
    * Empty / omitted → no per-template documents; the generic `page` doc is
    * the only page type, current behavior.
@@ -689,10 +698,67 @@ export async function migrateSchemas(
     );
   }
 
+  // Template-restricted components (the `components` map on
+  // `aem-page-components.json` entries): pull each one out of the shared
+  // base array and queue it as an extra member on the per-template builder
+  // arrays of the templates it's allowed on. Anything unresolvable keeps
+  // the component in the shared array — the backward-compatible reading of
+  // a config that names nothing real.
+  const restrictedExclude: string[] = [];
+  const templateExtras = new Map<string, PageBuilderMember[]>();
+  if (pageComponents && pageComponents.size > 0) {
+    const memberByTypeName = new Map(successMembers.map((m) => [m.name, m]));
+    const pageShellSet = new Set(pageShellExclude);
+    const restrictedSet = new Set<string>();
+    for (const [shellResourceType, entry] of pageComponents.entries()) {
+      if (!entry.components) continue;
+      const declared = new Set(entry.templates);
+      for (const [template, resourceTypes] of Object.entries(entry.components)) {
+        // The loader already rejects unknown template keys unless
+        // `discover: true`; here an unknown key means discovery didn't find
+        // the template in extracted content.
+        if (!declared.has(template)) {
+          logger?.warn(
+            `page-components: "components" for "${shellResourceType}" targets template "${template}", which wasn't discovered in extracted content — restriction skipped (run aem-extract, then re-run migrate:schema).`,
+          );
+          continue;
+        }
+        for (const resourceType of resourceTypes) {
+          const typeName = typeNameByResourceType.get(resourceType);
+          const member = typeName ? memberByTypeName.get(typeName) : undefined;
+          if (!member) {
+            logger?.warn(
+              `page-components: "components" entry "${resourceType}" (template "${template}") matches no emitted component (check aem-component-paths and this run's failures) — keeping the shared ${pageBuilderName}.of[] unchanged for it.`,
+            );
+            continue;
+          }
+          if (pageShellSet.has(member.name)) {
+            logger?.warn(
+              `page-components: "components" entry "${resourceType}" (template "${template}") is itself a declared page-shell — it never appears in a page builder; entry ignored.`,
+            );
+            continue;
+          }
+          restrictedSet.add(member.name);
+          const extras = templateExtras.get(template) ?? [];
+          if (!extras.some((m) => m.name === member.name)) extras.push(member);
+          templateExtras.set(template, extras);
+        }
+      }
+    }
+    restrictedExclude.push(...restrictedSet);
+    if (restrictedExclude.length > 0) {
+      logger?.info(
+        `page-components: restricting ${restrictedExclude.length} component(s) to specific page templates — ${restrictedExclude.join(", ")}. ` +
+          `They leave the shared ${pageBuilderName}.of[] and join dedicated per-template builder arrays.`,
+      );
+    }
+  }
+
   const effectivePageBuilderExclude = [
     ...(pageBuilderExclude ?? []),
     ...pageShellExclude,
     ...slotOnlyExclude,
+    ...restrictedExclude,
   ];
 
   // Canonical Portable Text table types (table/row/cell) — always emitted so
@@ -702,6 +768,7 @@ export async function migrateSchemas(
 
   let pageBuilderFile: string | undefined;
   let pageFile: string | undefined;
+  let baseMembers: PageBuilderMember[] = [];
   if (emitPageBuilder) {
     // Depth-limit escape hatch: `contentFragment` document + the
     // `contentFragmentRef` block aem-transform swaps in when a subtree is
@@ -725,11 +792,13 @@ export async function migrateSchemas(
     });
     pageBuilderFile = pb.pageBuilderFile;
     pageFile = pb.pageFile;
+    baseMembers = pb.registeredMembers;
   }
 
   let pageTemplatesFile: string | undefined;
   let templatePageFiles: string[] | undefined;
   let templatePageTypeNames: string[] = [];
+  let templateBuilderTypeNames: string[] = [];
   let missingPageComponentPaths: string[] | undefined;
   if (emitPageBuilder && pageComponents && pageComponents.size > 0) {
     const tp = await writeTemplatePageArtifacts({
@@ -739,6 +808,8 @@ export async function migrateSchemas(
       pageComponentsConfig: pageComponents,
       typeNameByResourceType,
       pageBuilderTypeName: pageBuilderName,
+      baseMembers,
+      templateComponents: templateExtras,
       logger,
     });
     pageTemplatesFile = tp.manifestFile;
@@ -747,6 +818,7 @@ export async function migrateSchemas(
     // are preserved rather than rewritten, but they're still document types
     // for layout purposes.
     templatePageTypeNames = tp.manifest.entries.map((e) => e.sanityType);
+    templateBuilderTypeNames = tp.builderTypeNames;
     missingPageComponentPaths = tp.missingComponentPaths.length > 0
       ? tp.missingComponentPaths
       : undefined;
@@ -754,7 +826,8 @@ export async function migrateSchemas(
 
   // Per-template document files count as "expected" — protect them from the
   // generated-file pruner that runs next, which otherwise nukes any .ts file
-  // not in the component success list.
+  // not in the component success list. Same for the dedicated per-template
+  // page-builder arrays.
   const protectedTypeNames =
     pageComponents && pageComponents.size > 0
       ? [
@@ -763,6 +836,7 @@ export async function migrateSchemas(
             const base = f.split("/").pop() ?? "";
             return base.endsWith(".ts") ? base.slice(0, -3) : base;
           }) ?? []),
+          ...templateBuilderTypeNames,
         ]
       : successTypeNames;
 

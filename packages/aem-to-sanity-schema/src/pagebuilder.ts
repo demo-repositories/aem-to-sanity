@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { writeTextFile, type Logger } from "aem-to-sanity-core";
 import { toTitleCase } from "./naming.ts";
 import { PT_TABLE_TYPE_NAMES } from "./pt-table.ts";
+import { TEMPLATE_PAGES_GENERATED_MARKER } from "./template-pages.ts";
 import {
   FLAT_PLANNER,
   scanGeneratedSchemaFiles,
@@ -50,6 +51,12 @@ export interface WritePageBuilderArtifactsResult {
   pageWritten: boolean;
   /** Type names registered in `pageBuilder.of[]`. */
   registered: string[];
+  /**
+   * The registered members with their friendly titles, in emission order.
+   * Callers composing per-template page-builder arrays (base + extras)
+   * reuse these so titles stay consistent across every array.
+   */
+  registeredMembers: PageBuilderMember[];
 }
 
 export async function writePageBuilderArtifacts(
@@ -114,7 +121,13 @@ export async function writePageBuilderArtifacts(
 
   const pageWritten = await maybeWritePage(pageFile, pageTypeName, pageBuilderTypeName, logger);
 
-  return { pageFile, pageBuilderFile, pageWritten, registered };
+  return {
+    pageFile,
+    pageBuilderFile,
+    pageWritten,
+    registered,
+    registeredMembers,
+  };
 }
 
 function renderPageBuilder(
@@ -231,6 +244,10 @@ export async function scanSchemaTypeNames(
     files.map(async (f) => {
       try {
         const contents = await readFile(join(schemasDir, f.relPath), "utf8");
+        // Per-template document types and their dedicated page-builder
+        // arrays (template-pages emissions) are never `pageBuilder.of[]`
+        // members — folding them back in would nest pages inside pages.
+        if (contents.includes(TEMPLATE_PAGES_GENERATED_MARKER)) return undefined;
         const m = contents.match(
           /defineType\(\{\s*name:\s*"([A-Za-z][A-Za-z0-9_]*)"/,
         );
@@ -241,7 +258,7 @@ export async function scanSchemaTypeNames(
       return f.typeName;
     }),
   );
-  return names.filter((n) => !excludeSet.has(n));
+  return names.filter((n): n is string => n !== undefined && !excludeSet.has(n));
 }
 
 /**

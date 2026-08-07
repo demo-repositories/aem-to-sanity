@@ -339,13 +339,45 @@ The page-shell object itself is automatically excluded from \`pageBuilder.of[]\`
 
 Explicit names are used verbatim and claim first — another template whose *derived* name would collide takes the usual fallback (\`aem\` prefix / numeric suffix), while an explicit name that is reserved or collides with an emitted component type is a hard error at \`migrate:schema\` time. Keys must match a declared template unless \`discover: true\` is set (a discovered template can be named before it's ever listed). The override flows through the \`page-templates.json\` manifest, so \`aem-transform\` stamps the same \`_type\` — no extra wiring. Like \`aem-component-names.json\`, this is a **set-once-before-first-import** knob: renaming after content is ingested changes every affected doc's \`_type\`, and the re-import needs \`--recreate-on-type-change\` (destroys publish history + drafts of those docs).
 
-**Manifest** — \`migrate:schema\` writes \`output/cache/page-templates.json\` with one entry per pair (\`{pageComponentResourceType, pageComponentSanityType, cqTemplate, sanityType, sanityTitle}\`). \`aem-transform\` reads this manifest to route each raw page to the right \`_type\`.
+**Manifest** — \`migrate:schema\` writes \`output/cache/page-templates.json\` with one entry per pair (\`{pageComponentResourceType, pageComponentSanityType, cqTemplate, sanityType, sanityTitle, pageBuilderType}\`). \`aem-transform\` reads this manifest to route each raw page to the right \`_type\`.
 
 **Transform** — \`derivePageProperties\` in \`packages/aem-to-sanity-content/src/transform.ts\` lifts every authored value from \`jcr:content\` into \`pageProperties\`, applying the same camelCase rule as ordinary fields and the same coercion pipeline (\`"true"\` → \`true\`, HTML → Portable Text, etc.). \`derivePageFeaturedImage\` moves \`cq:featuredimage/fileReference\` into \`fileReferenceAemPath\` so \`aem-assets\` rewrites it to a Sanity asset ref the same way it does for fileupload widgets. The \`JCR_CONTENT_BOOKKEEPING_KEYS\` denylist drops replication-per-agent, versioning, and ContextHub plumbing that AEM writes onto \`jcr:content\` but which has no Sanity counterpart.
 
 **Audit** — Pages whose \`jcr:content\` carries a declared page-shell \`sling:resourceType\` but a *undeclared* \`cq:template\` fall back to the generic \`_type: "page"\` and surface as \`unknownPageTemplates\` findings in \`transform-report.json\`. Add the template to \`aem-page-components.json\` and re-run \`migrate:schema\` + \`transform\` + \`import\` to upgrade them.
 
 Missing / empty file → no per-template documents; every page uses the generic \`page\` doc (today's behavior). Fully backwards compatible.
+
+### Template-restricted components (\`components\`)
+
+By default every emitted component joins the single shared page-builder array, so every page type — the generic \`page\` and each per-template document — offers every component in its "+ Add" menu. An entry's optional \`components\` map (mirroring AEM template policies that allow a component only on certain templates) restricts components to specific templates, keyed by \`cq:template\` path:
+
+\`\`\`json
+{
+  "uxp/components/structure/page": {
+    "discover": true,
+    "components": {
+      "/conf/uxp/settings/wcm/templates/news-article": [
+        "uxp/components/proxy/content/newscard",
+        "uxp/components/proxy/content/eventscard"
+      ],
+      "/conf/uxp/settings/wcm/templates/homepage": [
+        "uxp/components/proxy/content/greeting"
+      ]
+    }
+  }
+}
+\`\`\`
+
+A listed component leaves the shared \`pageBuilder.of[]\` — the "base" set that everything unlisted stays in — and each keyed template's document type gets a dedicated array type, \`{docType}Builder\` (e.g. \`newsArticlePageBuilder\`), containing the base members plus that template's extras, alphabetized. The same component may appear under several templates (across entries too) — it joins each of their builders. The document's page-builder *field name* is unchanged (still \`MIGRATION_PAGE_BUILDER_NAME\`, default \`pageBuilder\`), so \`aem-transform\` output and previously ingested content are untouched — this is a Studio-authoring-surface knob, not a content-shape knob, and it can be adopted or reverted at any point in a migration.
+
+Rules and caveats:
+
+- Like \`names\`, a \`components\` key must match a declared template unless \`discover: true\` is set (load-time error otherwise). A discover-mode key whose template never turns up in extracted content is warned and skipped at schema time.
+- A resource type matching no emitted component is warned and ignored; the component stays in the shared array.
+- Because the shared array also backs container drop zones (\`aem-component-containers.json\` \`childrenField\`) and the generic \`page\` doc, a restricted component disappears from those surfaces too — it is only offered inside the templates it's pinned to.
+- Existing authored content is never dropped: restriction changes what the "+ Add" menu offers, and a previously ingested block of a now-restricted type surfaces as a Studio validation message rather than silent data loss (keep-original-on-failure).
+
+No \`components\` maps → one shared page-builder array for every page type (today's behavior). Fully backwards compatible.
 
 ## Coral buttongroup (\`granite/ui/components/coral/foundation/form/buttongroup\`)
 
