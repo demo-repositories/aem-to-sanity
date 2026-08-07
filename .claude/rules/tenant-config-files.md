@@ -19,7 +19,7 @@ Every per-tenant knob is a file in the tenant folder (copied from `tenants/templ
 | `aem-component-names.json` | `AEM_COMPONENT_NAMES_FILE` | `loadComponentNameConfig` | schema only — see `type-naming.md` rule |
 | `aem-component-slots.json` | `AEM_COMPONENT_SLOTS_FILE` | `loadSlotConfig` | schema only (visibility layer over auto-discovered slots) |
 | `aem-dialog-overrides.json` | `AEM_DIALOG_OVERRIDES_FILE` | `loadDialogOverrideConfig` | schema + `aem-probe` + `aem-eject-dialogs` — see `dialog-resolution-and-overrides.md` rule |
-| `aem-page-components.json` | `AEM_PAGE_COMPONENTS_FILE` | `loadPageComponentConfig` | schema (per-template page doc types) |
+| `aem-page-components.json` | `AEM_PAGE_COMPONENTS_FILE` | `loadPageComponentConfig` | schema (per-template page doc types + page-builder membership) |
 
 Conventions shared by the JSON configs:
 
@@ -71,6 +71,8 @@ AEM editable templates are **not** migrated (no `/conf/**` fetch anywhere); only
 - Default type name: last template path segment camelCased + `Page`; explicit `names` claim first, and a reserved/colliding explicit name is a hard throw.
 - Pages whose declared shell has an undeclared `cq:template` surface in `transform-report.json → unknownPageTemplates` with a CLI callout.
 - Flipping an already-imported page from `page` to a per-template type needs `aem-import --recreate-on-type-change` (`_type` is immutable in Sanity; delete happens in a separate earlier transaction on purpose).
+
+Entries may also carry a **`components` map** (`cq:template` path → component resource types) restricting those components to that template's page builder: listed components leave the shared base `pageBuilder.of[]`, and each keyed template's doc type gets a dedicated `{docType}Builder` array (base + extras, alphabetized) that its page-builder field references. The field NAME stays `MIGRATION_PAGE_BUILDER_NAME` — transform output and ingested content are untouched, so this is **not** a set-once knob; it only reshapes Studio "+ Add" menus. Like `names`, keys must match declared templates unless `discover: true` (load-time error); undiscovered templates / unmatched resource types warn at schema time and the component stays in the shared array. The shared array also backs container drop zones and the generic `page` doc — restricted components disappear from those too. Manifest entries in `page-templates.json` carry the array each doc uses in `pageBuilderType`.
 
 ## Set-once knobs (idempotency hazards)
 

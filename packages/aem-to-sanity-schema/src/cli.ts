@@ -232,13 +232,17 @@ async function main(): Promise<void> {
     let templateCount = 0;
     let discoverCount = 0;
     let nameOverrideCount = 0;
+    const restrictedComponents = new Set<string>();
     for (const v of declaredPageComponents.values()) {
       templateCount += v.templates.length;
       if (v.discover) discoverCount++;
       nameOverrideCount += Object.keys(v.names ?? {}).length;
+      for (const rts of Object.values(v.components ?? {})) {
+        for (const rt of rts) restrictedComponents.add(rt);
+      }
     }
     logger.info(
-      `Applied ${declaredPageComponents.size} page-component(s) (${templateCount} explicit template${templateCount === 1 ? "" : "s"}${discoverCount > 0 ? `, ${discoverCount} with auto-discover` : ""}${nameOverrideCount > 0 ? `, ${nameOverrideCount} name override${nameOverrideCount === 1 ? "" : "s"}` : ""}) from ${pageComponentsFile}`,
+      `Applied ${declaredPageComponents.size} page-component(s) (${templateCount} explicit template${templateCount === 1 ? "" : "s"}${discoverCount > 0 ? `, ${discoverCount} with auto-discover` : ""}${nameOverrideCount > 0 ? `, ${nameOverrideCount} name override${nameOverrideCount === 1 ? "" : "s"}` : ""}${restrictedComponents.size > 0 ? `, ${restrictedComponents.size} template-restricted component${restrictedComponents.size === 1 ? "" : "s"}` : ""}) from ${pageComponentsFile}`,
     );
   }
 

@@ -82,12 +82,36 @@ export interface PageComponentConfigEntry {
    * `--recreate-on-type-change`.
    */
   names?: Readonly<Record<string, TemplatePageNameOverride>>;
+  /**
+   * Per-template component restrictions, keyed by `cq:template` path.
+   * Each entry lists component `sling:resourceType`s that should be offered
+   * ONLY on this template's pages: they leave the shared page-builder array
+   * (the "base" set every unlisted component stays in) and join a dedicated
+   * `{docType}Builder` array emitted for the template's document type
+   * (base members + these extras).
+   *
+   * The page-builder *field name* is unchanged, so transform output and
+   * ingested content are untouched — this reshapes Studio "+ Add" menus
+   * only and is safe to add, change, or remove between runs (not a
+   * set-once knob).
+   *
+   * Like {@link names}, keys must match a path in {@link templates} unless
+   * {@link discover} is `true`. Resource types are normalized (leading `/`
+   * and `apps/` stripped) at load.
+   */
+  components?: Readonly<Record<string, ReadonlyArray<string>>>;
 }
 
 export type PageComponentConfig = Map<string, PageComponentConfigEntry>;
 
 /** Sanity type names must be identifier-like; enforced at load so a typo fails fast. */
 const VALID_TYPE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+/** Same key normalization as the other component config files. */
+function normalizeResourceType(key: string): string {
+  const trimmed = key.trim().replace(/^\/+/, "");
+  return trimmed.startsWith("apps/") ? trimmed.slice("apps/".length) : trimmed;
+}
 
 export interface LoadPageComponentConfigOptions {
   /** Absolute or relative path. Missing file → empty config. */
@@ -240,10 +264,63 @@ export function loadPageComponentConfig(
       }
     }
 
+    let components: Record<string, string[]> | undefined;
+    if (v.components !== undefined) {
+      if (!v.components || typeof v.components !== "object" || Array.isArray(v.components)) {
+        throw new Error(
+          `page-components config: "components" for "${resourceType}" must be an object keyed by cq:template path`,
+        );
+      }
+      components = {};
+      for (const [rawTemplate, rawList] of Object.entries(v.components)) {
+        const template = rawTemplate.trim();
+        if (!template) {
+          throw new Error(
+            `page-components config: "components" for "${resourceType}" has an empty cq:template key`,
+          );
+        }
+        if (components[template]) {
+          throw new Error(
+            `page-components config: "components" for "${resourceType}" has duplicate entries for "${template}"`,
+          );
+        }
+        if (!seen.has(template) && !discover) {
+          throw new Error(
+            `page-components config: "components" for "${resourceType}" targets "${template}", which is not in its "templates" list — fix the path or set "discover": true if the template should be picked up from extracted content`,
+          );
+        }
+        if (!Array.isArray(rawList)) {
+          throw new Error(
+            `page-components config: "components" for template "${template}" (under "${resourceType}") must be an array of component sling:resourceTypes`,
+          );
+        }
+        const rts: string[] = [];
+        const seenRts = new Set<string>();
+        for (const rt of rawList as unknown[]) {
+          if (typeof rt !== "string" || rt.trim().length === 0) {
+            throw new Error(
+              `page-components config: "components" for template "${template}" (under "${resourceType}") has a non-string / empty resource type`,
+            );
+          }
+          const normalized = normalizeResourceType(rt);
+          if (seenRts.has(normalized)) continue;
+          seenRts.add(normalized);
+          rts.push(normalized);
+        }
+        if (rts.length === 0) {
+          throw new Error(
+            `page-components config: "components" for template "${template}" (under "${resourceType}") needs at least one resource type — remove the key to keep the template on the shared page builder`,
+          );
+        }
+        components[template] = rts;
+      }
+    }
+
     out.set(resourceType, {
       templates: list,
       ...(discover ? { discover: true } : {}),
       ...(names && Object.keys(names).length > 0 ? { names } : {}),
+      ...(components && Object.keys(components).length > 0 ? { components } : {}),
     });
   }
   return out;

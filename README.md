@@ -167,7 +167,7 @@ Every migration runs from `tenants/<your-tenant>/`. Only `tenants/template/` (th
 | `aem-component-names.json` | Explicit Sanity type name / title / folder / file / icon overrides per component |
 | `aem-component-slots.json` | Visibility rules for auto-discovered named slots (mirror AEM enable-toggles) |
 | `aem-dialog-overrides.json` | Dialog overrides: splice Sling-Resource-Merger-inherited tabs, or point at static local dialog files (generate them with `pnpm eject-dialogs`) |
-| `aem-page-components.json` | Page-shell components + their `cq:template` paths |
+| `aem-page-components.json` | Page-shell components + their `cq:template` paths; optional per-template `components` map restricting components to specific templates' page builders |
 | `output/cache/…` | Per-stage artifacts — gitignored caches, regenerable. See `docs/running-the-migration.md` § 1e for the full tree (`aem/content/`, `aem/apps/`, `clean/`, `categories/`, `assets/`, reports). |
 
 ---

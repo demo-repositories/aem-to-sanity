@@ -147,6 +147,8 @@ Every AEM page records which editable template created it (`cq:template` on `jcr
 
 Sanity constraint encoded here: **`_type` is immutable**. Flipping already-imported pages to a per-template type needs `aem-import --recreate-on-type-change`, which deletes old docs in a *separate earlier transaction* (the content lake validates immutability against pre-transaction state).
 
+One more piece of template semantics migrates: AEM policies often allow a component only on certain templates. The `components` map on an `aem-page-components.json` entry (`cq:template` path → allowed component resource types) reproduces that in the Studio — restricted components leave the shared `pageBuilder` array and each affected template's doc type gets a dedicated `{docType}Builder` array (base + extras). Field name stays put, so this is menu-shaping only, not a set-once identity knob.
+
 ### 5.9 Tags (`cq:Tag`) and the DAM
 
 - **Tags**: AEM tags are JCR nodes under `/content/cq_tags`, forming a taxonomy; content references them via `cq:tags` string arrays (`ns:parent/child`). `aem-tags` emits one Sanity `category` document per tag (parent-child preserved) plus a manifest; the transform resolves authored `cq:tags` into references through it, following `cq:movedTo` aliases (AEM's tag-rename breadcrumb) with a cycle guard.
