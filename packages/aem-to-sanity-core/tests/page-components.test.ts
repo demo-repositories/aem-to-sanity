@@ -138,4 +138,82 @@ describe("loadPageComponentConfig", () => {
       ).toThrow(/must not be empty/);
     });
   });
+
+  describe("components restrictions", () => {
+    const NEWSCARD = "uxp/components/proxy/content/newscard";
+
+    it("loads a components map keyed by template", () => {
+      const config = loadPageComponentConfig({
+        file: configFile({
+          [RT]: { templates: [TEMPLATE], components: { [TEMPLATE]: [NEWSCARD] } },
+        }),
+      });
+      expect(config.get(RT)?.components).toEqual({ [TEMPLATE]: [NEWSCARD] });
+    });
+
+    it("normalizes leading / and apps/ on resource types, and dedupes", () => {
+      const config = loadPageComponentConfig({
+        file: configFile({
+          [RT]: {
+            templates: [TEMPLATE],
+            components: { [TEMPLATE]: [`/apps/${NEWSCARD}`, ` ${NEWSCARD} `] },
+          },
+        }),
+      });
+      expect(config.get(RT)?.components).toEqual({ [TEMPLATE]: [NEWSCARD] });
+    });
+
+    it("rejects a components key not in templates without discover", () => {
+      expect(() =>
+        loadPageComponentConfig({
+          file: configFile({
+            [RT]: {
+              templates: [TEMPLATE],
+              components: { "/conf/uxp/settings/wcm/templates/other": [NEWSCARD] },
+            },
+          }),
+        }),
+      ).toThrow(/not in its "templates" list/);
+    });
+
+    it("allows an unlisted components key with discover: true", () => {
+      const other = "/conf/uxp/settings/wcm/templates/other";
+      const config = loadPageComponentConfig({
+        file: configFile({
+          [RT]: { discover: true, components: { [other]: [NEWSCARD] } },
+        }),
+      });
+      expect(config.get(RT)?.components).toEqual({ [other]: [NEWSCARD] });
+    });
+
+    it("rejects an empty resource-type list", () => {
+      expect(() =>
+        loadPageComponentConfig({
+          file: configFile({
+            [RT]: { templates: [TEMPLATE], components: { [TEMPLATE]: [] } },
+          }),
+        }),
+      ).toThrow(/needs at least one resource type/);
+    });
+
+    it("rejects a non-array value", () => {
+      expect(() =>
+        loadPageComponentConfig({
+          file: configFile({
+            [RT]: { templates: [TEMPLATE], components: { [TEMPLATE]: NEWSCARD } },
+          }),
+        }),
+      ).toThrow(/must be an array of component sling:resourceTypes/);
+    });
+
+    it("rejects non-string resource types", () => {
+      expect(() =>
+        loadPageComponentConfig({
+          file: configFile({
+            [RT]: { templates: [TEMPLATE], components: { [TEMPLATE]: [42] } },
+          }),
+        }),
+      ).toThrow(/non-string \/ empty resource type/);
+    });
+  });
 });
