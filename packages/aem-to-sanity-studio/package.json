@@ -33,6 +33,9 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
+  "dependencies": {
+    "sanity-plugin-bynder-input": "^5.1.0"
+  },
   "peerDependencies": {
     "@sanity/ui": "^3",
     "react": "^18 || ^19",

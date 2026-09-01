@@ -16,6 +16,12 @@
  * Manifest (`output/assets/manifest.json`) tracks both IDs so re-runs skip
  * whichever steps already completed.
  *
+ * Alternative backend (`MIGRATION_ASSET_BACKEND=bynder`): assets already live
+ * in a Bynder portal (migrated out-of-band, stamped with a metaproperty
+ * holding the legacy AEM DAM path). Phases 1-3 are skipped entirely; phase 0
+ * resolves each DAM path against Bynder (`bynder.ts`) and phase 4 rewrites
+ * fields to `bynder.asset` objects (`sanity-plugin-bynder-input` shape).
+ *
  * Dry-run by default. Set `MIGRATION_DRY_RUN=false` to upload + link + rewrite.
  */
 import "./load-env.ts";
@@ -30,7 +36,24 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { createColors, formatDuration, listCleanFiles, resolveConfig, startTimer, type AuthMode } from "aem-to-sanity-core";
+import {
+  createColors,
+  formatDuration,
+  listCleanFiles,
+  resolveAssetBackend,
+  resolveConfig,
+  startTimer,
+  type AssetBackend,
+  type AuthMode,
+} from "aem-to-sanity-core";
+import {
+  bynderAssetValue,
+  checkBynderConnection,
+  findBynderMediaByAemPath,
+  metapropertyWarning,
+  resolveBynderConfig,
+  type BynderConfig,
+} from "./bynder.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -38,6 +61,12 @@ interface SanityRef {
   _type: "image" | "file";
   asset: { _type: "reference"; _ref: string };
 }
+
+/**
+ * `bynder.asset` object in the shape `sanity-plugin-bynder-input` persists
+ * (id/databaseId/name/type/previewUrl/... — built by `bynderAssetValue`).
+ */
+type BynderAssetRef = { _type: string } & Record<string, unknown>;
 
 /**
  * Per-asset state. Re-runs check `mediaLibraryAssetId` (skip upload) and
@@ -59,7 +88,10 @@ interface ManifestEntry {
   linkedRef?: string;
   /** Optional GDR `media._ref` (e.g. `media-library:<mlId>:<assetId>`) for reference. */
   mediaRef?: string;
-  sanityRef?: SanityRef;
+  /** Bynder media UUID (`MIGRATION_ASSET_BACKEND=bynder` runs only). */
+  bynderAssetId?: string;
+  /** What phase 4 writes into docs — asset reference (ML) or `bynder.asset` object. */
+  sanityRef?: SanityRef | BynderAssetRef;
   status:
     | "cached"
     | "downloaded"
@@ -706,6 +738,17 @@ async function main(): Promise<void> {
   const assetsDir = join(outputDir, "cache", "assets");
   const manifestFile = join(assetsDir, "manifest.json");
   const dryRun = process.env.MIGRATION_DRY_RUN !== "false";
+  // Where assets live: "media-library" (default; download → upload → link)
+  // or "bynder" (resolve DAM paths against a Bynder portal — see bynder.ts).
+  // Set-once knob shared with migrate:schema: it decides both the emitted
+  // field types and the rewritten field values.
+  let assetBackend: AssetBackend;
+  try {
+    assetBackend = resolveAssetBackend(process.env);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(2);
+  }
   const uploadOnly = process.argv.includes("--upload-only");
   // `--link-only` is for re-runs where assets already live in the Sanity
   // Media Library. Phase 0's aspect lookup (`aspects.aemSource.damPath`)
@@ -746,6 +789,12 @@ async function main(): Promise<void> {
     );
     process.exit(2);
   }
+  if (assetBackend === "bynder" && (uploadOnly || usePlaceholders)) {
+    console.error(
+      "MIGRATION_ASSET_BACKEND=bynder is incompatible with --upload-only and --placeholders — this pipeline never uploads to Bynder (assets are migrated into the portal out-of-band). Only --download-only (cache AEM binaries for your own Bynder ingestion) applies.",
+    );
+    process.exit(2);
+  }
   const skipRewrite = process.argv.includes("--no-rewrite");
 
   mkdirSync(assetsDir, { recursive: true });
@@ -768,22 +817,36 @@ async function main(): Promise<void> {
     ? " [fixture images: skip AEM download]"
     : usePlaceholders
       ? " [placeholders: local SVGs, skip AEM download]"
-      : linkOnly
-        ? " [link-only: skip download + upload]"
-        : uploadOnly
-          ? " [upload-only: skip download]"
-          : downloadOnly
-            ? " [download-only: skip ML dedup + upload + link + rewrite]"
-            : "";
+      : assetBackend === "bynder" && !downloadOnly
+        ? " [bynder: resolve via metaproperty, skip download + upload + ML link]"
+        : linkOnly
+          ? " [link-only: skip download + upload]"
+          : uploadOnly
+            ? " [upload-only: skip download]"
+            : downloadOnly
+              ? " [download-only: skip ML dedup + upload + link + rewrite]"
+              : "";
   console.error(
     `[assets] ${c.green(sortedPaths.length)} unique asset(s) across ${c.green(cleanFiles.length)} page(s)${c.dim(modeLabel)}`,
   );
   if (downloadOnly) {
     console.error(c.dim("DOWNLOAD ONLY — no Media Library upload/link, no doc rewrite"));
   } else if (dryRun) {
-    console.error(c.dim("DRY RUN — set MIGRATION_DRY_RUN=false to upload + link + rewrite"));
+    console.error(
+      c.dim(
+        assetBackend === "bynder"
+          ? "DRY RUN — Bynder resolution runs read-only; set MIGRATION_DRY_RUN=false to also rewrite clean docs"
+          : "DRY RUN — set MIGRATION_DRY_RUN=false to upload + link + rewrite",
+      ),
+    );
   } else {
-    console.error(c.dim("Target Media Library + dataset link — MIGRATION_DRY_RUN=false"));
+    console.error(
+      c.dim(
+        assetBackend === "bynder"
+          ? "Target Bynder — resolved bynder.asset objects rewritten into clean docs — MIGRATION_DRY_RUN=false"
+          : "Target Media Library + dataset link — MIGRATION_DRY_RUN=false",
+      ),
+    );
   }
 
   const manifest = loadManifest(manifestFile);
@@ -803,7 +866,7 @@ async function main(): Promise<void> {
   // now useful.
   const aspectStamped = new Set<string>();
   const phaseTimings: Record<string, number> = {};
-  if (!downloadOnly && (!dryRun || linkOnly)) {
+  if (assetBackend === "media-library" && !downloadOnly && (!dryRun || linkOnly)) {
     const mlId = mustEnv("SANITY_MEDIA_LIBRARY_ID");
     const token = mustEnv("SANITY_TOKEN");
     const apiVersion = process.env.SANITY_API_VERSION ?? "2025-02-19";
@@ -904,8 +967,121 @@ async function main(): Promise<void> {
     phaseTimings.phase0 = phase0.elapsedMs();
   }
 
+  // ── Phase 0 (Bynder backend): resolve DAM paths via metaproperty ──────
+  // Runs under dry-run too — resolution is read-only against Bynder, so a
+  // dry run doubles as a "which assets would link" preview (same rationale
+  // as --link-only forcing the ML phase 0). Every path is re-resolved each
+  // run (Bynder is the source of truth — mirrors the ML staleness gate):
+  // hits refresh the stored bynder.asset value, misses clear stale linkage.
+  if (assetBackend === "bynder" && !downloadOnly) {
+    let bynder: BynderConfig;
+    try {
+      bynder = resolveBynderConfig(process.env);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exit(2);
+    }
+    const concurrency = assetConcurrency();
+    console.error(
+      c.bold("\n── 0. Resolve assets in Bynder ──") +
+        c.dim(` (metaproperty: ${bynder.aemPathProperty}, concurrency: ${concurrency})`),
+    );
+    const phase0 = startTimer();
+    try {
+      await checkBynderConnection(bynder);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exit(2);
+    }
+    const propWarning = await metapropertyWarning(bynder);
+    if (propWarning) console.error(c.yellow(`  ⚠ ${propWarning}`));
+    let hits = 0;
+    let done = 0;
+    await runInParallel(sortedPaths, concurrency, async (damPath, _i, workerId) => {
+      const w = c.dim(workerLabel(workerId, concurrency));
+      const existing = manifest[damPath];
+      try {
+        const hit = await withRetry(`bynder-search ${damPath}`, 3, () =>
+          findBynderMediaByAemPath(bynder, damPath),
+        );
+        done++;
+        if (hit) {
+          hits++;
+          manifest[damPath] = {
+            damPath,
+            cachedFile: existing?.cachedFile,
+            mimeType: existing?.mimeType,
+            fileSize: existing?.fileSize,
+            downloadedAt: existing?.downloadedAt,
+            bynderAssetId: hit.media.id,
+            sanityRef: bynderAssetValue(hit.media) as BynderAssetRef,
+            status: "linked",
+            linkedAt: new Date().toISOString(),
+          };
+          writeFileSync(manifestFile, JSON.stringify(manifest, null, 2));
+          const ambiguous =
+            hit.matches > 1
+              ? c.yellow(` (${hit.matches} exact matches — picked newest)`)
+              : "";
+          console.error(
+            `  ${c.dim(`${done}/${sortedPaths.length}`)} ${w} ${c.green("found ")} ${damPath}  ${c.dim(hit.media.id)}${ambiguous}`,
+          );
+          return;
+        }
+        // Miss: clear any stale linkage from a prior run (asset deleted or
+        // metaproperty unstamped since) so phase 4 doesn't rewrite from a
+        // dead value; keep the local download-cache bookkeeping.
+        manifest[damPath] = {
+          damPath,
+          cachedFile: existing?.cachedFile,
+          mimeType: existing?.mimeType,
+          fileSize: existing?.fileSize,
+          downloadedAt: existing?.downloadedAt,
+          status: "failed-link",
+          error: `no Bynder asset with metaproperty ${bynder.aemPathProperty} == ${damPath}`,
+        };
+        writeFileSync(manifestFile, JSON.stringify(manifest, null, 2));
+        console.error(
+          `  ${c.dim(`${done}/${sortedPaths.length}`)} ${w} ${c.yellow("miss  ")} ${damPath}`,
+        );
+      } catch (err) {
+        // Transport/auth error after retries: keep prior state (a healthy
+        // later run re-resolves) but record the failure.
+        done++;
+        manifest[damPath] = {
+          ...(existing ?? { damPath }),
+          damPath,
+          status: "failed-link",
+          error: (err as Error).message,
+        };
+        writeFileSync(manifestFile, JSON.stringify(manifest, null, 2));
+        console.error(
+          `  ${c.dim(`${done}/${sortedPaths.length}`)} ${w} ${c.yellow("fail  ")} ${damPath}  ${c.dim((err as Error).message.slice(0, 80))}`,
+        );
+      }
+    });
+    console.error(
+      c.dim(
+        `  ${hits}/${sortedPaths.length} resolved via Bynder metaproperty "${bynder.aemPathProperty}"`,
+      ),
+    );
+    if (hits < sortedPaths.length) {
+      console.error(
+        c.yellow(
+          `  ${sortedPaths.length - hits} asset(s) not found in Bynder — they'll be left unresolved in clean docs. Stamp the metaproperty on the missing assets (or fix BYNDER_AEM_PATH_PROPERTY) and re-run.`,
+        ),
+      );
+    }
+    phaseTimings.phase0 = phase0.elapsedMs();
+  }
+
   // ── Phase 1: download ────────────────────────────────────────────────
-  if (!uploadOnly && !linkOnly) {
+  if (assetBackend === "bynder" && !downloadOnly) {
+    console.error(
+      c.bold("\n── 1. Download from AEM DAM ──") +
+        c.dim(" (skipped: Bynder backend — binaries already live in Bynder)"),
+    );
+  } else if (!uploadOnly && !linkOnly) {
     const concurrency = assetConcurrency();
     console.error(
       c.bold(
@@ -949,10 +1125,16 @@ async function main(): Promise<void> {
   }
 
   // ── Phase 2: upload to Media Library ────────────────────────────────
-  if (linkOnly || downloadOnly) {
+  if (linkOnly || downloadOnly || assetBackend === "bynder") {
     console.error(
       c.bold("\n── 2. Upload to Sanity Media Library ──") +
-        c.dim(linkOnly ? " (skipped: --link-only)" : " (skipped: --download-only)"),
+        c.dim(
+          linkOnly
+            ? " (skipped: --link-only)"
+            : downloadOnly
+              ? " (skipped: --download-only)"
+              : " (skipped: Bynder backend)",
+        ),
     );
   } else {
   const uploadConcurrency = assetConcurrency();
@@ -1016,9 +1198,14 @@ async function main(): Promise<void> {
   } // end of !linkOnly upload block
 
   // ── Phase 3: link to project dataset ────────────────────────────────
-  if (downloadOnly) {
+  if (downloadOnly || assetBackend === "bynder") {
     console.error(
-      c.bold("\n── 3. Link to project dataset ──") + c.dim(" (skipped: --download-only)"),
+      c.bold("\n── 3. Link to project dataset ──") +
+        c.dim(
+          downloadOnly
+            ? " (skipped: --download-only)"
+            : " (skipped: Bynder backend — phase 0 already produced bynder.asset values)",
+        ),
     );
   } else {
   const linkConcurrency = assetConcurrency();
@@ -1092,7 +1279,7 @@ async function main(): Promise<void> {
     failedDownload: all.filter((e) => e.status === "failed-download").length,
     uploaded: all.filter((e) => e.mediaLibraryAssetId).length,
     failedUpload: all.filter((e) => e.status === "failed-upload").length,
-    linked: all.filter((e) => e.linkedRef).length,
+    linked: all.filter((e) => e.linkedRef || e.bynderAssetId).length,
     failedLink: all.filter((e) => e.status === "failed-link").length,
   };
   const unresolvedList = [...rewriteStats.unresolved].sort();
@@ -1102,6 +1289,7 @@ async function main(): Promise<void> {
       {
         generatedAt: new Date().toISOString(),
         dryRun,
+        assetBackend,
         summary: stats,
         rewrite: {
           rewrites: rewriteStats.rewrites,
@@ -1143,8 +1331,12 @@ async function main(): Promise<void> {
 
   console.error(c.dim("\n────────────────────────────────────────"));
   console.error(`Downloaded: ${c.green(stats.downloaded)}   Cached: ${c.dim(stats.cached)}   Failed: ${stats.failedDownload > 0 ? c.yellow(stats.failedDownload) : c.green(0)}`);
-  console.error(`Uploaded:   ${c.green(stats.uploaded)}   Failed: ${stats.failedUpload > 0 ? c.yellow(stats.failedUpload) : c.green(0)}`);
-  console.error(`Linked:     ${c.green(stats.linked)}   Failed: ${stats.failedLink > 0 ? c.yellow(stats.failedLink) : c.green(0)}`);
+  if (assetBackend === "bynder") {
+    console.error(`Resolved:   ${c.green(stats.linked)}   Failed: ${stats.failedLink > 0 ? c.yellow(stats.failedLink) : c.green(0)}   ${c.dim("(Bynder metaproperty lookup)")}`);
+  } else {
+    console.error(`Uploaded:   ${c.green(stats.uploaded)}   Failed: ${stats.failedUpload > 0 ? c.yellow(stats.failedUpload) : c.green(0)}`);
+    console.error(`Linked:     ${c.green(stats.linked)}   Failed: ${stats.failedLink > 0 ? c.yellow(stats.failedLink) : c.green(0)}`);
+  }
   if (patched > 0) {
     console.error(`Rewrote:    ${c.green(rewriteStats.rewrites)} ref(s) across ${c.green(patched)} clean file(s)`);
   }
@@ -1172,7 +1364,7 @@ async function main(): Promise<void> {
     console.error(`Failures:   ${c.dim(assetFailuresLog)} ${c.dim(`(${failureRows.size} DAM path(s) — download 404s / upload / link / unresolved)`)}`);
   }
   const phaseLabels: Record<string, string> = {
-    phase0: "phase 0 (ML dedup)",
+    phase0: assetBackend === "bynder" ? "phase 0 (Bynder resolve)" : "phase 0 (ML dedup)",
     phase1: "phase 1 (download)",
     phase2: "phase 2 (upload)",
     phase3: "phase 3 (link)",

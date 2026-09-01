@@ -268,6 +268,12 @@ If `fileReferenceParameter` is omitted, a single image/file field is emitted (le
 
 **Content + assets** — `aem-transform` moves `/content/dam/...` strings from `{name}` onto `{name}AemPath` using `content-type-registry.json` (field names include **nested** multifield/array member fields via `flattenSchemaFieldNames` in `mapper.ts`). `aem-assets` uploads binaries and replaces `{name}` with a Sanity asset reference object, while **leaving** `{name}AemPath` strings untouched (`rewriteDamRefs` in `assets.ts`).
 
+### Bynder asset backend (`MIGRATION_ASSET_BACKEND=bynder`)
+
+With the Bynder backend, every field the mapper types as `image` or `file` (fileupload pairs, DAM-rooted pathfield/pathbrowser, nested multifield members, the per-template `featuredImage`) emits as **`bynder.asset`** — the object type registered by [`sanity-plugin-bynder-input`](https://github.com/sanity-io/plugins/tree/main/plugins/sanity-plugin-bynder-input), which the consuming Studio must install. The `{name}AemPath` provenance field and the transform's split behavior are unchanged; `content-type-registry.json` keeps the semantic `image` / `file` kind either way.
+
+`aem-assets` then skips download/upload entirely and resolves each DAM path against the Bynder portal (`GET /api/v4/media/?property_<BYNDER_AEM_PATH_PROPERTY>=<path>`, exact-match verified on the echoed metaproperty value, with a `keyword` search fallback), rewriting `{name}` to the plugin's persisted value shape (`_type: "bynder.asset"`, `id`/`databaseId` = the Bynder media UUID, `name`, uppercase `type`, `previewUrl`/`previewImg` from the `webimage` derivative, `datUrl`, `videoUrl`, `width`/`height`/`aspectRatio` from the original binary). Set-once knob: switching backends after an import changes emitted field types AND ingested field values.
+
 ## AEM authoring hints (`cq:panelTitle` and friends)
 
 AEM stores certain authoring metadata **outside** the dialog payload. The clearest example is accordion / expander panels: each child node carries the panel heading on `cq:panelTitle` (sibling to its own dialog fields), not on a dialog-defined property. The transform's normal property iterator drops anything with a colon — so without an explicit lift step the value would be lost.
