@@ -15,8 +15,13 @@
  * - `aemSourceAspect` — Media Library aspect stamped by `aem-assets` for
  *   cross-run dedup. Also exposed as the `./aspects/aemSource` entry point so
  *   an aspect file can re-export it without pulling in React.
+ * - `aemBynderPlugin` — flag-gated `sanity-plugin-bynder-input` wiring for
+ *   `MIGRATION_ASSET_BACKEND=bynder` migrations; activates only when
+ *   `SANITY_STUDIO_BYNDER_PORTAL_URL` is set.
  */
 export { category } from "./schemas/category.js";
+export { aemBynderPlugin } from "./plugins/bynder.js";
+export type { AemBynderPluginOptions } from "./plugins/bynder.js";
 export {
   aemFormComponents,
   StringToggleGroupInput,

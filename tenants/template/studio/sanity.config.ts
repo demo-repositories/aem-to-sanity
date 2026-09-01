@@ -2,7 +2,7 @@ import { defineConfig } from "sanity";
 import { structureTool } from "sanity/structure";
 import { sanitizeSchemaTypes } from "aem-to-sanity-schema/sanitize";
 import { allSchemaTypes } from "./schemas/index.ts";
-import { aemFormComponents } from "aem-to-sanity-studio";
+import { aemBynderPlugin, aemFormComponents } from "aem-to-sanity-studio";
 
 /**
  * Example Studio that consumes the schemas emitted by `aem-to-sanity-schema`.
@@ -22,7 +22,13 @@ export default defineConfig({
     process.env.SANITY_STUDIO_PROJECT_ID ?? process.env.SANITY_PROJECT_ID ?? "",
   dataset:
     process.env.SANITY_STUDIO_DATASET ?? process.env.SANITY_DATASET ?? "production",
-  plugins: [structureTool()],
+  // `aemBynderPlugin()` is flag-gated wiring for MIGRATION_ASSET_BACKEND=bynder
+  // migrations: it registers sanity-plugin-bynder-input (the `bynder.asset`
+  // type + Bynder browse/pick input) only when SANITY_STUDIO_BYNDER_PORTAL_URL
+  // is set in the Studio .env — a no-op otherwise. To customize the plugin
+  // (asset filters, language, persistRawFields), replace the spread with your
+  // own `bynderInputPlugin({...})` call.
+  plugins: [structureTool(), ...aemBynderPlugin()],
   schema: {
     types: sanitizeSchemaTypes(allSchemaTypes),
   },

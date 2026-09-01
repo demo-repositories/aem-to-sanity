@@ -10,6 +10,7 @@ Studio-side primitives for AEM → Sanity migrations. Tenant Studios import thes
 | `aemFormComponents` | `form.components` for `defineConfig` — routes fields marked `options.aemWidget` (`buttonGroup` → toggle group, `note` → caution banner) to their inputs, and enables the built-in Portable Text table plugin (sanity ≥ 6.6) so migrated richtext tables are editable in place | Studio rendering of migrated Coral widgets + tables |
 | `StringToggleGroupInput`, `NoteField`, `isNoteField` | The individual components behind `aemFormComponents`, exported for custom routing | — |
 | `aemSourceAspect` (also `aem-to-sanity-studio/aspects/aemSource`) | Media Library aspect stamped on every uploaded asset (`damPath`, `assetInstanceId`) | `aem-assets` dedup + link steps |
+| `aemBynderPlugin` | Flag-gated wiring for [`sanity-plugin-bynder-input`](https://github.com/sanity-io/plugins/tree/main/plugins/sanity-plugin-bynder-input): returns `[bynderInputPlugin({...})]` when `SANITY_STUDIO_BYNDER_PORTAL_URL` is set (options override env: `portalUrl`, `language`, `persistRawFields`), `[]` otherwise — spread into `plugins`. Registers the `bynder.asset` type the generated schemas reference and gives authors the Bynder Compact View to browse/pick assets. For full control, skip the helper and register `bynderInputPlugin(...)` yourself | Studios consuming a `MIGRATION_ASSET_BACKEND=bynder` migration |
 
 ## Usage in a tenant Studio
 
@@ -19,9 +20,12 @@ import { category } from "aem-to-sanity-studio";
 export const allSchemaTypes = [...generatedSchemaTypes, category];
 
 // sanity.config.ts
-import { aemFormComponents } from "aem-to-sanity-studio";
+import { aemBynderPlugin, aemFormComponents } from "aem-to-sanity-studio";
 export default defineConfig({
   // …
+  // Bynder-backed migrations only: activates when
+  // SANITY_STUDIO_BYNDER_PORTAL_URL is set in the Studio .env; no-op otherwise.
+  plugins: [structureTool(), ...aemBynderPlugin()],
   form: { components: aemFormComponents },
 });
 

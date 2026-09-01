@@ -7,7 +7,11 @@ created with `pnpm -w migrate:init` get it automatically).
 ## Wiring
 
 1. Fill `studio/.env` (seeded from `.env.example`) with the tenant's
-   `SANITY_STUDIO_PROJECT_ID` / `SANITY_STUDIO_DATASET`.
+   `SANITY_STUDIO_PROJECT_ID` / `SANITY_STUDIO_DATASET`. Bynder-backed
+   migrations (`MIGRATION_ASSET_BACKEND=bynder`) also set
+   `SANITY_STUDIO_BYNDER_PORTAL_URL` — that flag activates the pre-wired
+   `sanity-plugin-bynder-input` so asset fields browse/pick from Bynder;
+   unset, the plugin is inert.
 2. In the tenant's own `.env`, point schema emission here:
    `SCHEMAS_OUT_DIR=./studio/schemas/generated`.
 3. `pnpm install` (root) → `pnpm migrate:schema` (tenant) → `pnpm dev` (here).
