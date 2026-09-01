@@ -15,6 +15,7 @@ import {
   loadPageComponentConfig,
   loadSlotConfig,
   logStartupBanner,
+  resolveAssetBackend,
   resolveConfig,
   resolvePageBuilderName,
   resolveSchemaLayout,
@@ -141,6 +142,17 @@ async function main(): Promise<void> {
   if (schemaLayout !== "flat") {
     logger.info(
       `Schema layout: ${schemaLayout} (MIGRATION_SCHEMA_LAYOUT) — generated files grouped under documents/ and objects/.`,
+    );
+  }
+
+  // Asset backend — decides what image/file dialog fields emit as. Shared
+  // with aem-assets (which rewrites the matching values into clean docs) —
+  // set once in the tenant .env before the first run. Invalid values throw
+  // in resolveAssetBackend with the allowed list.
+  const assetBackend = resolveAssetBackend(process.env);
+  if (assetBackend === "bynder") {
+    logger.info(
+      `Asset backend: bynder (MIGRATION_ASSET_BACKEND) — image/file dialog fields emit as bynder.asset; add sanity-plugin-bynder-input to the consuming Studio.`,
     );
   }
 
@@ -324,6 +336,7 @@ async function main(): Promise<void> {
     docsOutputFile: "./docs/aem-to-sanity-mapping.md",
     continueOnAuth,
     pageBuilderName,
+    assetBackend,
     schemaLayout,
     typeNaming,
     typeSuffix,

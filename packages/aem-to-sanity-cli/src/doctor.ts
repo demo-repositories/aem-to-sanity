@@ -196,24 +196,70 @@ function validateTenantEnvRequired(
  * Download-only asset mode (`MIGRATION_ASSETS_DOWNLOAD_ONLY=true`, same as
  * `aem-assets --download-only`) stops after phase 1 (AEM download) — no ML
  * dedup lookup, upload, link, or rewrite, regardless of `MIGRATION_DRY_RUN` —
- * so `SANITY_MEDIA_LIBRARY_ID` is never read. `SANITY_TOKEN` stays required:
+ * so `SANITY_MEDIA_LIBRARY_ID` is never read. Same for the Bynder backend
+ * (`MIGRATION_ASSET_BACKEND=bynder`): assets resolve against the Bynder
+ * portal and never touch the Media Library. `SANITY_TOKEN` stays required:
  * `aem-import` needs it even when assets never touch the Media Library.
  */
 export function conditionallyUnusedEnvKeys(tenantEnv: Map<string, string>): Set<string> {
   const out = new Set<string>();
-  if (tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") === "true") {
+  if (
+    tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") === "true" ||
+    tenantEnv.get("MIGRATION_ASSET_BACKEND") === "bynder"
+  ) {
     out.add("SANITY_MEDIA_LIBRARY_ID");
   }
   return out;
 }
 
-function recordConditionallyUnused(unused: Set<string>): void {
+function recordConditionallyUnused(
+  unused: Set<string>,
+  tenantEnv: Map<string, string>,
+): void {
   if (unused.has("SANITY_MEDIA_LIBRARY_ID")) {
     record(
       "info",
       "env",
-      "MIGRATION_ASSETS_DOWNLOAD_ONLY=true — SANITY_MEDIA_LIBRARY_ID not required (assets stop after AEM download)",
+      tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") === "true"
+        ? "MIGRATION_ASSETS_DOWNLOAD_ONLY=true — SANITY_MEDIA_LIBRARY_ID not required (assets stop after AEM download)"
+        : "MIGRATION_ASSET_BACKEND=bynder — SANITY_MEDIA_LIBRARY_ID not required (assets resolve against Bynder)",
     );
+  }
+}
+
+const BYNDER_REQUIRED_KEYS = [
+  "BYNDER_BASE_URL",
+  "BYNDER_TOKEN",
+  "BYNDER_AEM_PATH_PROPERTY",
+] as const;
+
+/**
+ * Asset-backend env sanity: an invalid `MIGRATION_ASSET_BACKEND` value is an
+ * error (both migrate:schema and aem-assets refuse to start on it), and the
+ * Bynder backend needs its portal / token / metaproperty vars — resolution
+ * runs even under dry-run (read-only preview), so these aren't gated on
+ * `MIGRATION_DRY_RUN=false` the way the Media Library id is.
+ */
+function checkAssetBackendEnv(tenantEnv: Map<string, string>): void {
+  const backend = tenantEnv.get("MIGRATION_ASSET_BACKEND");
+  if (backend !== undefined && backend !== "media-library" && backend !== "bynder") {
+    record(
+      "error",
+      "env",
+      `MIGRATION_ASSET_BACKEND="${backend}" is invalid — use "media-library" (default) or "bynder"`,
+    );
+    return;
+  }
+  if (backend !== "bynder") return;
+  if (tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") === "true") return;
+  for (const key of BYNDER_REQUIRED_KEYS) {
+    if (!isMeaningfulValue(tenantEnv.get(key))) {
+      record(
+        "error",
+        "env",
+        `MIGRATION_ASSET_BACKEND=bynder but ${key} is unset — aem-assets can't resolve assets against Bynder`,
+      );
+    }
   }
 }
 
@@ -249,7 +295,8 @@ function checkEnv(ctx: WorkspaceContext, dir: string, slug: string): void {
 
     const tenantEnv = parseEnv(envContent);
     const demoUnused = conditionallyUnusedEnvKeys(tenantEnv);
-    recordConditionallyUnused(demoUnused);
+    recordConditionallyUnused(demoUnused, tenantEnv);
+    checkAssetBackendEnv(tenantEnv);
     validateTenantEnvRequired(
       declared,
       tenantEnv,
@@ -273,7 +320,8 @@ function checkEnv(ctx: WorkspaceContext, dir: string, slug: string): void {
 
     if (
       tenantEnv.get("MIGRATION_DRY_RUN") === "false" &&
-      tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") !== "true"
+      tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") !== "true" &&
+      tenantEnv.get("MIGRATION_ASSET_BACKEND") !== "bynder"
     ) {
       if (!isMeaningfulValue(tenantEnv.get("SANITY_MEDIA_LIBRARY_ID"))) {
         record(
@@ -297,7 +345,8 @@ function checkEnv(ctx: WorkspaceContext, dir: string, slug: string): void {
   const fixtureMode = isMeaningfulValue(fixturesDirRaw);
 
   const unused = conditionallyUnusedEnvKeys(tenantEnv);
-  recordConditionallyUnused(unused);
+  recordConditionallyUnused(unused, tenantEnv);
+  checkAssetBackendEnv(tenantEnv);
   validateTenantEnvRequired(
     declared,
     tenantEnv,
@@ -332,7 +381,8 @@ function checkEnv(ctx: WorkspaceContext, dir: string, slug: string): void {
 
   if (
     tenantEnv.get("MIGRATION_DRY_RUN") === "false" &&
-    tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") !== "true"
+    tenantEnv.get("MIGRATION_ASSETS_DOWNLOAD_ONLY") !== "true" &&
+    tenantEnv.get("MIGRATION_ASSET_BACKEND") !== "bynder"
   ) {
     if (!isMeaningfulValue(tenantEnv.get("SANITY_MEDIA_LIBRARY_ID"))) {
       record(

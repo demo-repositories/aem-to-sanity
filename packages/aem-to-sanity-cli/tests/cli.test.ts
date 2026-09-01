@@ -95,6 +95,16 @@ describe("conditionallyUnusedEnvKeys", () => {
     expect(conditionallyUnusedEnvKeys(env)).toEqual(new Set(["SANITY_MEDIA_LIBRARY_ID"]));
   });
 
+  it("skips SANITY_MEDIA_LIBRARY_ID when the asset backend is bynder", () => {
+    const env = parseEnv("MIGRATION_ASSET_BACKEND=bynder\n");
+    expect(conditionallyUnusedEnvKeys(env)).toEqual(new Set(["SANITY_MEDIA_LIBRARY_ID"]));
+  });
+
+  it("keeps SANITY_MEDIA_LIBRARY_ID required for the media-library backend", () => {
+    const env = parseEnv("MIGRATION_ASSET_BACKEND=media-library\n");
+    expect(conditionallyUnusedEnvKeys(env)).toEqual(new Set());
+  });
+
   it("requires SANITY_MEDIA_LIBRARY_ID otherwise, regardless of dry-run", () => {
     for (const envText of [
       "",

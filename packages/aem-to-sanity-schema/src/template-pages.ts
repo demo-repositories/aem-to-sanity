@@ -82,6 +82,12 @@ export interface WriteTemplatePageArtifactsOptions {
   templateComponents?: ReadonlyMap<string, PageBuilderMember[]>;
   /** Layout planner deciding subfolder placement. Default: flat. */
   planner?: SchemaPathPlanner;
+  /**
+   * Substitute Sanity type for the `featuredImage` field (e.g.
+   * `bynder.asset` when `MIGRATION_ASSET_BACKEND=bynder`); unset → native
+   * `image`. Mirrors the component emitter's image/file substitution.
+   */
+  assetFieldType?: string;
   logger?: Logger;
 }
 
@@ -186,6 +192,7 @@ export async function writeTemplatePageArtifacts(
     baseMembers = [],
     templateComponents,
     planner = FLAT_PLANNER,
+    assetFieldType,
     logger,
   } = opts;
 
@@ -340,6 +347,7 @@ export async function writeTemplatePageArtifacts(
         pageComponentSanityType,
         pageBuilderTypeName,
         builderTypeName,
+        assetFieldType,
         logger,
       });
       if (wrote) documentFiles.push(file);
@@ -385,6 +393,8 @@ interface MaybeWriteTemplatePageArgs {
   pageBuilderTypeName: string;
   /** Array type backing the field — shared, or this template's dedicated builder. */
   builderTypeName: string;
+  /** Substitute type for `featuredImage` (e.g. `bynder.asset`); unset → `image`. */
+  assetFieldType?: string;
   logger?: Logger;
 }
 
@@ -443,7 +453,7 @@ ${rendered}
 }
 
 function renderTemplatePage(args: MaybeWriteTemplatePageArgs): string {
-  const { typeName, title, pageComponentSanityType, pageBuilderTypeName, builderTypeName } = args;
+  const { typeName, title, pageComponentSanityType, pageBuilderTypeName, builderTypeName, assetFieldType } = args;
   return `// ${GENERATED_MARKER}. Safe to delete or replace.
 // To author a custom document type for this AEM template, remove this file
 // (or the marker comment) — the migration will not overwrite it. Custom
@@ -503,8 +513,8 @@ export const ${typeName} = defineType({
       of: [{ type: "reference", to: [{ type: "category" }] }],
     }),
     // Lifted from AEM \`jcr:content/cq:featuredimage\` by \`aem-transform\` —
-    // the DAM reference is rewritten to a Sanity asset by \`aem-assets\`.
-    defineField({ name: "featuredImage", type: "image", group: "content" }),
+    // the DAM reference is rewritten to a linked asset by \`aem-assets\`.
+    defineField({ name: "featuredImage", type: ${JSON.stringify(assetFieldType ?? "image")}, group: "content" }),
     defineField({
       name: ${JSON.stringify(pageBuilderTypeName)},
       type: ${JSON.stringify(builderTypeName)},

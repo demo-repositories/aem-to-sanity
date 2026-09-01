@@ -44,6 +44,15 @@ export interface EmitInput {
   previewOverride?: PreviewOverride;
   /** Command the header comment tells readers to run to regenerate. */
   regenerateCommand?: string;
+  /**
+   * Concrete Sanity type emitted for `image` / `file` mapped fields, when
+   * the asset backend isn't the Sanity Media Library — e.g. `"bynder.asset"`
+   * (`MIGRATION_ASSET_BACKEND=bynder`, the type registered by
+   * `sanity-plugin-bynder-input`). Unset → native `image` / `file`. Also
+   * disables the media-preview heuristic: the substitute type holds a plain
+   * object the Studio preview can't render as media.
+   */
+  assetFieldType?: string;
 }
 
 /**
@@ -80,7 +89,12 @@ export async function emitSchemaFile(input: EmitInput): Promise<string> {
     fieldsets.length > 0
       ? `  fieldsets: ${stringifyFieldsets(fieldsets)},\n`
       : "";
-  const previewBlock = renderPreviewBlock(fields, title, input.previewOverride);
+  const previewBlock = renderPreviewBlock(
+    fields,
+    title,
+    input.previewOverride,
+    input.assetFieldType,
+  );
   // Config-validated PascalCase `*Icon` identifier (`VALID_ICON_NAME` in
   // component-names.ts), so it lands verbatim in the import. Since
   // @sanity/icons v5, per-icon components live only in subpath modules
@@ -103,7 +117,7 @@ export const ${exportName} = defineType({
   title: ${titleLiteral},
   type: "object",
 ${iconLiteral}${groupsLiteral}${fieldsetsLiteral}${previewBlock}  fields: [
-${fields.map((f) => renderField(f, 2)).join(",\n")}
+${fields.map((f) => renderField(f, 2, input.assetFieldType)).join(",\n")}
   ],
 });
 `;
@@ -287,10 +301,15 @@ function renderPreviewBlock(
   fields: SanityField[],
   staticTitle: string,
   override?: PreviewOverride,
+  assetFieldType?: string,
 ): string {
   const titlePath = override?.title;
   const subtitlePath = override?.subtitle ?? pickSubtitleFieldName(fields, undefined);
-  const mediaPath = override?.media ?? pickMediaSelectPath(fields);
+  // With a substituted asset type (e.g. bynder.asset) the field holds a
+  // plain object, not something the Studio preview renders as media — skip
+  // the heuristic pick; an explicit override still wins.
+  const mediaPath =
+    override?.media ?? (assetFieldType ? undefined : pickMediaSelectPath(fields));
   const countPath = override?.count;
   const staticLit = JSON.stringify(staticTitle);
 
@@ -371,9 +390,13 @@ ${returnBody}
 `;
 }
 
-function renderField(field: SanityField, indentLevel: number): string {
+function renderField(
+  field: SanityField,
+  indentLevel: number,
+  assetFieldType?: string,
+): string {
   const indent = "  ".repeat(indentLevel);
-  const body = fieldBody(field, indentLevel + 1);
+  const body = fieldBody(field, indentLevel + 1, assetFieldType);
   // `options.aemWidget` is not a standard Sanity string option, so the
   // defineField call opts out of strict definition typing for that field.
   // Slot references opt out too: their `type` is a generated alias name
@@ -388,7 +411,11 @@ function renderField(field: SanityField, indentLevel: number): string {
   return `${indent}defineField(${body}${defineOptions})`;
 }
 
-function fieldBody(field: SanityField, _indentLevel: number): string {
+function fieldBody(
+  field: SanityField,
+  _indentLevel: number,
+  assetFieldType?: string,
+): string {
   const props: Record<string, string> = {};
 
   props.name = JSON.stringify(field.name);
@@ -448,7 +475,10 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     }
     case "image":
     case "file": {
-      props.type = JSON.stringify(field.type);
+      // Non-Media-Library asset backends substitute their own object type
+      // here (e.g. `bynder.asset`); the registry keeps the semantic
+      // image/file kind either way.
+      props.type = JSON.stringify(assetFieldType ?? field.type);
       break;
     }
     case "array-of-blocks": {
@@ -472,7 +502,7 @@ function fieldBody(field: SanityField, _indentLevel: number): string {
     case "array-of-object": {
       props.type = '"array"';
       const itemFields = field.itemFields
-        .map((f) => renderField(f, 0))
+        .map((f) => renderField(f, 0, assetFieldType))
         .join(", ");
       const memberTitle = field.itemTitle
         ? `, title: ${JSON.stringify(field.itemTitle)}`

@@ -83,5 +83,6 @@ These reshape ids or `_type` values; changing them after the first real import o
 - `MIGRATION_TYPE_SUFFIX` when `MIGRATION_TYPE_SUFFIX_MODE=type` (the default) — `file` mode only renames files/exports and is safe to change
 - `name` overrides in `aem-component-names.json`
 - renaming a `jcr:title` in AEM while `MIGRATION_TYPE_NAMING=title`
+- `MIGRATION_ASSET_BACKEND` (`media-library` default vs `bynder`) — reshapes emitted asset field types (`image`/`file` vs `bynder.asset`) and the ingested field values `aem-assets` rewrites; switching after an import orphans every asset field value
 
 Safe-to-change knobs: `title`, `folder`, `file`, `icon`, `preview` overrides; `MIGRATION_SCHEMA_LAYOUT`; `MIGRATION_TYPE_SUFFIX_MODE=file` suffix.

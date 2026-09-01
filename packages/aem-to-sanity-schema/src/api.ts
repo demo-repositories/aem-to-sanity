@@ -3,6 +3,7 @@ import { readFile, readdir, rmdir, unlink } from "node:fs/promises";
 import {
   AEM_AUTHORING_HINTS,
   AemFetchError,
+  BYNDER_ASSET_TYPE_NAME,
   DIALOG_OVERRIDE_WILDCARD,
   DialogOverrideError,
   aemCacheAppsFile,
@@ -11,6 +12,7 @@ import {
   writeJson,
   writeTextFile,
   type AppliedSupplementaryTab,
+  type AssetBackend,
   type AuthoringHintConfig,
   type ComponentNameConfig,
   type ContainerConfig,
@@ -106,6 +108,16 @@ export interface MigrateSchemasOptions {
    * Default: `"pageBuilder"`.
    */
   pageBuilderName?: string;
+  /**
+   * Where migrated assets live (`MIGRATION_ASSET_BACKEND`). With
+   * `"bynder"`, every mapped `image` / `file` field (and the per-template
+   * `featuredImage`) emits as `bynder.asset` — the object type registered by
+   * `sanity-plugin-bynder-input` — matching the values `aem-assets` rewrites
+   * into clean docs. Set-once-before-first-import knob: switching backends
+   * changes emitted field types AND ingested field values. Default:
+   * `"media-library"` (native `image` / `file` types).
+   */
+  assetBackend?: AssetBackend;
   /**
    * How component type names (and therefore schema file names, registry
    * `sanityType`s, and ingested `_type`s) are derived. `"path"` (default)
@@ -344,6 +356,12 @@ export async function migrateSchemas(
   const authCircuitBreakerThreshold = opts.authCircuitBreakerThreshold ?? 5;
   const schemasDir = opts.schemasDir ?? join(outputDir, "schemas");
   const pageBuilderName = opts.pageBuilderName ?? "pageBuilder";
+  // Concrete Sanity type for image/file fields; undefined keeps the native
+  // types (media-library backend, the default).
+  const assetFieldType =
+    (opts.assetBackend ?? "media-library") === "bynder"
+      ? BYNDER_ASSET_TYPE_NAME
+      : undefined;
   const typeNaming = opts.typeNaming ?? "path";
   const containers = opts.containers ?? new Map();
   const effectiveJcrPrefix = opts.jcrPrefix ?? "/apps/";
@@ -618,6 +636,7 @@ export async function migrateSchemas(
         fieldOverrides: effectiveFieldOverrides(p),
         previewOverride: previewOverrideByPath.get(p),
         pageBuilderName,
+        assetFieldType,
         prefetchedComponentNode: prefetchedNodes.get(p),
         containerEntry: containers.get(rt),
         slotMap: discoveredSlots.get(rt),
@@ -810,6 +829,7 @@ export async function migrateSchemas(
       pageBuilderTypeName: pageBuilderName,
       baseMembers,
       templateComponents: templateExtras,
+      assetFieldType,
       logger,
     });
     pageTemplatesFile = tp.manifestFile;
@@ -946,6 +966,8 @@ interface ProcessOneDeps {
   previewOverride?: PreviewOverride;
   /** Page-builder array type name container drop-zones reference. */
   pageBuilderName: string;
+  /** Substitute Sanity type for image/file fields (e.g. `bynder.asset`); unset → native types. */
+  assetFieldType?: string;
   /**
    * Component node already fetched by the title-naming pre-pass. When set,
    * processOne reuses it instead of re-fetching `componentPath`.
@@ -1347,6 +1369,7 @@ async function processOne(
       icon: deps.icon,
       previewOverride: deps.previewOverride,
       regenerateCommand,
+      assetFieldType: deps.assetFieldType,
     });
   } catch (err) {
     report.add({

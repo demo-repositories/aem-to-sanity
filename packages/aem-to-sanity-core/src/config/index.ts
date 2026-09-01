@@ -27,6 +27,12 @@ export {
   DEFAULT_SCHEMA_LAYOUT,
   resolveSchemaLayout,
 } from "./schema-layout.ts";
+export {
+  DEFAULT_ASSET_BACKEND,
+  BYNDER_ASSET_TYPE_NAME,
+  resolveAssetBackend,
+} from "./asset-backend.ts";
+export type { AssetBackend } from "./asset-backend.ts";
 export type { SchemaLayout } from "./schema-layout.ts";
 export { loadSlotConfig } from "./slots.ts";
 export type {
